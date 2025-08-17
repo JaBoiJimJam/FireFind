@@ -1,0 +1,6 @@
+This project will be following the sprint-based version strategy.
+
+The format is: <symbol><sprint number>[.<patch>]
+An example of this is M3.5
+The first version in the first sprint is: M1.0
+The seventh version in the fourth sprint is: M4.7
