@@ -1,0 +1,4 @@
+# Minimal rules for Sprint 1 demo
+admin_ports: [22, 23, 3389, 5900, 445, 389, 636]
+# Flag networks as 'broad' when prefix length is <= this value (e.g., /0..../8)
+broad_cidr_prefix_max: 8

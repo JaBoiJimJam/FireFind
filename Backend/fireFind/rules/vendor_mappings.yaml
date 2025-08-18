@@ -1,0 +1,8 @@
+fortinet:
+  rule_id: [policyid, id, uuid, rule_id]
+  src: [srcaddr, src, source]
+  dst: [dstaddr, dst, destination]
+  proto: [service, proto, protocol]
+  port: [service_port, port, dport]
+  action: [action]
+  comment: [comments, comment, name, remarks]

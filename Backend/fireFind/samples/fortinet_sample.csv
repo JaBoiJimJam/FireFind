@@ -1,0 +1,5 @@
+policyid,srcaddr,dstaddr,service,service_port,action,comments
+1001,0.0.0.0/0,10.0.0.5,tcp,22,allow,SSH open to internal server
+1002,192.168.1.0/24,0.0.0.0/0,tcp,3389,allow,RDP outbound
+1003,any,any,any,any,allow,Too permissive
+1004,10.0.0.0/8,10.0.1.10,tcp,443,allow,Wide source network
