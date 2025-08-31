@@ -30,7 +30,7 @@ def parse(
     mappings: str = typer.Option("rules/vendor_mappings.yaml", help="Vendor mappings YAML"),
 ):
     """Ingest, normalize, analyze, and output reports."""
-    # Load configs
+    # Load config
     with open(rules, "r", encoding="utf-8") as f:
         rules_cfg = yaml.safe_load(f) or {}
     with open(mappings, "r", encoding="utf-8") as f:

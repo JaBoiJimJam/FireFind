@@ -51,7 +51,7 @@ def main():
     out_csv = os.path.join(out_dir, f"{input_base_name}_report_findings.csv")
     out_pdf = os.path.join(out_dir, f"{input_base_name}_report_findings.pdf")
 
-    # Load rules and mappings
+    # Load rules and mapping
     try:
         with open(rules_file, "r", encoding="utf-8") as f:
             rules_cfg = yaml.safe_load(f) or {}
