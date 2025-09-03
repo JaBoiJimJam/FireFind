@@ -1,18 +1,67 @@
-# FireFind (Sprint 1 Starter)
+# FireFind Backend
 
-A minimal, client-demo-ready starter for the **FireFind** MVP. It ingests a firewall rule export (CSV/XLSX), normalizes the data, runs minimal risk checks, and outputs **findings.csv** and a **report.pdf**.
+This is the backend portion of the FireFind project, which processes firewall rules, analyzes them for risks, and generates reports in CSV and PDF formats.
 
-## Quickstart
+## Features
+- Processes firewall rules from CSV or Excel files.
+- Normalizes and analyzes rules for potential risks.
+- Generates findings in both CSV and PDF formats.
+- Allows users to select which file to process from the `samples` directory.
 
-```bash
-python -m pip install -r requirements.txt
+---
 
-# Run demo on sample CSV (Fortinet placeholder sample)
-python src/firefind/cli.py parse   --vendor fortinet   --input samples/fortinet_sample.csv   --out-csv out/findings.csv   --out-pdf out/report.pdf   --rules rules/rules.yaml   --mappings rules/vendor_mappings.yaml
-```
+## Prerequisites
+1. **Python**: Ensure Python 3.8 or later is installed.
+   - Verify installation:
+     ```bash
+     python --version
+     ```
+2. **Dependencies**: Install required Python packages.
+   - Navigate to the `backend` directory and run:
+     ```bash
+     pip install -r requirements.txt
+     ```
 
-Outputs:
-- `out/findings.csv` – technical findings
-- `out/report.pdf` – stakeholder summary (counts + top risks)
+---
 
-> Note: The sample CSV is simplified and already close to the normalized schema. For real vendor exports, update `rules/vendor_mappings.yaml` to map columns → normalized fields.
+## How to Use
+
+### 1. **Prepare Input Files**
+   - Place your firewall rule files (CSV or Excel format) in the `samples` directory located in the `backend` folder.
+
+### 2. **Run the Program**
+   - Use the `run_backend.py` script to process the files.
+   - Navigate to the `backend` directory and run:
+     ```bash
+     python run_backend.py
+     ```
+
+### 3. **Select a File**
+   - The program will list all files in the `samples` directory.
+   - Example:
+     ```
+     Available files in the 'samples' folder:
+     1. CLIENT1 Firewall Rules - Anonymised - Firewall Policy-EXTERNAL-FW-DC.xlsx
+     2. CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-DaaS.xlsx
+     3. fortinet_sample.csv
+     Enter the number of the file you want to process:
+     ```
+   - Enter the number corresponding to the file you want to process.
+
+### 4. **Output**
+   - The program will generate two output files in the `out` directory:
+     - A CSV file containing the findings.
+     - A PDF report summarizing the findings.
+   - The output files will have `_report_findings` appended to their names. For example:
+     - Input file: `fortinet_sample.csv`
+     - Output CSV: `fortinet_sample_report_findings.csv`
+     - Output PDF: `fortinet_sample_report_findings.pdf`
+
+---
+
+## Example Workflow
+1. Place the file `fortinet_sample.csv` in the `samples` directory.
+2. Run the program:
+   ```bash
+   python run_backend.py
+   ```
