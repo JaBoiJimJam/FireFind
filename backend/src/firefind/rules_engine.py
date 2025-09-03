@@ -4,16 +4,17 @@ from .model import Rule, Finding
 
 def parse_ports(port_str: str) -> List[int]:
     s = (port_str or "").lower().replace("tcp/", "").replace("udp/", "").strip()
+    # treat "any" as "unspecified" (empty list), not all ports
     if s in ("", "any", "*"):
-        return list(range(1,65536))
+        return []
     parts = [p.strip() for p in s.split(",") if p.strip()]
     out: List[int] = []
     for p in parts:
         if "-" in p:
-            a,b = p.split("-",1)
+            a, b = p.split("-", 1)
             try:
                 a_i, b_i = int(a), int(b)
-                out.extend(list(range(a_i, b_i+1)))
+                out.extend(range(a_i, b_i + 1))
             except ValueError:
                 continue
         else:
@@ -21,7 +22,8 @@ def parse_ports(port_str: str) -> List[int]:
                 out.append(int(p))
             except ValueError:
                 continue
-    return sorted(set([x for x in out if 1 <= x <= 65535]))
+    return sorted({x for x in out if 1 <= x <= 65535})
+
 
 def is_any(value: str) -> bool:
     v = (value or "").strip().lower()
@@ -49,10 +51,13 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
 
         # Admin ports exposure
         ports = set(parse_ports(r.port))
-        if any(p in admin_ports for p in ports):
-            findings.append(Finding(vendor, r.rule_id, r.src, r.dst, r.proto, r.port, r.action,
-                                    finding_type="admin_port_exposed", severity="High",
-                                    rationale=f"Rule permits administrative port(s): {sorted(admin_ports.intersection(ports))}"))
+        if ports and any(p in admin_ports for p in ports):
+            findings.append(
+            Finding(vendor, r.rule_id, r.src, r.dst, r.proto, r.port, r.action,
+                finding_type="admin_port_exposed", severity="High",
+                rationale=f"Rule permits administrative port(s): {sorted(admin_ports.intersection(ports))}")
+    )
+
 
         # Broad CIDR (src or dst)
         if is_broad_cidr(r.src, broad_prefix) or is_broad_cidr(r.dst, broad_prefix):
