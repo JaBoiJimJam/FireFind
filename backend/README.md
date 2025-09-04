@@ -35,7 +35,7 @@ FireFind/
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/JaBoiJimJam/FireFind.git
    cd FireFind
    ```
 
@@ -140,17 +140,6 @@ Executive summary with:
 
 ## Development
 
-### Running Tests
-```bash
-pytest
-```
-
-### Code Formatting
-```bash
-black .
-flake8 .
-```
-
 ### Project Requirements
 
 - Python 3.8+
@@ -170,19 +159,3 @@ Install all required packages:
 ```bash
 pip install -r requirements.txt
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and ensure code quality
-5. Submit a pull request
-
-## License
-
-[Add your license information here]
-
-## Support
-
-[Add support contact information here]
