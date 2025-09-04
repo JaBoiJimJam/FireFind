@@ -1,6 +1,6 @@
 # FireFind Backend
 
-This is the backend portion of the FireFind project, which processes firewall rules, analyzes them for risks, and generates reports in CSV and PDF formats.
+This is the backend portion of the FireFind project, which processes firewall rules, analyzes them for risks, and generates reports in CSV and PDF format.
 
 ## Features
 - Processes firewall rules from CSV or Excel files.

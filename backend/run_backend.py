@@ -88,7 +88,7 @@ def main():
     print(f"Output CSV: {out_csv}")
     print(f"Output PDF: {out_pdf}")
 
-    # Set up environment with Unicode support
+    # Sets up environment with Unicode support
     env = os.environ.copy()
     env["PYTHONPATH"] = src_dir
     env["PYTHONIOENCODING"] = "utf-8"
