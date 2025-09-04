@@ -1,4 +1,24 @@
-typer>=0.12.3
-PyYAML>=6.0.1
-openpyxl>=3.1.2
-fpdf2>=2.7.9
+# Core dependencies for FireFind CLI
+typer>=0.9.0
+click>=8.1.0
+pyyaml>=6.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+xlrd>=2.0.0
+
+# PDF generation
+reportlab>=4.0.0
+matplotlib>=3.7.0
+
+# Network analysis
+ipaddress
+netaddr>=0.8.0
+
+# Development dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Optional: Rich for better CLI output
+rich>=13.0.0

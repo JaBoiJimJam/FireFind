@@ -1,96 +1,138 @@
 import os
 import sys
-import yaml
-from firefind.loaders.csv_xlsx_loader import load_table
-from firefind.vendors.fortinet import map_row_fortinet
-from firefind.model import Rule
-from firefind.rules_engine import run_checks
-from firefind.reporters.csv_report import write_findings_csv
-from firefind.reporters.pdf_report import generate_pdf
+import subprocess
+from datetime import datetime
+
+def find_directory(start_path, dir_name):
+    """Find a directory by searching in common locations"""
+    # Check current directory and parent directories
+    current = start_path
+    for _ in range(3):  # Check up to 3 levels up
+        test_path = os.path.join(current, dir_name)
+        if os.path.exists(test_path):
+            return test_path
+        current = os.path.dirname(current)
+    return None
+
+def find_file(start_path, file_path):
+    """Find a file by searching in common locations"""
+    # Check current directory and parent directories
+    current = start_path
+    for _ in range(3):  # Check up to 3 levels up
+        test_path = os.path.join(current, file_path)
+        if os.path.exists(test_path):
+            return test_path
+        current = os.path.dirname(current)
+    return None
 
 def main():
     # Define paths relative to the current script's directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    samples_dir = os.path.join(script_dir, "samples")
-    out_dir = os.path.join(script_dir, "out")
-    rules_file = os.path.join(script_dir, "rules", "rules.yaml")
-    mappings_file = os.path.join(script_dir, "rules", "vendor_mappings.yaml")
+    backend_dir = script_dir
+    src_dir = os.path.join(backend_dir, "src")
+    project_root = os.path.dirname(script_dir)
+    
+    # Try to find all required directories and files
+    samples_dir = find_directory(project_root, "samples")
+    if not samples_dir:
+        samples_dir = find_directory(backend_dir, "samples")
+    
+    out_dir = os.path.join(project_root, "out")
+    
+    # Search for rules files
+    rules_file = find_file(project_root, os.path.join("rules", "rules.yaml"))
+    if not rules_file:
+        rules_file = find_file(backend_dir, os.path.join("rules", "rules.yaml"))
+    
+    mappings_file = find_file(project_root, os.path.join("rules", "vendor_mappings.yaml"))
+    if not mappings_file:
+        mappings_file = find_file(backend_dir, os.path.join("rules", "vendor_mappings.yaml"))
 
     # Ensure output directory exists
     os.makedirs(out_dir, exist_ok=True)
 
-    # List available files in the samples directory
+    # Check if required directories and files exist
+    if not os.path.exists(src_dir):
+        print(f"Error: The 'src' directory does not exist at {src_dir}.")
+        return
+    
+    if not samples_dir or not os.path.exists(samples_dir):
+        print(f"Error: Could not find 'samples' directory.")
+        print(f"Searched from: {project_root}")
+        print(f"Please ensure the samples directory exists.")
+        return
+    
+    if not rules_file or not os.path.exists(rules_file):
+        print(f"Error: Could not find 'rules/rules.yaml' file.")
+        print(f"Searched from: {project_root}")
+        print(f"Please ensure the rules file exists.")
+        return
+    
+    if not mappings_file or not os.path.exists(mappings_file):
+        print(f"Error: Could not find 'rules/vendor_mappings.yaml' file.")
+        print(f"Searched from: {project_root}")
+        print(f"Please ensure the vendor mappings file exists.")
+        return
+
+    # Generate timestamp for filenames (YYYY-MM-DD_HH-MM-SS format)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    
+    # Define output file paths with timestamp
+    out_csv = os.path.join(out_dir, f"findings_all_{timestamp}.csv")
+    out_pdf = os.path.join(out_dir, f"report_all_{timestamp}.pdf")
+
+    print("Running FireFind backend...")
+    print(f"Input directory: {samples_dir}")
+    print(f"Rules file: {rules_file}")
+    print(f"Mappings file: {mappings_file}")
+    print(f"Output CSV: {out_csv}")
+    print(f"Output PDF: {out_pdf}")
+
+    # Set up environment with Unicode support
+    env = os.environ.copy()
+    env["PYTHONPATH"] = src_dir
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+
+    # Build the command
+    cmd = [
+        sys.executable, "-m", "firefind.cli",
+        "--vendor", "fortinet",
+        "--input", samples_dir,
+        "--out-csv", out_csv,
+        "--out-pdf", out_pdf,
+        "--rules", rules_file,
+        "--mappings", mappings_file
+    ]
+
     try:
-        sample_files = [f for f in os.listdir(samples_dir) if os.path.isfile(os.path.join(samples_dir, f))]
-    except FileNotFoundError:
-        print(f"Error: The 'samples' directory does not exist at {samples_dir}.")
-        return
-
-    if not sample_files:
-        print("No files found in the 'samples' folder.")
-        return
-
-    print("Available files in the 'samples' folder:")
-    for idx, file_name in enumerate(sample_files, start=1):
-        print(f"{idx}. {file_name}")
-
-    # Ask the user to select a file
-    try:
-        choice = int(input("Enter the number of the file you want to process: "))
-        if choice < 1 or choice > len(sample_files):
-            raise ValueError("Invalid choice.")
-    except ValueError:
-        print("Invalid input. Please enter a valid number.")
-        return
-
-    # Get the selected file
-    input_file = os.path.join(samples_dir, sample_files[choice - 1])
-    input_base_name = os.path.splitext(os.path.basename(input_file))[0]
-
-    # Define output file paths
-    out_csv = os.path.join(out_dir, f"{input_base_name}_report_findings.csv")
-    out_pdf = os.path.join(out_dir, f"{input_base_name}_report_findings.pdf")
-
-    # Load rules and mapping
-    try:
-        with open(rules_file, "r", encoding="utf-8") as f:
-            rules_cfg = yaml.safe_load(f) or {}
-        with open(mappings_file, "r", encoding="utf-8") as f:
-            vendor_mappings = yaml.safe_load(f) or {}
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
-        return
-
-    # Pick vendor mapping
-    vendor = "fortinet"
-    if vendor not in vendor_mappings:
-        print(f"Vendor '{vendor}' not found in mappings file.")
-        return
-    mapping = vendor_mappings[vendor]
-
-    # Load and normalize rows
-    print(f"Loading rows from {input_file}...")
-    raw_rows = load_table(input_file)
-    rules = []
-    for row in raw_rows:
-        normalized_row = map_row_fortinet(row, mapping)
-        rules.append(Rule(**normalized_row))
-    print(f"Normalized {len(rules)} rules.")
-
-    # Run checks
-    print("Running checks...")
-    findings = run_checks(rules=rules, cfg=rules_cfg, vendor=vendor)  # Pass 'vendor' explicitly
-    print(f"Findings: {len(findings)} total.")
-
-    # Write findings to CSV
-    write_findings_csv(out_csv, findings)
-    print(f"Wrote CSV: {out_csv}")
-
-    # Generate PDF report
-    generate_pdf(out_pdf, findings)
-    print(f"Wrote PDF: {out_pdf}")
+        # Run the command
+        result = subprocess.run(
+            cmd,
+            cwd=backend_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace'
+        )
+        
+        # Print output
+        if result.stdout:
+            print("Output:")
+            print(result.stdout)
+        
+        if result.stderr:
+            print("Errors:")
+            print(result.stderr)
+        
+        if result.returncode == 0:
+            print("\nFireFind backend completed successfully!")
+        else:
+            print(f"\nFireFind backend failed with return code: {result.returncode}")
+            
+    except Exception as e:
+        print(f"Error running FireFind backend: {e}")
 
 if __name__ == "__main__":
-    # Add the `src` directory to the Python module search path
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
     main()
