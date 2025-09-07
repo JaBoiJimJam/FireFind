@@ -1,30 +1,186 @@
 vendor,rule_id,src,dst,proto,port,action,finding_type,severity,rationale
+fortinet,28,CLIENT1DAAS_450,"DR-DAAS_VLAN4
+IN-DaaS-VL0
+PROD-DaaS1",any,"TCP/80,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443]"
 fortinet,113,CLIENT1DAAS_450,"DR-DAAS_VLAN4
 PROD-DaaS1",any,TCP/445,Accept,admin_port_exposed,High,Rule permits administrative port(s): [445]
 fortinet,115,CLIENT1DAAS_450,"DR-DAAS_VLAN4
-PROD-DaaS1",any,"TCP/135,TCP/27000,TCP/7279,TCP/1024-65535",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [3389, 5900]"
-fortinet,1214,CLIENT1DAAS_450,any,any,"TCP/21,TCP/80,TCP/443,TCP/22",Accept,admin_port_exposed,High,Rule permits administrative port(s): [22]
+PROD-DaaS1",any,"TCP/135,TCP/27000,TCP/7279,TCP/1024-65535",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [135, 1025, 1080, 1433, 1434, 1521, 1723, 1900, 2049, 2082, 2083, 2303, 3074, 3128, 3306, 3389, 4000, 4444, 5000, 5060, 5432, 5555, 5900, 5939, 5985, 5986, 6379, 6667, 6697, 8000, 8080, 8081, 8443, 8888, 9090, 9100, 9200, 10000, 27017, 28017]"
+fortinet,117,CLIENT1DAAS_450,"DAASNETS_400
+DR-DAAS_VLAN4
+PROD-DaaS1",any,"UDP/443,TCP/80,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443]"
+fortinet,118,CLIENT1DAAS_450,DAASNETSDEV_399,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,134,CLIENT1DAAS_450,"DR-DAAS_VLAN4
+PROD-DaaS1",any,"TCP/1494,TCP/2598,TCP/49752,UDP/1494,TCP/80,TCP/8080,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443, 8080]"
+fortinet,135,CLIENT1DAAS_450,any,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,140,CLIENT1DAAS_450,"DR-DAAS_VLAN4
+PROD-DaaS1",any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,723,CLIENT1DAAS_450,"DR-DAAS_VLAN4
+PROD-DaaS1",any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,724,CLIENT1DAAS_450,"DAASNETSDEV_399
+DAASNETS_400",any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,1214,CLIENT1DAAS_450,any,any,"TCP/21,TCP/80,TCP/443,TCP/22",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [21, 22, 80, 443]"
 fortinet,72,"DAASNETSDEV_399
-DAASNETS_400",CLIENT1DAAS_450,any,"UDP/53,TCP/636",Accept,admin_port_exposed,High,Rule permits administrative port(s): [636]
+DAASNETS_400",CLIENT1DAAS_450,any,"UDP/53,TCP/636",Accept,admin_port_exposed,High,Rule permits administrative port(s): [53]
+fortinet,107,"DAASNETSDEV_399
+DAASNETS_400",CLIENT1DAAS_450,any,"TCP/1494,TCP/2598,UDP/1494,UDP/2598,TCP/80,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443]"
 fortinet,116,"DAASNETS_400
 DR-DAAS_VLAN4
-PROD-DaaS1",CLIENT1DAAS_450,any,"TCP/1494,TCP/2598,TCP/3389,TCP/49152-65535,TCP/135,TCP/138,TCP/5985,TCP/8008,UDP/49152-65535,UDP/1494,UDP/2598,UDP/49152-50795,TCP/80,TCP/443,GROUP MEMBER (2): ECHO-REPLY, ECHO-REQUEST,UDP/138",Accept,admin_port_exposed,High,Rule permits administrative port(s): [3389]
-fortinet,24,CLIENT1DEV_79,"Inter-FWL-VLAN4
-PROD-DEV1",any,"UDP/389,TCP/3268,TCP/464,UDP/464,GROUP MEMBER (3): DOMAIN-TCP, DOMAIN-UDP_, DOMAIN-UDP,GROUP MEMBER (4): KERBEROS_V5_TCP, KERBEROS_V5_UDP, KERBEROS-TCP-V4, KERBEROS-UDP-V4_,TCP/389,GROUP MEMBER (2): NTP-TCP, NTP-UDP",Accept,admin_port_exposed,High,Rule permits administrative port(s): [389]
+PROD-DaaS1",CLIENT1DAAS_450,any,"TCP/1494,TCP/2598,TCP/3389,TCP/49152-65535,TCP/135,TCP/138,TCP/5985,TCP/8008,UDP/49152-65535,UDP/1494,UDP/2598,UDP/49152-50795,TCP/80,TCP/443,GROUP MEMBER (2): ECHO-REPLY, ECHO-REQUEST,UDP/138",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 135, 138, 443, 3389, 5985]"
+fortinet,133,"DR-DAAS_VLAN4
+PROD-DaaS1",CLIENT1DAAS_450,any,"TCP/1494,TCP/2598,TCP/49752,UDP/1494,TCP/80,TCP/8080,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443, 8080]"
+fortinet,6,CLIENT1DEV_79,IN-PROD-VL0,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,8,CLIENT1DEV_79,IN-PROD-VL0,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,9,CLIENT1DEV_79,IN-PROD-VL0,any,TCP/80,Accept,admin_port_exposed,High,Rule permits administrative port(s): [80]
+fortinet,10,CLIENT1DEV_79,Inter-FWL-VLAN4,any,"TCP/514,UDP/514",Accept,admin_port_exposed,High,Rule permits administrative port(s): [514]
+fortinet,143,CLIENT1DEV_79,"WAN_21
+Inter-FWL-VLAN4
+PROD-DEV1",any,"TCP/8490,TCP/25",Accept,admin_port_exposed,High,Rule permits administrative port(s): [25]
+fortinet,219,CLIENT1DEV_79,"Inter-FWL-VLAN4
+PROD-DEV1",any,TCP/25,Accept,admin_port_exposed,High,Rule permits administrative port(s): [25]
+fortinet,302,CLIENT1DEV_79,"Transit_1010
+IN-PROD-VL0",any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,1366,CLIENT1DEV_79,"Transit_1010
+IN-PROD-VL0",any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,1373,CLIENT1DEV_79,IN-PROD-VL0,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,1374,CLIENT1DEV_79,IN-PROD-VL0,any,TCP/21,Accept,admin_port_exposed,High,Rule permits administrative port(s): [21]
+fortinet,1377,CLIENT1DEV_79,IN-PROD-VL0,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
 fortinet,216,"Inter-FWL-VLAN4
-PROD-DEV1",CLIENT1DEV_79,any,"TCP/1580,TCP/1581-1583,TCP/1591-1593,TCP/10000,TCP/21,GROUP MEMBER (2): ECHO-REPLY, ECHO-REQUEST,TCP/22,TCP/23",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [22, 23]"
+PROD-DEV1",CLIENT1DEV_79,any,"TCP/1580,TCP/1581-1583,TCP/1591-1593,TCP/10000,TCP/21,GROUP MEMBER (2): ECHO-REPLY, ECHO-REQUEST,TCP/22,TCP/23",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [21, 22, 23, 10000]"
 fortinet,221,"Inter-FWL-VLAN4
 PROD-DEV1",CLIENT1DEV_79,any,TCP/22,Accept,admin_port_exposed,High,Rule permits administrative port(s): [22]
 fortinet,225,"Inter-FWL-VLAN4
 Transit_1010
 IN-PROD-VL0
 PROD-DEV1",CLIENT1DEV_79,any,"TCP/22,TCP/22,TCP/23",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [22, 23]"
+fortinet,235,"THIRDPARTY1DEV_40
+Inter-FWL-VLAN4
+PROD-DEV1
+BSKDEV_43","DEV_104
+AD_DEV_11
+_DEV_12
+T_1316
+DEV_14
+DEV_150
+DEV_151
+QDEV_152
+DEV_153
+DEV_154
+DEV_155
+DEV_156
+EDEV_157
+DEV_158
+DEV_159
+FDEV_161
+DEV_162
+DEV_163
+DEV_164
+DEV_165
+EV_166
+DEV_167
+HDEV_186
+DEV_169
+DEV_17
+DEV_170
+DEV_171
+DEV_10
+DEV_173
+DEV_174
+DEV_175
+ODEV_176
+DEV_177
+DEV_178
+DEV_18
+DEV_180
+DEV_183
+DEV_19
+DEV_230
+DEV_207
+DEV_215
+DEV_27
+DEV_272
+DEV_29
+DEV_33
+TDEV_331
+DEV_346
+LDEV_349
+DEV_35
+DEV_359
+FDASQLD_363
+FILED_372
+STG_375
+DEV_379
+DEV_383
+DEV_388
+DEV_392
+THIRDPARTY1DEV_40
+DEV_43
+DEV_44
+SDEV_465
+DEV_48
+DEV_49
+DELPDEV_521
+DEV2_706
+SYSTEM1D_708
+SDEV_73
+DEV_74
+DEV_75
+DEV_76
+DEV_77
+DEV_78
+CLIENT1DEV_79
+DEV_81
+DEV_83
+NOMANSLAND_51
+WAN_21
+Inter-FWL-VLAN4
+WAN_31
+WAN_283
+WAN_25
+WAN_343
+EWAN-FW_408
+AZR-BNK_1701
+AZR-NI_1700
+AZR-THIRDPARTY1_1702
+AZR-_1703
+AZR-PSS_1704
+Transit_1010
+IN-PROD-VL0
+AZR-FOB_1706
+AZR-SYSTEM4_1707
+AZR-RAB_1708
+AZR-_1709
+AZR-_1710
+PROD-DEV1",any,"TCP/80,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443]"
 fortinet,331,"Inter-FWL-VLAN4
 PROD-DEV1",CLIENT1DEV_79,any,"TCP/8810,TCP/8811,TCP/23",Accept,admin_port_exposed,High,Rule permits administrative port(s): [23]
+fortinet,816,IN-PROD-VL0,CLIENT1DEV_79,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,907,"Inter-FWL-VLAN4
+PROD-DEV1",CLIENT1DEV_79,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,912,"Inter-FWL-VLAN4
+PROD-DEV1
+IN-PROD-VL0",CLIENT1DEV_79,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,1361,"Transit_1010
+IN-PROD-VL0",CLIENT1DEV_79,any,"TCP/1433,TCP/80",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 1433]"
+fortinet,1362,"Transit_1010
+IN-PROD-VL0",CLIENT1DEV_79,any,"TCP/8911-8912,TCP/21",Accept,admin_port_exposed,High,Rule permits administrative port(s): [21]
 fortinet,1363,"Inter-FWL-VLAN4
 PROD-DEV1",CLIENT1DEV_79,any,TCP/3389,Accept,admin_port_exposed,High,Rule permits administrative port(s): [3389]
+fortinet,1364,"WAN_21
+EWAN-FW_408
+Transit_1010
+IN-PROD-VL0",CLIENT1DEV_79,any,"TCP/80,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443]"
+fortinet,1365,"Transit_1010
+IN-PROD-VL0",CLIENT1DEV_79,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
 fortinet,1367,"Inter-FWL-VLAN4
-IN-PROD-VL0",CLIENT1DEV_79,any,"TCP/80,TCP/443,TCP/3389",Accept,admin_port_exposed,High,Rule permits administrative port(s): [3389]
+IN-PROD-VL0",CLIENT1DEV_79,any,"TCP/80,TCP/443,TCP/3389",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443, 3389]"
+fortinet,1368,IN-PROD-VL0,CLIENT1DEV_79,any,"TCP/80,TCP/443,TCP/1433",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443, 1433]"
+fortinet,1369,IN-PROD-VL0,CLIENT1DEV_79,any,"TCP/80,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443]"
 fortinet,1370,"IN-PROD-VL0
 Inter-FWL-VLAN4",CLIENT1DEV_79,any,"TCP/22,TCP/8810-8811,TCP/23,TCP/3389",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [22, 23, 3389]"
+fortinet,1371,"Inter-FWL-VLAN4
+IN-PROD-VL0",CLIENT1DEV_79,any,"TCP/80,TCP/1433",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 1433]"
+fortinet,1376,IN-PROD-VL0,CLIENT1DEV_79,any,TCP/443,Accept,admin_port_exposed,High,Rule permits administrative port(s): [443]
+fortinet,104,IN-PROD-VL0,CLIENT1DEV_79,any,"TCP/80,TCP/443,TCP/1433",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443, 1433]"
+fortinet,105,IN-PROD-VL0,CLIENT1DEV_79,any,"TCP/80,TCP/443",Accept,admin_port_exposed,High,"Rule permits administrative port(s): [80, 443]"
 fortinet,106,IN-PROD-VL0,CLIENT1DEV_79,any,"TCP/22,TCP/8810-8811",Accept,admin_port_exposed,High,Rule permits administrative port(s): [22]
