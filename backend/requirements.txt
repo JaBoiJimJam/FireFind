@@ -1,4 +1,4 @@
-# Core dependencies for FireFind
+# Core dependencies for FireFind CLI
 typer>=0.9.0
 click>=8.1.0
 pyyaml>=6.0
@@ -6,9 +6,8 @@ pandas>=2.0.0
 openpyxl>=3.1.0
 xlrd>=2.0.0
 
-# PDF generation
-reportlab>=4.0.0
-matplotlib>=3.7.0
+# PDF generation - Using fpdf for professional reports
+fpdf2>=2.7.0
 
 # Network analysis
 ipaddress
