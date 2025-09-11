@@ -6,6 +6,8 @@ Firewall Risk Identification Tool
 
 ## Requirements
 - Python 3.8+
+- pip
+- Git Bash or Windows Subsystem for Linux (WSL) for Windows users
 
 ## Installation
 (Optional) create and activate a virtual environment:
