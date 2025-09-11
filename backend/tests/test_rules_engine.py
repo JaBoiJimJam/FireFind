@@ -97,18 +97,18 @@ def test_run_analysis_custom_config_loading(tmp_path):
     assert {fl.finding_type for fl in findings} == {"admin_port_exposed"}
 
 
-def test_run_analysis_without_seq_column(tmp_path):
-    csv_path = tmp_path / "rules.csv"
-    csv_path.write_text(
-        "rid,src_col,dst_col,svc,act_col\n" "1,1.1.1.1,2.2.2.2,TCP/9999,allow\n"
-    )
+def test_run_analysis_no_seq_column(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    csv = "rid,src_col,dst_col,svc_col,act_col\n1,1.1.1.1,2.2.2.2,TCP/9999,allow\n"
+    (data_dir / "rules.csv").write_text(csv)
 
     rules_yaml = tmp_path / "rules.yml"
     rules_yaml.write_text("admin_ports: [9999]\n")
 
     mapping_yaml = tmp_path / "mapping.yml"
     mapping_yaml.write_text(
-        "custom:\n"
+        "noseq:\n"
         "  rule_id: ['rid']\n"
         "  src: ['src_col']\n"
         "  dst: ['dst_col']\n"
@@ -116,12 +116,15 @@ def test_run_analysis_without_seq_column(tmp_path):
     )
 
     findings = run_analysis(
-        input_path=csv_path,
-        vendor="custom",
+        input_path=data_dir,
+        vendor="noseq",
         rules_path=rules_yaml,
         mappings_path=mapping_yaml,
     )
 
     assert len(findings) == 1
-    assert findings[0].finding_type == "admin_port_exposed"
-    assert findings[0].rule_id == "1"
+    f = findings[0]
+    assert f.finding_type == "admin_port_exposed"
+    assert f.rule_id == "1"
+    assert f.src == "1.1.1.1"
+    assert f.dst == "2.2.2.2"
