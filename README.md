@@ -39,6 +39,12 @@ python -m firefind.cli --vendor fortinet --input samples \
   --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
 ```
 
+To view the current application version:
+
+```bash
+python -m firefind.cli --version
+```
+
 ### Integrated development server
 For a combined frontend and API during development, run:
 

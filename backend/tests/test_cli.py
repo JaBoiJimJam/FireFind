@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
+from firefind import __version__
 from firefind.cli import parse, app as cli_app
 
 runner = CliRunner()
@@ -78,3 +79,9 @@ def test_directory_with_dummy_csv(tmp_path):
         ],
     )
     assert result.exit_code == 0
+
+
+def test_version_option():
+    result = runner.invoke(cli_app, ["--version"])
+    assert result.exit_code == 0
+    assert __version__ in result.output
