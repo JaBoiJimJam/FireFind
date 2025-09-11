@@ -81,6 +81,12 @@ python -m firefind.cli `
   --out-pdf ..\out\report_all.pdf `
   --rules ..\rules\rules.yaml `
   --mappings ..\rules\vendor_mappings.yaml
+  ```
+
+To display the application's version:
+
+```bash
+python -m firefind.cli --version
 ```
 
 ### Method 3: FastAPI Server
@@ -101,6 +107,7 @@ Then send a `POST` request to `http://localhost:8000/scan` with a CSV or XLSX fi
 - `--out-pdf`: Output path for PDF summary report
 - `--rules`: Path to security analysis rules YAML file
 - `--mappings`: Path to vendor column mappings YAML file
+- `--version`: Show the application's version and exit
 
 ## Configuration Files
 

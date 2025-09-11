@@ -7,6 +7,8 @@ from typing import List, Tuple
 import typer
 import yaml
 
+from . import __version__
+
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
 from .rules_engine import run_checks
@@ -15,6 +17,56 @@ from .reporters.pdf_report import generate_pdf
 from .vendors.utils import pick_first_present  # we reuse this helper
 
 app = typer.Typer(help="Ingest, normalize, analyze, and output reports.")
+
+
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"FireFind {__version__}")
+        raise typer.Exit()
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    input: str = typer.Option(
+        ...,
+        "--input",
+        help="Path to input CSV/XLSX file or folder of files",
+    ),
+    vendor: str = typer.Option(
+        "fortinet",
+        "--vendor",
+        help="Vendor name (e.g., 'fortinet')",
+    ),
+    out_csv: str = typer.Option(
+        "out/findings.csv",
+        "--out-csv",
+        help="Output CSV path",
+    ),
+    out_pdf: str = typer.Option(
+        "out/report.pdf",
+        "--out-pdf",
+        help="Output PDF path",
+    ),
+    rules: str = typer.Option(
+        "rules/rules.yaml",
+        "--rules",
+        help="Rules YAML path",
+    ),
+    mappings: str = typer.Option(
+        "rules/vendor_mappings.yaml",
+        "--mappings",
+        help="Vendor mappings YAML",
+    ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=version_callback,
+        is_eager=True,
+        help="Show the application's version and exit",
+    ),
+):
+    """FireFind command line interface."""
+    parse(input, vendor, out_csv, out_pdf, rules, mappings)
 
 # ------------------------
 # Small helpers (local)
@@ -103,14 +155,13 @@ def to_rule(row: dict, mapping: dict) -> Rule | None:
 # CLI command
 # ------------------------
 
-@app.command()
 def parse(
-    input: str = typer.Option(..., "--input", help="Path to input CSV/XLSX file or folder of files"),
-    vendor: str = typer.Option("fortinet", "--vendor", help="Vendor name (e.g., 'fortinet')"),
-    out_csv: str = typer.Option("out/findings.csv", "--out-csv", help="Output CSV path"),
-    out_pdf: str = typer.Option("out/report.pdf", "--out-pdf", help="Output PDF path"),
-    rules: str = typer.Option("rules/rules.yaml", "--rules", help="Rules YAML path"),
-    mappings: str = typer.Option("rules/vendor_mappings.yaml", "--mappings", help="Vendor mappings YAML"),
+    input: str,
+    vendor: str,
+    out_csv: str,
+    out_pdf: str,
+    rules: str,
+    mappings: str,
 ):
     """Main entrypoint for FireFind CLI."""
 
