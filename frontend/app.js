@@ -1,9 +1,11 @@
 // Smooth scroll function
-function smoothScroll(targetId) {
-    event.preventDefault();
+function smoothScroll(event, targetId) {
+    if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+    }
     const element = document.getElementById(targetId);
     if (element) {
-        element.scrollIntoView({ 
+        element.scrollIntoView({
             behavior: 'smooth',
             block: 'start'
         });
@@ -23,7 +25,7 @@ window.addEventListener('scroll', () => {
 // File handling
 let uploadedFiles = [];
 const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
+the const fileInput = document.getElementById('fileInput');
 
 // Drag and drop
 dropZone.addEventListener('dragover', (e) => {
@@ -133,10 +135,11 @@ async function startScan(e) {
         if (!response.ok) throw new Error('Scan failed');
         const data = await response.json();
 
-        document.getElementById('criticalCount').textContent = data.metrics?.critical ?? 0;
-        document.getElementById('highCount').textContent = data.metrics?.high ?? 0;
-        document.getElementById('totalCount').textContent = data.metrics?.total ?? 0;
-        document.getElementById('score').textContent = data.metrics?.score ? data.metrics.score + '%' : '0%';
+        const metrics = data.metrics || {};
+        document.getElementById('criticalCount').textContent = metrics.critical ?? 0;
+        document.getElementById('highCount').textContent = metrics.high ?? 0;
+        document.getElementById('totalCount').textContent = metrics.total ?? data.findings?.length ?? 0;
+        document.getElementById('score').textContent = metrics.score != null ? metrics.score + '%' : '0%';
 
         const pdfLink = document.getElementById('pdfLink');
         const csvLink = document.getElementById('csvLink');
@@ -144,11 +147,19 @@ async function startScan(e) {
             pdfLink.href = data.pdf;
             pdfLink.style.pointerEvents = 'auto';
             pdfLink.style.opacity = '1';
+        } else {
+            pdfLink.removeAttribute('href');
+            pdfLink.style.pointerEvents = 'none';
+            pdfLink.style.opacity = '0.5';
         }
         if (data.csv) {
             csvLink.href = data.csv;
             csvLink.style.pointerEvents = 'auto';
             csvLink.style.opacity = '1';
+        } else {
+            csvLink.removeAttribute('href');
+            csvLink.style.pointerEvents = 'none';
+            csvLink.style.opacity = '0.5';
         }
 
         const resultsSection = document.getElementById('results');
