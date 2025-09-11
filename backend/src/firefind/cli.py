@@ -2,10 +2,9 @@
 
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import typer
-import yaml
 
 from . import __version__
 
@@ -14,7 +13,7 @@ from .model import Rule, Finding
 from .rules_engine import run_checks
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
-from .vendors.utils import pick_first_present  # we reuse this helper
+from .utils import load_yaml, pick_mapping, to_rule
 
 app = typer.Typer(help="Ingest, normalize, analyze, and output reports.")
 
@@ -68,23 +67,6 @@ def main(
     """FireFind command line interface."""
     parse(input, vendor, out_csv, out_pdf, rules, mappings)
 
-# ------------------------
-# Small helpers (local)
-# ------------------------
-
-def load_yaml(path: Path) -> dict:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-def pick_mapping(vendor_mappings: dict, vendor: str) -> dict:
-    if not vendor_mappings:
-        return {}
-    v = vendor.lower()
-    for k, val in vendor_mappings.items():
-        if k.lower() == v:
-            return val
-    return vendor_mappings.get(vendor, {})
-
 def save_csv(findings: List[Finding], path: Path) -> None:
     p = Path(path)
     os.makedirs(p.parent, exist_ok=True)
@@ -96,61 +78,6 @@ def save_pdf(findings: List[Finding], path: Path) -> None:
     # Change from title= to client_name= to match your PDF function
     generate_pdf(str(p), findings, client_name="FireFind Analysis")
     
-# --- Service/Port sniffing improvements ---
-
-def sniff_proto_port(row: dict) -> Tuple[str, str]:
-    """
-    Prefer an explicit TCP/nnn or UDP/nnn column (e.g., 'Service.1').
-    If missing, sniff any cell that contains TCP/nnn or UDP/nnn (line-separated allowed).
-    Fall back to service NAME (ignored by rules_engine) or 'any'.
-    Returns (proto, port_string). We leave proto='any' and put concrete values in port_string.
-    """
-    # Typical places for concrete ports
-    svc_port = pick_first_present(row, ["Service.1", "Service Port", "Port", "DPort"])
-    if svc_port.strip():
-        parts = [p.strip() for p in str(svc_port).splitlines() if p.strip()]
-        return ("any", ",".join(parts))
-
-    # Sniff anywhere for TCP/nnn or UDP/nnn
-    for _, v in row.items():
-        s = str(v or "").strip().upper()
-        if (s.startswith("TCP/") or s.startswith("UDP/")) and any(ch.isdigit() for ch in s):
-            parts = [p.strip() for p in s.splitlines() if p.strip()]
-            return ("any", ",".join(parts))
-
-    # Fall back to friendly service name if present (rules engine will ignore)
-    svc_name = pick_first_present(row, ["Service"])
-    if svc_name.strip():
-        parts = [p.strip() for p in str(svc_name).splitlines() if p.strip()]
-        return ("any", ",".join(parts))
-
-    return ("any", "any")
-
-def to_rule(row: dict, mapping: dict) -> Rule | None:
-    """
-    Map a raw row into our normalized Rule. Skip obvious non-data rows.
-    """
-    rid = pick_first_present(row, mapping.get("rule_id", [])) or "(unknown)"
-    action = pick_first_present(row, mapping.get("action", [])) or "allow"
-    src = pick_first_present(row, mapping.get("src", [])) or "any"
-    dst = pick_first_present(row, mapping.get("dst", [])) or "any"
-    proto, port = sniff_proto_port(row)
-    comment = pick_first_present(row, mapping.get("comment", [])) or ""
-
-    # Skip banner/section/noise rows that have nothing useful
-    if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
-        return None
-
-    return Rule(
-        rule_id=rid,
-        src=src,
-        dst=dst,
-        proto=proto,
-        port=port,
-        action=action,
-        comment=comment,
-    )
-
 # ------------------------
 # CLI command
 # ------------------------

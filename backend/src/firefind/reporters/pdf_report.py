@@ -36,9 +36,10 @@ class PDFReport(FPDF):
         text = str(text)
         # Replace problematic Unicode characters with ASCII equivalents
         text = text.replace('•', '-')  # Replace bullet with dash
-        text = text.replace("'", "'")  # Replace smart quotes
-        text = text.replace('"', '"')
-        text = text.replace('"', '"')
+        text = text.replace('‘', "'")
+        text = text.replace('’', "'")
+        text = text.replace('“', '"')
+        text = text.replace('”', '"')
         text = text.replace('–', '-')  # Replace en-dash
         text = text.replace('—', '-')  # Replace em-dash
         
