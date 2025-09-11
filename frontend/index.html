@@ -24,9 +24,9 @@
                 <span>FireFind</span>
             </a>
             <ul class="nav-links">
-                <li><a href="#upload" onclick="smoothScroll('upload')">Scan</a></li>
-                <li><a href="#results" onclick="smoothScroll('results')">Results</a></li>
-                <li><a href="#reports" onclick="smoothScroll('reports')">Reports</a></li>
+                <li><a href="#upload" onclick="smoothScroll(event, 'upload')">Scan</a></li>
+                <li><a href="#results" onclick="smoothScroll(event, 'results')">Results</a></li>
+                <li><a href="#reports" onclick="smoothScroll(event, 'reports')">Reports</a></li>
             </ul>
         </nav>
     </header>
@@ -137,11 +137,13 @@
 
     <script>
         // Smooth scroll function
-        function smoothScroll(targetId) {
-            event.preventDefault();
+        function smoothScroll(event, targetId) {
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
             const element = document.getElementById(targetId);
             if (element) {
-                element.scrollIntoView({ 
+                element.scrollIntoView({
                     behavior: 'smooth',
                     block: 'start'
                 });
