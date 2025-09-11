@@ -4,11 +4,12 @@ from pathlib import Path
 import csv
 from openpyxl import load_workbook
 
+
 def _read_csv_rows(path: Path) -> Iterator[Dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as f:
         r = csv.DictReader(f)
         for row in r:
-            row_dict = { (k or "").strip(): (str(v) if v is not None else "") for k, v in row.items() }
+            row_dict = {(k or "").strip(): (str(v) if v is not None else "") for k, v in row.items()}
 
             # Skip section headings and noise only when a non-numeric Seq # is present
             seq = row_dict.get("Seq #")
@@ -18,6 +19,7 @@ def _read_csv_rows(path: Path) -> Iterator[Dict[str, str]]:
                     continue
 
             yield row_dict
+
 
 def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
     wb = load_workbook(filename=str(path), read_only=True, data_only=True)
@@ -47,7 +49,7 @@ def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
         return
 
     # iterate rows after header
-    for row in ws.iter_rows(min_row=header_row_idx+1, values_only=True):
+    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
         values = [("" if v is None else str(v).strip()) for v in row]
         # pad to headers length
         if len(values) < len(headers):
@@ -62,6 +64,7 @@ def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
                 continue
 
         yield row_dict
+
 
 def load_table(path: Path) -> Iterator[Dict[str, str]]:
     suffix = path.suffix.lower()
