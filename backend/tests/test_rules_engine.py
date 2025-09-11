@@ -128,4 +128,3 @@ def test_run_analysis_no_seq_column(tmp_path):
     assert f.rule_id == "1"
     assert f.src == "1.1.1.1"
     assert f.dst == "2.2.2.2"
-

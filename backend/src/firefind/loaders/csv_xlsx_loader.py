@@ -10,14 +10,12 @@ def _read_csv_rows(path: Path) -> Iterator[Dict[str, str]]:
         r = csv.DictReader(f)
         for row in r:
             row_dict = {(k or "").strip(): (str(v) if v is not None else "") for k, v in row.items()}
-
             # Skip section headings and noise only when a non-numeric Seq # is present
             seq = row_dict.get("Seq #")
             if seq is not None:
                 seq = seq.strip()
                 if not seq.isdigit():
                     continue
-
             yield row_dict
 
 
