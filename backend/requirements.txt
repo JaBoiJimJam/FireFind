@@ -6,6 +6,10 @@ pandas>=2.0.0
 openpyxl>=3.1.0
 xlrd>=2.0.0
 
+# Web API
+fastapi>=0.110.0
+uvicorn>=0.24.0
+
 # PDF generation - Using fpdf for professional reports
 fpdf2>=2.7.0
 
