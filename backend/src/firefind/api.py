@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import tempfile
+from collections import Counter
 from dataclasses import asdict
-from typing import List
+from typing import List, Dict, Any
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,15 +52,33 @@ async def scan(
             rules_path=rules_dir / "rules.yaml",
             mappings_path=rules_dir / "vendor_mappings.yaml",
         )
+        # Build metrics by severity
+        severity_counts = Counter(f.severity.lower() for f in findings)
+        metrics: Dict[str, Any] = dict(severity_counts)
+        metrics["total"] = len(findings)
+
+        pdf_path: Path | None = None
+        csv_path: Path | None = None
 
         # Optional report generation
         if save_csv or save_pdf:
             os.makedirs("out", exist_ok=True)
             if save_csv:
-                write_findings_csv("out/findings.csv", findings)
+                csv_path = Path("out/findings.csv")
+                write_findings_csv(csv_path, findings)
             if save_pdf:
+                pdf_path = Path("out/report.pdf")
                 generate_pdf(
-                    "out/report.pdf", findings, client_name="FireFind Analysis"
+                    pdf_path, findings, client_name="FireFind Analysis"
                 )
 
-    return {"findings": [asdict(f) for f in findings]}
+    response: Dict[str, Any] = {
+        "findings": [asdict(f) for f in findings],
+        "metrics": metrics,
+    }
+    if csv_path:
+        response["csv"] = csv_path.as_posix()
+    if pdf_path:
+        response["pdf"] = pdf_path.as_posix()
+
+    return response
