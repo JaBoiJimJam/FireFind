@@ -42,7 +42,15 @@ async def scan(
             contents = await uploaded.read()
             dest.write_bytes(contents)
 
-        findings = run_analysis(tmp_path, vendor=vendor)
+        # Resolve configuration file locations relative to the backend package
+        base_dir = Path(__file__).resolve().parents[2]
+        rules_dir = base_dir / "rules"
+        findings = run_analysis(
+            tmp_path,
+            vendor=vendor,
+            rules_path=rules_dir / "rules.yaml",
+            mappings_path=rules_dir / "vendor_mappings.yaml",
+        )
 
         # Optional report generation
         if save_csv or save_pdf:
@@ -50,6 +58,8 @@ async def scan(
             if save_csv:
                 write_findings_csv("out/findings.csv", findings)
             if save_pdf:
-                generate_pdf("out/report.pdf", findings, client_name="FireFind Analysis")
+                generate_pdf(
+                    "out/report.pdf", findings, client_name="FireFind Analysis"
+                )
 
     return {"findings": [asdict(f) for f in findings]}
