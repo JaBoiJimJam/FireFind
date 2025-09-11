@@ -115,6 +115,8 @@ def parse(
     """Main entrypoint for FireFind CLI."""
 
     input_path = Path(input)
+    if not input_path.exists():
+        raise typer.BadParameter(f"{input_path} does not exist")
 
     # Load configs
     rules_cfg = load_yaml(Path(rules))
@@ -126,6 +128,8 @@ def parse(
     if input_path.is_dir():
         typer.echo(f"Input is a directory → scanning for CSV/XLSX in {input_path}")
         files = list(sorted(input_path.glob("*.csv"))) + list(sorted(input_path.glob("*.xlsx")))
+        if not files:
+            raise typer.BadParameter("No CSV or XLSX files found")
         for f in files:
             typer.echo(f"  Loading {f}")
             raw_rows.extend(load_table(f))
