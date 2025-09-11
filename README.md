@@ -21,7 +21,7 @@ venv\Scripts\activate     # Windows
 Install dependencies:
 
 ```bash
-pip install -r backend/requirements.txt
+python -m pip install -r backend/requirements.txt
 ```
 
 This project relies solely on open-source libraries and runs on Windows or Linux without commercial dependencies.
@@ -57,7 +57,8 @@ For a combined frontend and API during development, run:
 Alternatively, use the convenience script to install dependencies, launch the server, and open it in your browser:
 
 ```bash
-./run_firefind.sh
+./run_firefind.sh   # Linux
+run_firefind.bat    # Windows
 ```
 
 The server will be available at http://localhost:8000 and serves the API under `/api` while hosting the static `frontend/` files at the root path.
