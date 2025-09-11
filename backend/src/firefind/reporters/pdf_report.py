@@ -17,7 +17,7 @@ class PDFReport(FPDF):
             self.image(logo_path, 10, 8, 33)
         
         # Title
-        self.set_font('Arial', 'B', 16)
+        she.set_font('Arial', 'B', 16)
         self.cell(0, 10, 'FireFind - Firewall Risk Assessment Report', 0, 1, 'C')
         self.ln(10)
         
@@ -27,26 +27,31 @@ class PDFReport(FPDF):
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
         
     def safe_text(self, text, max_chars=60):
-        """Ensure text fits within reasonable bounds and uses safe characters"""
+        """Ensure text fits within reasonable bounds and uses safe characters."""
         if isinstance(text, (int, float)):
             return str(text)
-        elif text is None:
+        if text is None:
             return "N/A"
-        
+
         text = str(text)
-        # Replace problematic Unicode characters with ASCII equivalents
-        text = text.replace('•', '-')  # Replace bullet with dash
-        text = text.replace('‘', "'")
-        text = text.replace('’', "'")
-        text = text.replace('“', '"')
-        text = text.replace('”', '"')
-        text = text.replace('–', '-')  # Replace en-dash
-        text = text.replace('—', '-')  # Replace em-dash
-        
-        # Truncate if too long
+
+        translation_table = str.maketrans({
+            "•": "-",  # bullet
+            "·": "-",  # alternate bullet / middle dot
+            "“": '"',
+            "”": '"',
+            "‘": "'",
+            "’": "'",
+            "—": "-",  # em dash
+            "–": "-",  # en dash
+            "…": "...",  # ellipsis
+        })
+
+        text = text.translate(translation_table)
+
         if len(text) > max_chars:
-            return text[:max_chars-3] + "..."
-            
+            text = text[: max_chars - 3] + "..."
+
         return text
         
     def add_title_page(self, client_name="Organization", report_date=None):
