@@ -17,7 +17,7 @@ class PDFReport(FPDF):
             self.image(logo_path, 10, 8, 33)
         
         # Title
-        self.set_font('Arial', 'B', 16)
+        she.set_font('Arial', 'B', 16)
         self.cell(0, 10, 'FireFind - Firewall Risk Assessment Report', 0, 1, 'C')
         self.ln(10)
         
