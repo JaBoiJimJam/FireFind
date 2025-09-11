@@ -41,8 +41,9 @@ def save_csv(findings: List[Finding], path: Path) -> None:
 def save_pdf(findings: List[Finding], path: Path) -> None:
     p = Path(path)
     os.makedirs(p.parent, exist_ok=True)
-    generate_pdf(str(p), findings, title="FireFind - Sprint Report")
-
+    # Change from title= to client_name= to match your PDF function
+    generate_pdf(str(p), findings, client_name="FireFind Analysis")
+    
 # --- Service/Port sniffing improvements ---
 
 def sniff_proto_port(row: dict) -> Tuple[str, str]:
