@@ -8,7 +8,12 @@ def _read_csv_rows(path: Path) -> Iterator[Dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as f:
         r = csv.DictReader(f)
         for row in r:
-            yield { (k or "").strip(): (str(v) if v is not None else "") for k, v in row.items() }
+            row_dict = { (k or "").strip(): (str(v) if v is not None else "") for k, v in row.items() }
+            # Skip section headings and noise: require a numeric Seq #
+            seq = row_dict.get("Seq #", "").strip()
+            if not seq.isdigit():
+                continue
+            yield row_dict
 
 def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
     wb = load_workbook(filename=str(path), read_only=True, data_only=True)
