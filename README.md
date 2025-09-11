@@ -87,7 +87,13 @@ FireFind uses a sprint-based versioning scheme documented in the Version Strateg
 - Historical trend analysis of risk scores
 
 ## Development
-Tooling such as pytest, flake8, and black is not yet configured. These will be introduced once a proper test suite and configuration are in place.
+Run the test suite with:
+
+```bash
+pytest
+```
+
+Additional tooling such as flake8 and black can be introduced once the project grows.
 
 ## Vendor Support
 FireFind currently supports Fortinet firewalls. Support for additional vendors is planned.
