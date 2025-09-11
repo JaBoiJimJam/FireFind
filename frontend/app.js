@@ -1,141 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FireFind - Firewall Risk Identification Tool</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <!-- Background -->
-    <div class="bg-animation">
-        <div class="cyber-grid"></div>
-    </div>
-
-    <!-- Scanning Line -->
-    <div class="scan-line"></div>
-
-    <!-- Header -->
-    <header id="header">
-        <nav>
-            <a href="#" class="logo">
-                <div class="logo-icon">F</div>
-                <span>FireFind</span>
-            </a>
-            <ul class="nav-links">
-                <li><a href="#upload" onclick="smoothScroll('upload')">Scan</a></li>
-                <li><a href="#results" onclick="smoothScroll('results')">Results</a></li>
-                <li><a href="#reports" onclick="smoothScroll('reports')">Reports</a></li>
-            </ul>
-        </nav>
-    </header>
-
-    <!-- Hero -->
-    <section class="hero">
-        <div class="hero-content">
-            <h1>FireFind</h1>
-            <p class="hero-description">
-                FireFind is an open-source firewall risk identification tool developed by Triskele Labs. 
-                It analyzes firewall configurations from multiple vendors to identify high-risk rules, 
-                security vulnerabilities, and compliance issues. Using advanced pattern recognition, 
-                FireFind instantly detects exposed admin ports, overly permissive rules, and potential 
-                attack vectors across your entire firewall infrastructure.
-            </p>
-            <div class="hero-stats">
-                <div class="stat-item">
-                    <span class="stat-number">5</span>
-                    <span class="stat-label">Vendors Supported</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-number">100K+</span>
-                    <span class="stat-label">Rules Analyzed</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-number">0.3s</span>
-                    <span class="stat-label">Scan Time</span>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Upload -->
-    <section class="upload-section" id="upload">
-        <form id="uploadForm" enctype="multipart/form-data">
-        <div class="drop-zone" id="dropZone">
-            <div class="upload-icon">📁</div>
-            <h2>Upload Firewall Configuration</h2>
-            <p>Drag and drop your CSV or XLSX files here</p>
-            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
-                Select Files
-            </button>
-            <button class="btn btn-secondary" onclick="startDemo()">
-                Run Demo
-            </button>
-            <input type="file" id="fileInput" name="files" class="file-input" multiple accept=".csv,.xlsx">
-        </div>
-        </form>
-    </section>
-
-    <!-- Files -->
-    <section class="files-section" id="filesSection">
-        <div class="files-grid" id="filesGrid"></div>
-        <div style="text-align: center;">
-            <button class="btn btn-primary" onclick="startScan(event)">
-                START SECURITY SCAN
-            </button>
-        </div>
-    </section>
-
-    <!-- Results -->
-    <section class="results-section" id="results">
-        <div class="results-header">
-            <h2>Analysis Complete</h2>
-            <p style="color: var(--text-muted);">Critical vulnerabilities detected - Immediate action required</p>
-        </div>
-
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-value" id="criticalCount">0</div>
-                <div class="metric-label">Critical Risks</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="highCount">0</div>
-                <div class="metric-label">High Priority</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="totalCount">0</div>
-                <div class="metric-label">Total Issues</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="score">0%</div>
-                <div class="metric-label">Security Score</div>
-            </div>
-        </div>
-
-        <div class="reports-section" id="reports">
-            <h3 style="text-align: center; color: var(--primary-green); margin-bottom: 2rem; font-size: 2rem;">Download Reports</h3>
-            <div class="reports-grid">
-                <a class="report-card" id="pdfLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                    <div class="report-icon">📊</div>
-                    <h4>PDF Report</h4>
-                    <p style="color: var(--text-muted);">High-level overview PDF</p>
-                </a>
-                <a class="report-card" id="csvLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                    <div class="report-icon">🔧</div>
-                    <h4>CSV Report</h4>
-                    <p style="color: var(--text-muted);">Detailed CSV export</p>
-                </a>
-            </div>
-        </div>
-    </section>
-
-    <!-- Footer -->
-    <footer>
-        <p>&copy; 2025 FireFind by Triskele Labs | Open-Source Security Intelligence | Version 1.0.0</p>
-    </footer>
-
-    <script>
         // Smooth scroll function
         function smoothScroll(targetId) {
             event.preventDefault();
@@ -200,7 +62,7 @@
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
-            the sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
         }
@@ -271,11 +133,10 @@
                 if (!response.ok) throw new Error('Scan failed');
                 const data = await response.json();
 
-                const metrics = data.metrics || {};
-                document.getElementById('criticalCount').textContent = metrics.critical ?? 0;
-                document.getElementById('highCount').textContent = metrics.high ?? 0;
-                document.getElementById('totalCount').textContent = metrics.total ?? data.findings?.length ?? 0;
-                document.getElementById('score').textContent = metrics.score != null ? metrics.score + '%' : '0%';
+                document.getElementById('criticalCount').textContent = data.metrics?.critical ?? 0;
+                document.getElementById('highCount').textContent = data.metrics?.high ?? 0;
+                document.getElementById('totalCount').textContent = data.metrics?.total ?? 0;
+                document.getElementById('score').textContent = data.metrics?.score ? data.metrics.score + '%' : '0%';
 
                 const pdfLink = document.getElementById('pdfLink');
                 const csvLink = document.getElementById('csvLink');
@@ -283,19 +144,11 @@
                     pdfLink.href = data.pdf;
                     pdfLink.style.pointerEvents = 'auto';
                     pdfLink.style.opacity = '1';
-                } else {
-                    pdfLink.removeAttribute('href');
-                    pdfLink.style.pointerEvents = 'none';
-                    pdfLink.style.opacity = '0.5';
                 }
                 if (data.csv) {
                     csvLink.href = data.csv;
                     csvLink.style.pointerEvents = 'auto';
                     csvLink.style.opacity = '1';
-                } else {
-                    csvLink.removeAttribute('href');
-                    csvLink.style.pointerEvents = 'none';
-                    csvLink.style.opacity = '0.5';
                 }
 
                 const resultsSection = document.getElementById('results');
@@ -388,6 +241,3 @@
             console.log('%cDeveloped by Triskele Labs', 'color: #a0a0a0; font-size: 12px;');
             console.log('%cOpen-Source Firewall Security Scanner', 'color: #00ff88; font-size: 14px;');
         });
-    </script>
-</body>
-</html>
