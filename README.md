@@ -52,6 +52,12 @@ For a combined frontend and API during development, run:
 ./start_dev.sh
 ```
 
+Alternatively, use the convenience script to install dependencies, launch the server, and open it in your browser:
+
+```bash
+./run_firefind.sh
+```
+
 The server will be available at http://localhost:8000 and serves the API under `/api` while hosting the static `frontend/` files at the root path.
 
 ## Project Structure
