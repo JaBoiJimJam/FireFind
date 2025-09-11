@@ -83,6 +83,16 @@ python -m firefind.cli `
   --mappings ..\rules\vendor_mappings.yaml
 ```
 
+### Method 3: FastAPI Server
+
+For a web API interface, run the bundled FastAPI application:
+
+```bash
+uvicorn firefind.api:app --reload
+```
+
+Then send a `POST` request to `http://localhost:8000/scan` with a CSV or XLSX file in the `file` form field. Findings are returned as JSON and optional CSV/PDF reports are saved to the `out/` directory.
+
 ### CLI Parameters
 
 - `--vendor`: Firewall vendor (currently supports: `fortinet`)
