@@ -8,11 +8,12 @@ def _read_csv_rows(path: Path) -> Iterator[Dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as f:
         r = csv.DictReader(f)
         for row in r:
-            row_dict = { (k or "").strip(): (str(v) if v is not None else "") for k, v in row.items() }
-            # Skip section headings and noise: require a numeric Seq #
-            seq = row_dict.get("Seq #", "").strip()
-            if not seq.isdigit():
-                continue
+            row_dict = {(k or "").strip(): (str(v) if v is not None else "") for k, v in row.items()}
+            # Skip section headings and noise only if a Seq # column exists
+            if "Seq #" in row_dict:
+                seq = row_dict.get("Seq #", "").strip()
+                if not seq.isdigit():
+                    continue
             yield row_dict
 
 def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
@@ -50,10 +51,11 @@ def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
             values += [""] * (len(headers) - len(values))
         row_dict = dict(zip(headers, values))
 
-        # Skip section headings and noise: require a numeric Seq #
-        seq = row_dict.get("Seq #", "").strip()
-        if not seq.isdigit():
-            continue
+        # Skip section headings and noise only if a Seq # column exists
+        if "Seq #" in row_dict:
+            seq = row_dict.get("Seq #", "").strip()
+            if not seq.isdigit():
+                continue
 
         yield row_dict
 
