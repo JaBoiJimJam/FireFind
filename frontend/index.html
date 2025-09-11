@@ -645,6 +645,9 @@
             transition: all 0.3s ease;
             cursor: pointer;
             position: relative;
+            display: block;
+            text-decoration: none;
+            color: inherit;
         }
 
         .report-card:hover {
@@ -784,6 +787,7 @@
 
     <!-- Upload -->
     <section class="upload-section" id="upload">
+        <form id="uploadForm" enctype="multipart/form-data">
         <div class="drop-zone" id="dropZone">
             <div class="upload-icon">📁</div>
             <h2>Upload Firewall Configuration</h2>
@@ -794,15 +798,16 @@
             <button class="btn btn-secondary" onclick="startDemo()">
                 Run Demo
             </button>
-            <input type="file" id="fileInput" class="file-input" multiple accept=".csv,.xlsx">
+            <input type="file" id="fileInput" name="files" class="file-input" multiple accept=".csv,.xlsx">
         </div>
+        </form>
     </section>
 
     <!-- Files -->
     <section class="files-section" id="filesSection">
         <div class="files-grid" id="filesGrid"></div>
         <div style="text-align: center;">
-            <button class="btn btn-primary" onclick="startScan()">
+            <button class="btn btn-primary" onclick="startScan(event)">
                 START SECURITY SCAN
             </button>
         </div>
@@ -817,19 +822,19 @@
 
         <div class="metrics-grid">
             <div class="metric-card">
-                <div class="metric-value">23</div>
+                <div class="metric-value" id="criticalCount">0</div>
                 <div class="metric-label">Critical Risks</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value">47</div>
+                <div class="metric-value" id="highCount">0</div>
                 <div class="metric-label">High Priority</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value">156</div>
+                <div class="metric-value" id="totalCount">0</div>
                 <div class="metric-label">Total Issues</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value">89%</div>
+                <div class="metric-value" id="score">0%</div>
                 <div class="metric-label">Security Score</div>
             </div>
         </div>
@@ -837,21 +842,16 @@
         <div class="reports-section" id="reports">
             <h3 style="text-align: center; color: var(--primary-green); margin-bottom: 2rem; font-size: 2rem;">Download Reports</h3>
             <div class="reports-grid">
-                <div class="report-card" onclick="downloadReport('executive')">
+                <a class="report-card" id="pdfLink" href="#" download style="pointer-events: none; opacity: 0.5;">
                     <div class="report-icon">📊</div>
-                    <h4>Executive Summary</h4>
+                    <h4>PDF Report</h4>
                     <p style="color: var(--text-muted);">High-level overview PDF</p>
-                </div>
-                <div class="report-card" onclick="downloadReport('technical')">
+                </a>
+                <a class="report-card" id="csvLink" href="#" download style="pointer-events: none; opacity: 0.5;">
                     <div class="report-icon">🔧</div>
-                    <h4>Technical Analysis</h4>
+                    <h4>CSV Report</h4>
                     <p style="color: var(--text-muted);">Detailed CSV export</p>
-                </div>
-                <div class="report-card" onclick="downloadReport('compliance')">
-                    <div class="report-icon">📋</div>
-                    <h4>Compliance Report</h4>
-                    <p style="color: var(--text-muted);">XLSX compliance audit</p>
-                </div>
+                </a>
             </div>
         </div>
     </section>
@@ -911,12 +911,12 @@
 
         function handleFiles(files) {
             for (let file of files) {
-                // Check if file already exists
                 if (!uploadedFiles.find(f => f.name === file.name)) {
                     uploadedFiles.push({
                         id: Date.now() + Math.random(),
                         name: file.name,
-                        size: formatFileSize(file.size)
+                        size: formatFileSize(file.size),
+                        file: file
                     });
                 }
             }
@@ -964,40 +964,68 @@
 
         function startDemo() {
             uploadedFiles = [
-                { id: 'demo1', name: 'fortinet_config_2025.csv', size: '245 KB' },
-                { id: 'demo2', name: 'sophos_rules_export.xlsx', size: '1.2 MB' },
-                { id: 'demo3', name: 'checkpoint_firewall.csv', size: '567 KB' }
+                { id: 'demo1', name: 'fortinet_config_2025.csv', size: '245 KB', file: new File(['demo'], 'fortinet_config_2025.csv', { type: 'text/csv' }) },
+                { id: 'demo2', name: 'sophos_rules_export.xlsx', size: '1.2 MB', file: new File(['demo'], 'sophos_rules_export.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) },
+                { id: 'demo3', name: 'checkpoint_firewall.csv', size: '567 KB', file: new File(['demo'], 'checkpoint_firewall.csv', { type: 'text/csv' }) }
             ];
             displayFiles();
             showToast('Demo files loaded successfully!');
         }
 
-        function startScan() {
+        async function startScan(e) {
             if (uploadedFiles.length === 0) {
                 showToast('Please upload files first');
                 return;
             }
-            
+
+            const btn = e.target;
+            btn.disabled = true;
+            const originalText = btn.textContent;
+            btn.textContent = 'SCANNING...';
             showToast('Scanning firewall configurations...');
-            
-            // Animate button
-            event.target.disabled = true;
-            event.target.textContent = 'SCANNING...';
-            
-            setTimeout(() => {
-                event.target.disabled = false;
-                event.target.textContent = 'START SECURITY SCAN';
-                
-                // Show results with smooth scroll
+
+            const formData = new FormData();
+            uploadedFiles.forEach(f => {
+                if (f.file) formData.append('files', f.file);
+            });
+
+            try {
+                const response = await fetch('/scan', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) throw new Error('Scan failed');
+                const data = await response.json();
+
+                document.getElementById('criticalCount').textContent = data.metrics?.critical ?? 0;
+                document.getElementById('highCount').textContent = data.metrics?.high ?? 0;
+                document.getElementById('totalCount').textContent = data.metrics?.total ?? 0;
+                document.getElementById('score').textContent = data.metrics?.score ? data.metrics.score + '%' : '0%';
+
+                const pdfLink = document.getElementById('pdfLink');
+                const csvLink = document.getElementById('csvLink');
+                if (data.pdf) {
+                    pdfLink.href = data.pdf;
+                    pdfLink.style.pointerEvents = 'auto';
+                    pdfLink.style.opacity = '1';
+                }
+                if (data.csv) {
+                    csvLink.href = data.csv;
+                    csvLink.style.pointerEvents = 'auto';
+                    csvLink.style.opacity = '1';
+                }
+
                 const resultsSection = document.getElementById('results');
                 resultsSection.classList.add('active');
                 resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                
-                // Animate metrics
                 animateMetrics();
-                
-                showToast('Scan complete! 23 critical risks detected');
-            }, 2000);
+                showToast('Scan complete!');
+            } catch (err) {
+                showToast('Scan failed: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
         }
 
         function animateMetrics() {
@@ -1007,9 +1035,9 @@
                 const isPercentage = finalValue.includes('%');
                 const numericValue = parseInt(finalValue);
                 let currentValue = 0;
-                
+
                 metric.textContent = '0' + (isPercentage ? '%' : '');
-                
+
                 const increment = numericValue / 30;
                 const timer = setInterval(() => {
                     currentValue += increment;
@@ -1020,26 +1048,6 @@
                     metric.textContent = Math.floor(currentValue) + (isPercentage ? '%' : '');
                 }, 50);
             });
-        }
-
-        function downloadReport(type) {
-            showToast(`Generating ${type} report...`);
-            
-            setTimeout(() => {
-                const reportNames = {
-                    executive: 'FireFind_Executive_Summary_2025.pdf',
-                    technical: 'FireFind_Technical_Analysis_2025.csv',
-                    compliance: 'FireFind_Compliance_Report_2025.xlsx'
-                };
-                
-                // Create fake download
-                const link = document.createElement('a');
-                link.download = reportNames[type];
-                link.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent('FireFind Report Data');
-                link.click();
-                
-                showToast(`${reportNames[type]} downloaded successfully!`);
-            }, 1500);
         }
 
         function showToast(message) {
