@@ -1,9 +1,11 @@
         // Smooth scroll function
-        function smoothScroll(targetId) {
-            event.preventDefault();
+        function smoothScroll(event, targetId) {
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+            }
             const element = document.getElementById(targetId);
             if (element) {
-                element.scrollIntoView({ 
+                element.scrollIntoView({
                     behavior: 'smooth',
                     block: 'start'
                 });
