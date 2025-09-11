@@ -91,4 +91,3 @@ Tooling such as pytest, flake8, and black is not yet configured. These will be i
 
 ## Vendor Support
 FireFind currently supports Fortinet firewalls. Support for additional vendors is planned.
-
