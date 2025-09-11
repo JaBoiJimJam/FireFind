@@ -68,6 +68,16 @@ Or invoke the CLI directly:
 python -m firefind.cli --vendor fortinet --input samples \
   --out-csv ../out/findings.csv --out-pdf ../out/report.pdf \
   --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
+
+### Integrated development server
+
+For a combined frontend and API during development, run:
+
+```bash
+./start_dev.sh
+```
+
+The server will be available at http://localhost:8000 and serves the API under `/api` while hosting the static `frontend/` files at the root path.
 Vendor Support
 FireFind currently supports Fortinet firewalls. Support for additional vendors is planned.
 
@@ -141,5 +151,15 @@ Or invoke the CLI directly:
 python -m firefind.cli --vendor fortinet --input samples \
   --out-csv ../out/findings.csv --out-pdf ../out/report.pdf \
   --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
+
+### Integrated development server
+
+For a combined frontend and API during development, run:
+
+```bash
+./start_dev.sh
+```
+
+The server will be available at http://localhost:8000 and serves the API under `/api` while hosting the static `frontend/` files at the root path.
 Vendor Support
 FireFind currently supports Fortinet firewalls. Support for additional vendors is planned.
