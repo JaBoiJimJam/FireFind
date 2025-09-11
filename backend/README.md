@@ -81,7 +81,23 @@ python -m firefind.cli `
   --out-pdf ..\out\report_all.pdf `
   --rules ..\rules\rules.yaml `
   --mappings ..\rules\vendor_mappings.yaml
+  ```
+
+To display the application's version:
+
+```bash
+python -m firefind.cli --version
 ```
+
+### Method 3: FastAPI Server
+
+For a web API interface, run the bundled FastAPI application:
+
+```bash
+uvicorn firefind.api:app --reload
+```
+
+Then send a `POST` request to `http://localhost:8000/scan` with a CSV or XLSX file in the `file` form field. Findings are returned as JSON and optional CSV/PDF reports are saved to the `out/` directory.
 
 ### CLI Parameters
 
@@ -91,6 +107,7 @@ python -m firefind.cli `
 - `--out-pdf`: Output path for PDF summary report
 - `--rules`: Path to security analysis rules YAML file
 - `--mappings`: Path to vendor column mappings YAML file
+- `--version`: Show the application's version and exit
 
 ## Configuration Files
 

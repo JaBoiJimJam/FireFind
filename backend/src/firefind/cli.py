@@ -2,36 +2,70 @@
 
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import typer
-import yaml
+
+from . import __version__
 
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
 from .rules_engine import run_checks
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
-from .vendors.utils import pick_first_present  # we reuse this helper
+from .utils import load_yaml, pick_mapping, to_rule
 
 app = typer.Typer(help="Ingest, normalize, analyze, and output reports.")
 
-# ------------------------
-# Small helpers (local)
-# ------------------------
 
-def load_yaml(path: Path) -> dict:
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"FireFind {__version__}")
+        raise typer.Exit()
 
-def pick_mapping(vendor_mappings: dict, vendor: str) -> dict:
-    if not vendor_mappings:
-        return {}
-    v = vendor.lower()
-    for k, val in vendor_mappings.items():
-        if k.lower() == v:
-            return val
-    return vendor_mappings.get(vendor, {})
+
+@app.callback(invoke_without_command=True)
+def main(
+    input: str = typer.Option(
+        ...,
+        "--input",
+        help="Path to input CSV/XLSX file or folder of files",
+    ),
+    vendor: str = typer.Option(
+        "fortinet",
+        "--vendor",
+        help="Vendor name (e.g., 'fortinet')",
+    ),
+    out_csv: str = typer.Option(
+        "out/findings.csv",
+        "--out-csv",
+        help="Output CSV path",
+    ),
+    out_pdf: str = typer.Option(
+        "out/report.pdf",
+        "--out-pdf",
+        help="Output PDF path",
+    ),
+    rules: str = typer.Option(
+        "rules/rules.yaml",
+        "--rules",
+        help="Rules YAML path",
+    ),
+    mappings: str = typer.Option(
+        "rules/vendor_mappings.yaml",
+        "--mappings",
+        help="Vendor mappings YAML",
+    ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=version_callback,
+        is_eager=True,
+        help="Show the application's version and exit",
+    ),
+):
+    """FireFind command line interface."""
+    parse(input, vendor, out_csv, out_pdf, rules, mappings)
 
 def save_csv(findings: List[Finding], path: Path) -> None:
     p = Path(path)
@@ -44,77 +78,23 @@ def save_pdf(findings: List[Finding], path: Path) -> None:
     # Change from title= to client_name= to match your PDF function
     generate_pdf(str(p), findings, client_name="FireFind Analysis")
     
-# --- Service/Port sniffing improvements ---
-
-def sniff_proto_port(row: dict) -> Tuple[str, str]:
-    """
-    Prefer an explicit TCP/nnn or UDP/nnn column (e.g., 'Service.1').
-    If missing, sniff any cell that contains TCP/nnn or UDP/nnn (line-separated allowed).
-    Fall back to service NAME (ignored by rules_engine) or 'any'.
-    Returns (proto, port_string). We leave proto='any' and put concrete values in port_string.
-    """
-    # Typical places for concrete ports
-    svc_port = pick_first_present(row, ["Service.1", "Service Port", "Port", "DPort"])
-    if svc_port.strip():
-        parts = [p.strip() for p in str(svc_port).splitlines() if p.strip()]
-        return ("any", ",".join(parts))
-
-    # Sniff anywhere for TCP/nnn or UDP/nnn
-    for _, v in row.items():
-        s = str(v or "").strip().upper()
-        if (s.startswith("TCP/") or s.startswith("UDP/")) and any(ch.isdigit() for ch in s):
-            parts = [p.strip() for p in s.splitlines() if p.strip()]
-            return ("any", ",".join(parts))
-
-    # Fall back to friendly service name if present (rules engine will ignore)
-    svc_name = pick_first_present(row, ["Service"])
-    if svc_name.strip():
-        parts = [p.strip() for p in str(svc_name).splitlines() if p.strip()]
-        return ("any", ",".join(parts))
-
-    return ("any", "any")
-
-def to_rule(row: dict, mapping: dict) -> Rule | None:
-    """
-    Map a raw row into our normalized Rule. Skip obvious non-data rows.
-    """
-    rid = pick_first_present(row, mapping.get("rule_id", [])) or "(unknown)"
-    action = pick_first_present(row, mapping.get("action", [])) or "allow"
-    src = pick_first_present(row, mapping.get("src", [])) or "any"
-    dst = pick_first_present(row, mapping.get("dst", [])) or "any"
-    proto, port = sniff_proto_port(row)
-    comment = pick_first_present(row, mapping.get("comment", [])) or ""
-
-    # Skip banner/section/noise rows that have nothing useful
-    if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
-        return None
-
-    return Rule(
-        rule_id=rid,
-        src=src,
-        dst=dst,
-        proto=proto,
-        port=port,
-        action=action,
-        comment=comment,
-    )
-
 # ------------------------
 # CLI command
 # ------------------------
 
-@app.command()
 def parse(
-    input: str = typer.Option(..., "--input", help="Path to input CSV/XLSX file or folder of files"),
-    vendor: str = typer.Option("fortinet", "--vendor", help="Vendor name (e.g., 'fortinet')"),
-    out_csv: str = typer.Option("out/findings.csv", "--out-csv", help="Output CSV path"),
-    out_pdf: str = typer.Option("out/report.pdf", "--out-pdf", help="Output PDF path"),
-    rules: str = typer.Option("rules/rules.yaml", "--rules", help="Rules YAML path"),
-    mappings: str = typer.Option("rules/vendor_mappings.yaml", "--mappings", help="Vendor mappings YAML"),
+    input: str,
+    vendor: str,
+    out_csv: str,
+    out_pdf: str,
+    rules: str,
+    mappings: str,
 ):
     """Main entrypoint for FireFind CLI."""
 
     input_path = Path(input)
+    if not input_path.exists():
+        raise typer.BadParameter(f"{input_path} does not exist")
 
     # Load configs
     rules_cfg = load_yaml(Path(rules))
@@ -126,6 +106,8 @@ def parse(
     if input_path.is_dir():
         typer.echo(f"Input is a directory → scanning for CSV/XLSX in {input_path}")
         files = list(sorted(input_path.glob("*.csv"))) + list(sorted(input_path.glob("*.xlsx")))
+        if not files:
+            raise typer.BadParameter("No CSV or XLSX files found")
         for f in files:
             typer.echo(f"  Loading {f}")
             raw_rows.extend(load_table(f))
