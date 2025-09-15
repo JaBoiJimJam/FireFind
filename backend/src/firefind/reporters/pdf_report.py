@@ -1,8 +1,12 @@
 from fpdf import FPDF
 import os
+import logging
 from typing import List
 from datetime import datetime
 from ..model import Finding
+
+
+logger = logging.getLogger(__name__)
 
 class PDFReport(FPDF):
     def __init__(self):
@@ -351,4 +355,4 @@ def generate_pdf(output_path: str, findings: List[Finding], client_name="Triskel
     
     # Save the PDF
     pdf.output(output_path)
-    print(f"PDF report generated: {output_path}")
+    logger.info("PDF report generated: %s", output_path)
