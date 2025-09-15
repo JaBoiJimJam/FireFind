@@ -25,7 +25,7 @@ window.addEventListener('scroll', () => {
 // File handling
 let uploadedFiles = [];
 const dropZone = document.getElementById('dropZone');
-the const fileInput = document.getElementById('fileInput');
+const fileInput = document.getElementById('fileInput');
 
 // Drag and drop
 dropZone.addEventListener('dragover', (e) => {
