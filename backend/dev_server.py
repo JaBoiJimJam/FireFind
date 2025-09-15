@@ -13,6 +13,12 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/.well-known/appspecific/com.chrome.devtools.json", include_in_schema=False)
+async def chrome_devtools_config() -> dict[str, str]:
+    """Return empty JSON for Chrome devtools config."""
+    return {}
+
+
 app.mount("/api", api_app)
 
 # Serve the frontend directory if it exists
