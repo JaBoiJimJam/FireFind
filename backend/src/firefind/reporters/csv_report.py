@@ -2,8 +2,11 @@ import csv, os
 from typing import List
 from ..model import Finding
 
+
 def write_findings_csv(path: str, findings: List[Finding]) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    dir_name = os.path.dirname(path)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["vendor","rule_id","src","dst","proto","port","action","finding_type","severity","rationale"])
