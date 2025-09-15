@@ -1,0 +1,29 @@
+name: Run FireFind Batch
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-batch:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run backend tests
+        run: |
+          cd backend
+          pytest
+      - name: Execute run_firefind.bat
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c run_firefind.bat 2>&1" -NoNewWindow -PassThru -RedirectStandardOutput "batch.log"
+          Start-Sleep -Seconds 20
+          Get-Content batch.log
+          if (-not (Select-String -Path batch.log -Pattern "Uvicorn running on")) { Write-Error "Uvicorn failed to start"; exit 1 }
+          if (Select-String -Path batch.log -Pattern "ModuleNotFoundError") { Write-Error "ModuleNotFoundError encountered"; exit 1 }
+          Stop-Process $proc.Id
