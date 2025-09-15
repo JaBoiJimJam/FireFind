@@ -108,6 +108,10 @@ Run the test suite with:
 pytest
 ```
 
+Some integration tests invoke the Windows batch script `run_firefind.bat` using
+`cmd.exe`. A Windows runtime or a compatible environment such as Wine is
+required to execute these tests; they will be skipped when neither is available.
+
 Additional tooling such as flake8 and black can be introduced once the project grows.
 
 ## Vendor Support
