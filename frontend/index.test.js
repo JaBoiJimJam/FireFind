@@ -25,8 +25,7 @@ function loadApp() {
   if (!scriptLoaded) {
     jest.spyOn(window, 'setInterval').mockImplementation(() => {});
     const script = fs
-      .readFileSync(path.resolve(__dirname, 'app.js'), 'utf8')
-      .replace('the const', 'const');
+      .readFileSync(path.resolve(__dirname, 'app.js'), 'utf8');
     const scriptEl = document.createElement('script');
     scriptEl.textContent = script;
     document.body.appendChild(scriptEl);
