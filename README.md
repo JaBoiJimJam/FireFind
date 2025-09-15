@@ -63,6 +63,14 @@ run_firefind.bat    # Windows
 
 The server will be available at http://localhost:8000 and serves the API under `/api` while hosting the static `frontend/` files at the root path.
 
+### CORS configuration
+The backend's CORS policy can be adjusted by setting the `FIRE_FIND_ALLOW_ORIGINS` environment variable to a comma-separated list of allowed origins. For development, all origins are permitted by default.
+
+```bash
+export FIRE_FIND_ALLOW_ORIGINS=http://localhost:5173
+uvicorn firefind.api:app --reload
+```
+
 ## Project Structure
 ```
 backend/
