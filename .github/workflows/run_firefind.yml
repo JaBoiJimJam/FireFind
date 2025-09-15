@@ -21,7 +21,7 @@ jobs:
       - name: Execute run_firefind.bat
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c run_firefind.bat" -NoNewWindow -PassThru -RedirectStandardOutput "batch.log" -RedirectStandardError "batch.log"
+          $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c run_firefind.bat 2>&1" -NoNewWindow -PassThru -RedirectStandardOutput "batch.log"
           Start-Sleep -Seconds 20
           Get-Content batch.log
           if (-not (Select-String -Path batch.log -Pattern "Uvicorn running on")) { Write-Error "Uvicorn failed to start"; exit 1 }

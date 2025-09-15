@@ -21,47 +21,50 @@ def _read_csv_rows(path: Path) -> Iterator[Dict[str, str]]:
 
 def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
     wb = load_workbook(filename=str(path), read_only=True, data_only=True)
-    ws = wb.active
-
-    # find the header row
-    header_row_idx = None
-    for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
-        cells = [str(c).strip() if c is not None else "" for c in row]
-        if {"Seq #", "Action", "Service"} <= set(cells):
-            header_row_idx = i
-            headers = cells
-            break
-
-    if header_row_idx is None:
-        # fallback: take the first non-empty row as headers
+    try:
         ws = wb.active
-        ws.reset_dimensions()
+
+        # find the header row
+        header_row_idx = None
         for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
             cells = [str(c).strip() if c is not None else "" for c in row]
-            if any(cells):
+            if {"Seq #", "Action", "Service"} <= set(cells):
                 header_row_idx = i
                 headers = cells
                 break
 
-    if header_row_idx is None:
-        return
+        if header_row_idx is None:
+            # fallback: take the first non-empty row as headers
+            ws = wb.active
+            ws.reset_dimensions()
+            for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
+                cells = [str(c).strip() if c is not None else "" for c in row]
+                if any(cells):
+                    header_row_idx = i
+                    headers = cells
+                    break
 
-    # iterate rows after header
-    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
-        values = [("" if v is None else str(v).strip()) for v in row]
-        # pad to headers length
-        if len(values) < len(headers):
-            values += [""] * (len(headers) - len(values))
-        row_dict = dict(zip(headers, values))
+        if header_row_idx is None:
+            return
 
-        # Skip section headings and noise only when a non-numeric Seq # is present
-        seq = row_dict.get("Seq #")
-        if seq is not None:
-            seq = seq.strip()
-            if not seq.isdigit():
-                continue
+        # iterate rows after header
+        for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
+            values = [("" if v is None else str(v).strip()) for v in row]
+            # pad to headers length
+            if len(values) < len(headers):
+                values += [""] * (len(headers) - len(values))
+            row_dict = dict(zip(headers, values))
 
-        yield row_dict
+            # Skip section headings and noise only when a non-numeric Seq # is present
+            seq = row_dict.get("Seq #")
+            if seq is not None:
+                seq = seq.strip()
+                if not seq.isdigit():
+                    continue
+
+            yield row_dict
+    finally:
+        wb.close()
 
 
 def load_table(path: Path) -> Iterator[Dict[str, str]]:
