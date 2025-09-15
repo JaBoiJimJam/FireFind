@@ -102,3 +102,30 @@ test('startScan posts files and updates metrics and links', async () => {
   expect(startButton.disabled).toBe(false);
   expect(startButton.textContent).toBe('SCAN');
 });
+
+test('startScan uploads xlsx files correctly', async () => {
+  const startButton = document.createElement('button');
+  startButton.textContent = 'SCAN';
+  document.body.appendChild(startButton);
+
+  const file = new File(['binary'], 'rules.xlsx', {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  window.handleFiles([file]);
+
+  window.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ metrics: {}, findings: [] }),
+  });
+
+  await window.startScan({ target: startButton });
+
+  expect(window.fetch).toHaveBeenCalledWith(
+    '/api/scan',
+    expect.objectContaining({ method: 'POST' })
+  );
+  const formData = window.fetch.mock.calls[0][1].body;
+  const files = formData.getAll('files');
+  expect(files).toHaveLength(1);
+  expect(files[0].name).toBe('rules.xlsx');
+});
