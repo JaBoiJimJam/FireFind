@@ -247,8 +247,13 @@ function createParticle() {
 setInterval(createParticle, 300);
 
 // Initialize
+const isDevelopment =
+    typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
+
 window.addEventListener('load', () => {
-    console.log('%cFireFind v1.0.0', 'color: #4ECCA3; font-size: 24px; font-weight: bold;');
-    console.log('%cDeveloped by Triskele Labs', 'color: #a0a0a0; font-size: 12px;');
-    console.log('%cOpen-Source Firewall Security Scanner', 'color: #00ff88; font-size: 14px;');
+    if (isDevelopment) {
+        console.log('%cFireFind v1.0.0', 'color: #4ECCA3; font-size: 24px; font-weight: bold;');
+        console.log('%cDeveloped by Triskele Labs', 'color: #a0a0a0; font-size: 12px;');
+        console.log('%cOpen-Source Firewall Security Scanner', 'color: #00ff88; font-size: 14px;');
+    }
 });
