@@ -18,9 +18,18 @@ from .reporters.pdf_report import generate_pdf
 
 app = FastAPI()
 
+# Configure allowed CORS origins via environment variable. Multiple origins can
+# be provided as a comma-separated list. Defaults to "*" for development
+# convenience.
+origins_env = os.getenv("FIRE_FIND_ALLOW_ORIGINS", "*")
+if origins_env == "*":
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Development convenience
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
