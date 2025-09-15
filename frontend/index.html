@@ -62,15 +62,15 @@
 
     <!-- Upload -->
     <section class="upload-section" id="upload">
-        <form id="uploadForm" method="post" enctype="multipart/form-data">
+        <form id="uploadForm" method="post" enctype="multipart/form-data" onsubmit="event.preventDefault()">
         <div class="drop-zone" id="dropZone">
             <div class="upload-icon">📁</div>
             <h2>Upload Firewall Configuration</h2>
             <p>Drag and drop your CSV or XLSX files here</p>
-            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+            <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
                 Select Files
             </button>
-            <button class="btn btn-secondary" onclick="startDemo()">
+            <button type="button" class="btn btn-secondary" onclick="startDemo()">
                 Run Demo
             </button>
             <input type="file" id="fileInput" name="files" class="file-input" multiple accept=".csv,.xlsx">
