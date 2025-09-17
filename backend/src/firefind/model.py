@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional
 
 @dataclass
 class Rule:
@@ -9,7 +9,7 @@ class Rule:
     proto: str
     port: str
     action: str
-    comment: Optional[str] = ""
+    comment: Optional[str] = None
 
 @dataclass
 class Finding:
@@ -23,3 +23,4 @@ class Finding:
     finding_type: str
     severity: str
     rationale: str
+    risk_code: str = ""  # Add this field

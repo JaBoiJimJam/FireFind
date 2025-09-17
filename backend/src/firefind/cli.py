@@ -106,6 +106,10 @@ def parse(
     if input_path.is_dir():
         typer.echo(f"Input is a directory → scanning for CSV/XLSX in {input_path}")
         files = list(sorted(input_path.glob("*.csv"))) + list(sorted(input_path.glob("*.xlsx")))
+        
+        # Filter out temporary Excel files (starting with ~$)
+        files = [f for f in files if not f.name.startswith("~$")]
+        
         if not files:
             raise typer.BadParameter("No CSV or XLSX files found")
         for f in files:

@@ -1,14 +1,29 @@
-import csv, os
+import csv
 from typing import List
 from ..model import Finding
 
 
 def write_findings_csv(path: str, findings: List[Finding]) -> None:
-    dir_name = os.path.dirname(path)
-    if dir_name:
-        os.makedirs(dir_name, exist_ok=True)
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["vendor","rule_id","src","dst","proto","port","action","finding_type","severity","rationale"])
-        for x in findings:
-            w.writerow([x.vendor,x.rule_id,x.src,x.dst,x.proto,x.port,x.action,x.finding_type,x.severity,x.rationale])
+    """Write findings to a CSV file."""
+    with open(path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        # Swap risk_code and rationale positions: risk_code in column J, rationale in column K
+        writer.writerow([
+            'vendor', 'rule_id', 'src', 'dst', 'proto', 'port', 'action',
+            'finding_type', 'severity', 'risk_code', 'rationale'
+        ])
+        
+        for finding in findings:
+            writer.writerow([
+                finding.vendor,
+                finding.rule_id,
+                finding.src,
+                finding.dst,
+                finding.proto,
+                finding.port,
+                finding.action,
+                finding.finding_type,
+                finding.severity,
+                finding.risk_code,
+                finding.rationale
+            ])
