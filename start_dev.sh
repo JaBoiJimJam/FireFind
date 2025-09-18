@@ -9,3 +9,4 @@ export PYTHONPATH="$DIR/backend/src:$PYTHONPATH"
 
 # Launch FastAPI dev server serving API and static frontend assets
 exec python -m uvicorn backend.dev_server:app --reload --host 0.0.0.0 --port 8000
+
