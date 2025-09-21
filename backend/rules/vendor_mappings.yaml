@@ -1,8 +1,8 @@
 fortinet:
-  rule_id: ["Seq #", "ID", "Policyid", "Rule ID"]
-  src: ["Source Value", "Source", "Address", "Source Address"]
-  dst: ["Destination Value", "Destination", "Address.1", "Destination Address"]
+  rule_id: ["Seq #", "ID", "Policyid", "Rule ID", "policyid"]
+  src: ["Source Value", "Source", "Address", "Source Address", "srcaddr", "src"]
+  dst: ["Destination Value", "Destination", "Address.1", "Destination Address", "dstaddr", "dst"]
   proto: ["Service", "Proto", "Protocol"]
   port: ["Service.1", "Service Port", "Port", "DPort"]   # concrete TCP/nnn
   action: ["Action"]
-  comment: ["Comments", "Comment", "Name", "Remarks"]
+  comment: ["Comments", "Comment", "Name", "Remarks", "comments"]
