@@ -28,6 +28,40 @@ def test_read_csv_rows_and_load_table(tmp_path):
     assert list(load_table(csv_path)) == expected
 
 
+def test_read_csv_rows_with_banner_lines(tmp_path):
+    csv_path = tmp_path / "sample_with_banner.csv"
+    csv_content = (
+        "\n"
+        "Firewall Policy\n"
+        "action,srcaddr,dstaddr,policyid,service,comments\n"
+        "allow,internal,external,10,HTTP,Primary rule\n"
+        "deny,guest,restricted,11,HTTPS,Secondary rule\n"
+    )
+    csv_path.write_text(csv_content)
+
+    expected = [
+        {
+            "action": "allow",
+            "srcaddr": "internal",
+            "dstaddr": "external",
+            "policyid": "10",
+            "service": "HTTP",
+            "comments": "Primary rule",
+        },
+        {
+            "action": "deny",
+            "srcaddr": "guest",
+            "dstaddr": "restricted",
+            "policyid": "11",
+            "service": "HTTPS",
+            "comments": "Secondary rule",
+        },
+    ]
+
+    assert list(_read_csv_rows(csv_path)) == expected
+    assert list(load_table(csv_path)) == expected
+
+
 def test_read_xlsx_rows_and_load_table(tmp_path):
     xlsx_path = tmp_path / "sample.xlsx"
     wb = Workbook()
