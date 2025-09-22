@@ -1,6 +1,25 @@
 import ipaddress
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Set
 from .model import Rule, Finding
+
+
+DEFAULT_ADMIN_PORTS = [
+    21, 22, 23, 25, 53, 80, 110, 111, 135, 137, 138, 139, 143, 161, 443,
+    445, 465, 514, 993, 995, 1025, 1080, 1433, 1434, 1521, 1723, 2049, 2082,
+    2083, 3128, 3306, 3389, 5432, 5900, 5939, 6379, 8080, 8443, 8888, 9200,
+    10000, 27017, 3074, 5060, 135, 139, 1433, 1521, 1723, 1900, 2303, 4000,
+    4444, 5000, 5555, 6667, 6697, 8000, 8081, 9100, 9090, 5985, 5986, 28017,
+]
+
+DEFAULT_HIGH_RISK_ADMIN_PORTS: Set[int] = {
+    22, 23, 3389, 5900, 445, 389, 636, 5985, 5986,
+}
+
+DEFAULT_MEDIUM_RISK_ADMIN_PORTS: Set[int] = {
+    21, 25, 53, 80, 110, 111, 135, 137, 138, 139, 143, 161, 443, 465, 514,
+    993, 995, 1025, 1080, 1433, 1434, 1521, 1723, 2049, 2082, 2083, 3128,
+    3306, 5432, 5939, 6379, 8080, 8443, 8888, 9200, 3074, 5060,
+}
 
 
 def parse_ports(port_str: str) -> List[int]:
@@ -56,6 +75,35 @@ def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
     return f"FR-{severity_short}-{index:03d}"
 
 
+def _normalize_port_set(values: Iterable[int | str]) -> Set[int]:
+    normalized: Set[int] = set()
+    for value in values or []:
+        try:
+            normalized.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def classify_admin_port_severity(
+    exposed_ports: Set[int],
+    high_risk_ports: Set[int],
+    medium_risk_ports: Set[int],
+) -> str:
+    """Return a qualitative severity based on the exposed admin ports."""
+
+    if not exposed_ports:
+        return "Low"
+
+    if exposed_ports & high_risk_ports or len(exposed_ports) >= 4:
+        return "High"
+
+    if exposed_ports & medium_risk_ports or len(exposed_ports) >= 2:
+        return "Medium"
+
+    return "Low"
+
+
 def action_allows_traffic(action: str) -> bool:
     v = (action or "").strip().lower()
     return v.startswith("allow") or v.startswith("accept")
@@ -70,7 +118,16 @@ def looks_internet_facing(value: str) -> bool:
 
 
 def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
-    admin_ports = set(cfg.get("admin_ports", [22, 23, 3389, 5900, 445, 389, 636]))
+    admin_ports = _normalize_port_set(cfg.get("admin_ports", DEFAULT_ADMIN_PORTS))
+    if not admin_ports:
+        admin_ports = set(DEFAULT_ADMIN_PORTS)
+
+    high_risk_admin_ports = _normalize_port_set(
+        cfg.get("high_risk_admin_ports", DEFAULT_HIGH_RISK_ADMIN_PORTS)
+    ) or set(DEFAULT_HIGH_RISK_ADMIN_PORTS)
+    medium_risk_admin_ports = _normalize_port_set(
+        cfg.get("medium_risk_admin_ports", DEFAULT_MEDIUM_RISK_ADMIN_PORTS)
+    )
     broad_prefix = int(
         cfg.get("broad_cidr_prefix_max", 8)
     )  # e.g., flag /0..../8 as "broad"
@@ -105,8 +162,14 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
         if is_all_ports(r.port):
             ports.update(admin_ports)
 
-        if ports and any(p in admin_ports for p in ports):
-            risk_code = generate_risk_code('admin_port_exposed', 'High', risk_code_counter)
+        exposed_admin_ports = admin_ports.intersection(ports)
+        if exposed_admin_ports:
+            severity = classify_admin_port_severity(
+                exposed_admin_ports,
+                high_risk_admin_ports,
+                medium_risk_admin_ports,
+            )
+            risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
 
             findings.append(
@@ -119,8 +182,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
                     r.port,
                     r.action,
                     finding_type="admin_port_exposed",
-                    severity="High",
-                    rationale=f"Rule permits administrative port(s): {sorted(admin_ports.intersection(ports))}",
+                    severity=severity,
+                    rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
                     risk_code=risk_code,
                     source_file=r.source_file,
                 )
