@@ -192,19 +192,44 @@ class PDFReport(FPDF):
         """Convert technical finding type to user-friendly description"""
         descriptions = {
             'broad_source_range': 'Overly Broad Source Network Range',
-            'broad_destination_range': 'Overly Broad Destination Network Range', 
+            'broad_destination_range': 'Overly Broad Destination Network Range',
             'any_destination': 'Rule Allows Traffic to Any Destination',
             'admin_port_exposed': 'Administrative Port Exposed',
             'permissive_rule': 'Overly Permissive Rule Configuration',
         }
-        
+
         finding_type = getattr(finding, 'finding_type', 'unknown')
         return descriptions.get(finding_type, f'Security Finding: {finding_type}')
-        
+
+    def derive_client_identifier(self, source_file: str) -> str:
+        """Extract a high-level client identifier from a source filename."""
+        if not source_file:
+            return ""
+
+        basename = os.path.basename(source_file)
+        stem, _ = os.path.splitext(basename)
+        stem_normalized = stem.replace('_', ' ').strip()
+        if not stem_normalized:
+            return ""
+
+        dash_tokens = [token.strip() for token in stem_normalized.split('-') if token.strip()]
+        if dash_tokens:
+            first_token = dash_tokens[0]
+            first_word = first_token.split()[0].strip()
+            if first_word:
+                return first_word
+
+        for word in stem_normalized.split():
+            cleaned = word.strip()
+            if cleaned:
+                return cleaned
+
+        return stem_normalized
+
     def format_technical_details(self, finding: Finding):
         """Format technical details for the PDF"""
         details = []
-        
+
         # Rule information
         rule_id = getattr(finding, 'rule_id', 'N/A')
         details.append(f"Rule ID: {rule_id}")
@@ -214,15 +239,25 @@ class PDFReport(FPDF):
         dst = self.safe_text(getattr(finding, 'dst', 'N/A'), 40)
         details.append(f"Source: {src}")
         details.append(f"Destination: {dst}")
-        
+
         # Service details - removed protocol line
         port = getattr(finding, 'port', 'N/A')
         details.append(f"Port/Service: {port}")
-        
+
+        # Source file / client information
+        source_file = getattr(finding, 'source_file', '')
+        if source_file:
+            safe_source = self.safe_text(source_file, max_chars=80)
+            details.append(f"Source File: {safe_source}")
+            client_identifier = self.derive_client_identifier(source_file)
+            if client_identifier and client_identifier != source_file:
+                safe_client = self.safe_text(client_identifier, max_chars=40)
+                details.append(f"Client Identifier: {safe_client}")
+
         # Action
         action = getattr(finding, 'action', 'N/A')
         details.append(f"Action: {action}")
-        
+
         return details
         
     def add_detailed_findings(self, findings: List[Finding]):
