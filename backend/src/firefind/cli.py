@@ -114,10 +114,14 @@ def parse(
             raise typer.BadParameter("No CSV or XLSX files found")
         for f in files:
             typer.echo(f"  Loading {f}")
-            raw_rows.extend(load_table(f))
+            for row in load_table(f):
+                row["_source_file"] = f.name
+                raw_rows.append(row)
     else:
         typer.echo(f"Input is a file → {input_path}")
-        raw_rows = list(load_table(input_path))
+        for row in load_table(input_path):
+            row["_source_file"] = input_path.name
+            raw_rows.append(row)
 
     typer.echo(f"Loaded {len(raw_rows)} rows")
 
@@ -141,7 +145,19 @@ def parse(
     dedup = set()
     findings_unique: List[Finding] = []
     for f in findings:
-        fkey = (f.vendor, f.rule_id, f.src, f.dst, f.proto, f.port, f.action, f.finding_type, f.severity, f.rationale)
+        fkey = (
+            f.vendor,
+            f.rule_id,
+            f.src,
+            f.dst,
+            f.proto,
+            f.port,
+            f.action,
+            f.finding_type,
+            f.severity,
+            f.rationale,
+            f.source_file,
+        )
         if fkey in dedup:
             continue
         dedup.add(fkey)
