@@ -26,7 +26,11 @@ def test_sniff_proto_port_variants():
     row2 = {"Other": "TCP/22"}
     assert sniff_proto_port(row2) == ("any", "TCP/22")
     row3 = {"Service": "HTTP"}
-    assert sniff_proto_port(row3) == ("any", "HTTP")
+    assert sniff_proto_port(row3) == ("any", "80")
+    row5 = {"Service": "HTTP HTTPS"}
+    assert sniff_proto_port(row5) == ("any", "80,443")
+    row6 = {"Service": "ALL"}
+    assert sniff_proto_port(row6) == ("any", "ALL")
     row4 = {}
     assert sniff_proto_port(row4) == ("any", "any")
 
@@ -38,18 +42,26 @@ def test_to_rule_and_noise():
         "src": ["Source"],
         "dst": ["Dest"],
         "comment": ["Comment"],
+        "service": ["Service"],
+        "srcintf": ["Srcintf"],
+        "dstintf": ["Dstintf"],
     }
     row = {
         "Seq #": "1",
         "Action": "allow",
         "Source": "0.0.0.0/0",
         "Dest": "1.1.1.1",
-        "Service.1": "TCP/80",
+        "Service": "HTTP",
+        "Srcintf": "internal",
+        "Dstintf": "virtual-wan-link",
         "Comment": "test",
     }
     rule = to_rule(row, mapping)
     assert isinstance(rule, Rule)
-    assert rule.port == "TCP/80"
+    assert rule.port == "80"
+    assert rule.service == "HTTP"
+    assert rule.src_interface == "internal"
+    assert rule.dst_interface == "virtual-wan-link"
 
     noise_row = {"Seq #": "", "Source": "", "Dest": "", "Service": ""}
     assert to_rule(noise_row, mapping) is None

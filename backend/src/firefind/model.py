@@ -10,6 +10,9 @@ class Rule:
     port: str
     action: str
     comment: Optional[str] = None
+    src_interface: str = ""
+    dst_interface: str = ""
+    service: str = ""
 
 @dataclass
 class Finding:
