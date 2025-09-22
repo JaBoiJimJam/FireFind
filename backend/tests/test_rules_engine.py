@@ -40,6 +40,42 @@ def test_run_checks_broad_cidr():
     assert any(f.finding_type == "broad_cidr" for f in findings)
 
 
+def test_run_checks_all_ports_internet():
+    rule = Rule(
+        "10",
+        "all",
+        "all",
+        "any",
+        "ALL",
+        "allow",
+        src_interface="LAN1",
+        dst_interface="virtual-wan-link",
+        service="ALL",
+    )
+    findings = run_checks("v", [rule], {})
+    matching = [f for f in findings if f.finding_type == "all_ports_service"]
+    assert matching, "Expected all_ports_service finding"
+    assert matching[0].severity == "High"
+
+
+def test_run_checks_all_ports_internal_scope():
+    rule = Rule(
+        "11",
+        "10.0.0.0/24",
+        "10.1.0.0/24",
+        "any",
+        "ALL",
+        "allow",
+        src_interface="internal",
+        dst_interface="vpn",
+        service="ALL",
+    )
+    findings = run_checks("v", [rule], {})
+    matching = [f for f in findings if f.finding_type == "all_ports_service"]
+    assert matching, "Expected all_ports_service finding"
+    assert matching[0].severity == "Medium"
+
+
 def test_run_analysis_directory_and_dedup(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()

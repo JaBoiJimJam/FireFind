@@ -28,7 +28,12 @@ def parse_ports(port_str: str) -> List[int]:
 
 def is_any(value: str) -> bool:
     v = (value or "").strip().lower()
-    return v in {"any", "*", "0.0.0.0/0", "::/0"}
+    return v in {"any", "all", "*", "0.0.0.0/0", "::/0"}
+
+
+def is_all_ports(value: str) -> bool:
+    v = (value or "").strip().lower()
+    return v in {"all", "all_services", "all_tcp", "all_udp"}
 
 
 def is_broad_cidr(value: str, max_prefixlen: int) -> bool:
@@ -51,6 +56,19 @@ def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
     return f"FR-{severity_short}-{index:03d}"
 
 
+def action_allows_traffic(action: str) -> bool:
+    v = (action or "").strip().lower()
+    return v.startswith("allow") or v.startswith("accept")
+
+
+def looks_internet_facing(value: str) -> bool:
+    v = (value or "").strip().lower()
+    if not v:
+        return False
+    candidates = {"wan", "internet", "virtual-wan-link", "public"}
+    return any(token in v for token in candidates)
+
+
 def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
     admin_ports = set(cfg.get("admin_ports", [22, 23, 3389, 5900, 445, 389, 636]))
     broad_prefix = int(
@@ -62,7 +80,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
     for r in rules:
         # Allow-any
         if (
-            r.action.lower().startswith("allow")
+            action_allows_traffic(r.action)
             and (is_any(r.src) or is_broad_cidr(r.src, 0))
             and (is_any(r.dst) or is_broad_cidr(r.dst, 0))
         ):
@@ -83,10 +101,13 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
 
         # Admin ports exposure
         ports = set(parse_ports(r.port))
+        if is_all_ports(r.port):
+            ports.update(admin_ports)
+
         if ports and any(p in admin_ports for p in ports):
             risk_code = generate_risk_code('admin_port_exposed', 'High', risk_code_counter)
             risk_code_counter += 1
-            
+
             findings.append(
                 Finding(
                     vendor,
@@ -120,19 +141,44 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
                 )
             )
 
+        if action_allows_traffic(r.action) and is_all_ports(r.port):
+            severity = "High" if looks_internet_facing(r.dst_interface) else "Medium"
+            rationale_bits = [
+                "Service column permits all ports",
+            ]
+            if looks_internet_facing(r.dst_interface):
+                rationale_bits.append("destination interface appears internet-facing")
+            if is_any(r.src) and is_any(r.dst):
+                rationale_bits.append("rule is scoped to all sources and destinations")
+
+            findings.append(
+                Finding(
+                    vendor,
+                    r.rule_id,
+                    r.src,
+                    r.dst,
+                    r.proto,
+                    r.port,
+                    r.action,
+                    finding_type="all_ports_service",
+                    severity=severity,
+                    rationale="; ".join(rationale_bits),
+                )
+            )
+
     return findings
 
 
 def check_admin_ports(rule: Rule, admin_ports: List[int]) -> List[int]:
     """Check if rule exposes administrative ports."""
-    if rule.action.lower() != 'accept':
+    if not action_allows_traffic(rule.action):
         return []
-    
+
     exposed = []
     port_str = rule.port.lower()
-    
+
     # Parse different port formats
-    if 'any' in port_str:
+    if 'any' in port_str or is_all_ports(rule.port):
         return admin_ports  # If any port is allowed, all admin ports are exposed
     
     # Handle comma-separated ports

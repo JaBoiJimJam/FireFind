@@ -6,3 +6,6 @@ fortinet:
   port: ["Service.1", "Service Port", "Port", "DPort"]   # concrete TCP/nnn
   action: ["Action"]
   comment: ["Comments", "Comment", "Name", "Remarks", "comments"]
+  service: ["Service", "service"]
+  srcintf: ["Srcintf", "Source Interface", "srcintf", "src_interface"]
+  dstintf: ["Dstintf", "Destination Interface", "dstintf", "dst_interface"]
