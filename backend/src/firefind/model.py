@@ -13,6 +13,7 @@ class Rule:
     src_interface: str = ""
     dst_interface: str = ""
     service: str = ""
+    source_file: str = ""
 
 @dataclass
 class Finding:
@@ -27,3 +28,4 @@ class Finding:
     severity: str
     rationale: str
     risk_code: str = ""  # Add this field
+    source_file: str = ""

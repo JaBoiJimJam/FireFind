@@ -52,9 +52,13 @@ def run_analysis(
     if p.is_dir():
         files = list(sorted(p.glob("*.csv"))) + list(sorted(p.glob("*.xlsx")))
         for f in files:
-            raw_rows.extend(load_table(f))
+            for row in load_table(f):
+                row["_source_file"] = f.name
+                raw_rows.append(row)
     else:
-        raw_rows = list(load_table(p))
+        for row in load_table(p):
+            row["_source_file"] = p.name
+            raw_rows.append(row)
 
     # Normalize rules with de-duplication
     rules_norm: List[Rule] = []
@@ -87,6 +91,7 @@ def run_analysis(
             f.finding_type,
             f.severity,
             f.rationale,
+            f.source_file,
         )
         if fkey in dedup:
             continue

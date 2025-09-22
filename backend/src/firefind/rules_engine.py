@@ -96,6 +96,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
                     finding_type="allow_any",
                     severity="High",
                     rationale="Rule allows any-to-any access",
+                    source_file=r.source_file,
                 )
             )
 
@@ -120,7 +121,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
                     finding_type="admin_port_exposed",
                     severity="High",
                     rationale=f"Rule permits administrative port(s): {sorted(admin_ports.intersection(ports))}",
-                    risk_code=risk_code
+                    risk_code=risk_code,
+                    source_file=r.source_file,
                 )
             )
 
@@ -138,6 +140,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
                     finding_type="broad_cidr",
                     severity="Medium",
                     rationale=f"Network prefix is very broad (/{broad_prefix} or larger)",
+                    source_file=r.source_file,
                 )
             )
 
@@ -163,6 +166,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
                     finding_type="all_ports_service",
                     severity=severity,
                     rationale="; ".join(rationale_bits),
+                    source_file=r.source_file,
                 )
             )
 

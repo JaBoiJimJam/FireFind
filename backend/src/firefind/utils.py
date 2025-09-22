@@ -127,6 +127,7 @@ def to_rule(row: dict, mapping: dict) -> Rule | None:
     comment = pick_first_present(row, mapping.get("comment", [])) or ""
     srcintf = pick_first_present(row, mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
     dstintf = pick_first_present(row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
+    source_file = str(row.get("_source_file", ""))
 
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None
@@ -142,4 +143,5 @@ def to_rule(row: dict, mapping: dict) -> Rule | None:
         src_interface=srcintf,
         dst_interface=dstintf,
         service=service,
+        source_file=source_file,
     )
