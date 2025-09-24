@@ -89,12 +89,77 @@ class PDFReport(FPDF):
         }
         return colors.get(severity, (200, 200, 200))  # Default gray
         
+    def add_risk_bar_chart(
+        self,
+        severity_counts: dict,
+        origin_x: float,
+        origin_y: float,
+        chart_width: float = 80,
+        chart_height: float = 70,
+    ) -> float:
+        """Draw a simple bar chart summarising risk distribution."""
+
+        severities = ['Critical', 'High', 'Medium', 'Low', 'Info']
+        max_count = max([severity_counts.get(severity, 0) for severity in severities] + [0])
+        if max_count == 0:
+            max_count = 1  # Avoid divide-by-zero when there are no findings
+
+        # Chart title
+        self.set_font('Arial', 'B', 11)
+        self.set_text_color(0, 0, 0)
+        self.text(
+            origin_x + chart_width / 2 - self.get_string_width('Risk Distribution') / 2,
+            origin_y - chart_height - 4,
+            'Risk Distribution',
+        )
+
+        # Draw axes
+        self.set_draw_color(0, 0, 0)
+        self.line(origin_x, origin_y, origin_x + chart_width, origin_y)  # X-axis
+        self.line(origin_x, origin_y, origin_x, origin_y - chart_height)  # Y-axis
+
+        # Axis labels
+        self.set_font('Arial', '', 9)
+        self.set_text_color(0, 0, 0)
+        self.text(origin_x + chart_width / 2 - self.get_string_width('Risk Level') / 2, origin_y + 8, 'Risk Level')
+        self.set_xy(origin_x - 35, origin_y - chart_height / 2 - 8)
+        self.multi_cell(30, 4, 'Number of Rules\nFlagged', 0, 'C')
+
+        bar_spacing = chart_width / len(severities)
+        bar_width = bar_spacing * 0.6
+
+        for index, severity in enumerate(severities):
+            count = severity_counts.get(severity, 0)
+            bar_height = (count / max_count) * chart_height
+            bar_x = origin_x + (index * bar_spacing) + (bar_spacing - bar_width) / 2
+            bar_y = origin_y - bar_height
+
+            color = self.get_severity_color(severity)
+            self.set_fill_color(*color)
+            self.rect(bar_x, bar_y, bar_width, bar_height, 'F')
+            self.rect(bar_x, bar_y, bar_width, bar_height, 'D')
+
+            # Count label above the bar
+            self.set_font('Arial', '', 8)
+            self.set_text_color(0, 0, 0)
+            self.text(bar_x + bar_width / 2 - self.get_string_width(str(count)) / 2, bar_y - 2, str(count))
+
+            # Severity label on X-axis
+            label_width = self.get_string_width(severity)
+            self.text(bar_x + bar_width / 2 - label_width / 2, origin_y + 5, severity)
+
+        # Reset drawing color to default black
+        self.set_draw_color(0, 0, 0)
+
+        # Return bottom Y position (including some space for labels)
+        return origin_y + 12
+
     def add_risk_summary(self, findings: List[Finding]):
         self.add_page()
         self.set_font('Arial', 'B', 16)
         self.cell(0, 10, 'Risk Summary Dashboard', 0, 1, 'L')
         self.ln(5)
-        
+
         # Count findings by severity
         severity_counts = {}
         for finding in findings:
@@ -111,7 +176,7 @@ class PDFReport(FPDF):
         for i, severity in enumerate(severities):
             count = severity_counts.get(severity, 0)
             color = self.get_severity_color(severity)
-            
+
             y_pos = y_start + (i * 25)
             
             # Draw colored box
@@ -135,7 +200,11 @@ class PDFReport(FPDF):
             self.set_font('Arial', '', 10)
             self.cell(0, 8, f'{severity} Risk Issues: {count}', 0, 1, 'L')
             
-        self.ln(140)  # Move past the boxes
+        boxes_bottom = y_start + ((len(severities) - 1) * 25) + box_height
+        chart_bottom = self.add_risk_bar_chart(severity_counts, origin_x=110, origin_y=boxes_bottom)
+        final_bottom = max(boxes_bottom, chart_bottom)
+        self.set_y(final_bottom + 10)
+        self.ln(5)
         
         # Key metrics
         self.set_font('Arial', 'B', 12)
