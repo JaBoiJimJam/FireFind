@@ -122,8 +122,13 @@ class PDFReport(FPDF):
         self.set_font('Arial', '', 9)
         self.set_text_color(0, 0, 0)
         self.text(origin_x + chart_width / 2 - self.get_string_width('Risk Level') / 2, origin_y + 8, 'Risk Level')
-        self.set_xy(origin_x - 35, origin_y - chart_height / 2 - 8)
-        self.multi_cell(30, 4, 'Number of Rules\nFlagged', 0, 'C')
+
+        # Keep the Y-axis label within the page margins even if the chart is centered
+        label_width = 30
+        label_margin = 5
+        label_x = max(self.l_margin, origin_x - label_width - label_margin)
+        self.set_xy(label_x, origin_y - chart_height / 2 - 8)
+        self.multi_cell(label_width, 4, 'Number of Rules\nFlagged', 0, 'C')
 
         bar_spacing = chart_width / len(severities)
         bar_width = bar_spacing * 0.6
@@ -201,7 +206,21 @@ class PDFReport(FPDF):
             self.cell(0, 8, f'{severity} Risk Issues: {count}', 0, 1, 'L')
             
         boxes_bottom = y_start + ((len(severities) - 1) * 25) + box_height
-        chart_bottom = self.add_risk_bar_chart(severity_counts, origin_x=110, origin_y=boxes_bottom)
+
+        # Position the bar chart below the summary boxes to avoid overlapping text
+        chart_height = 70
+        chart_spacing = 18
+        chart_origin_y = boxes_bottom + chart_height + chart_spacing
+        chart_origin_x = max(45, self.l_margin + 5)
+        chart_width = self.w - chart_origin_x - self.r_margin
+
+        chart_bottom = self.add_risk_bar_chart(
+            severity_counts,
+            origin_x=chart_origin_x,
+            origin_y=chart_origin_y,
+            chart_width=chart_width,
+            chart_height=chart_height,
+        )
         final_bottom = max(boxes_bottom, chart_bottom)
         self.set_y(final_bottom + 10)
         self.ln(5)
