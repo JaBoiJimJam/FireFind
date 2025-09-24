@@ -13,7 +13,7 @@ from typing import Dict, List, Tuple
 
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
-from .rules_engine import run_checks
+from .rules_engine import run_checks, generate_risk_code
 from .utils import load_yaml, pick_mapping, to_rule
 
 
@@ -36,6 +36,25 @@ def _severity_rank(severity: str) -> int:
     """Return a numeric priority for a severity label."""
 
     return _SEVERITY_PRIORITY.get(severity or "", -1)
+
+
+def _resequence_risk_codes(findings: List[Finding]) -> None:
+    """Ensure risk codes are sequential after de-duplication."""
+
+    counters: Dict[str, int] = {}
+
+    for finding in findings:
+        # Only specific finding types receive risk codes for now. For any other
+        # finding we keep the field empty to avoid implying a tracked risk.
+        if finding.finding_type != "admin_port_exposed":
+            finding.risk_code = finding.risk_code or ""
+            continue
+
+        counter = counters.get(finding.finding_type, 0) + 1
+        counters[finding.finding_type] = counter
+        finding.risk_code = generate_risk_code(
+            finding.finding_type, finding.severity, counter
+        )
 
 
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
@@ -71,6 +90,8 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         existing = findings_unique[existing_index]
         if _severity_rank(finding.severity) > _severity_rank(existing.severity):
             findings_unique[existing_index] = finding
+
+    _resequence_risk_codes(findings_unique)
 
     return findings_unique
 

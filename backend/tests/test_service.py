@@ -27,7 +27,7 @@ def test_deduplicate_prefers_higher_severity() -> None:
 
     assert len(deduped) == 1
     assert deduped[0].severity == "High"
-    assert deduped[0].risk_code == "FR-HIGEN-002"
+    assert deduped[0].risk_code == "FR-HIGEN-001"
 
 
 def test_deduplicate_retains_existing_higher_severity() -> None:
@@ -38,4 +38,14 @@ def test_deduplicate_retains_existing_higher_severity() -> None:
 
     assert len(deduped) == 1
     assert deduped[0].severity == "High"
-    assert deduped[0].risk_code == "FR-HIGEN-010"
+    assert deduped[0].risk_code == "FR-HIGEN-001"
+
+
+def test_risk_codes_are_resequenced() -> None:
+    first = _make_finding("High", risk_code="FR-HIGEN-010")
+    second = _make_finding("High", risk_code="FR-HIGEN-011")
+    second.rule_id = "2"
+
+    deduped = deduplicate_findings([first, second])
+
+    assert [f.risk_code for f in deduped] == ["FR-HIGEN-001", "FR-HIGEN-002"]
