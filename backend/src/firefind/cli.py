@@ -13,6 +13,7 @@ from .model import Rule, Finding
 from .rules_engine import run_checks
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
+from .service import deduplicate_findings
 from .utils import load_yaml, pick_mapping, to_rule
 
 app = typer.Typer(help="Ingest, normalize, analyze, and output reports.")
@@ -140,28 +141,7 @@ def parse(
 
     # Analyze
     findings = run_checks(vendor, rules_norm, rules_cfg)
-
-    # De-duplicate findings across files
-    dedup = set()
-    findings_unique: List[Finding] = []
-    for f in findings:
-        fkey = (
-            f.vendor,
-            f.rule_id,
-            f.src,
-            f.dst,
-            f.proto,
-            f.port,
-            f.action,
-            f.finding_type,
-            f.severity,
-            f.rationale,
-            f.source_file,
-        )
-        if fkey in dedup:
-            continue
-        dedup.add(fkey)
-        findings_unique.append(f)
+    findings_unique = deduplicate_findings(findings)
 
     # Save reports
     save_csv(findings_unique, Path(out_csv))
