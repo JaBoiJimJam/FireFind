@@ -34,6 +34,31 @@ def test_run_checks_admin_port_exposure():
     assert any(f.finding_type == "admin_port_exposed" for f in findings)
 
 
+def test_admin_port_risk_rating_varies_with_port():
+    rule_critical = Rule("1", "1.1.1.1", "2.2.2.2", "any", "22", "allow")
+    rule_high = Rule("2", "1.1.1.1", "2.2.2.2", "any", "3389", "allow")
+    rule_medium = Rule("3", "1.1.1.1", "2.2.2.2", "any", "3306", "allow")
+    rule_low = Rule("4", "1.1.1.1", "2.2.2.2", "any", "25", "allow")
+
+    cfg = {
+        "admin_ports": [22, 3389, 3306, 25],
+        "critical_risk_admin_ports": [22],
+        "high_risk_admin_ports": [3389],
+        "medium_risk_admin_ports": [3306],
+        "low_risk_admin_ports": [25],
+    }
+
+    findings = run_checks(
+        "v", [rule_critical, rule_high, rule_medium, rule_low], cfg
+    )
+    ratings = {f.rule_id: f.severity for f in findings if f.finding_type == "admin_port_exposed"}
+
+    assert ratings["1"] == "Critical"
+    assert ratings["2"] == "High"
+    assert ratings["3"] == "Medium"
+    assert ratings["4"] == "Low"
+
+
 def test_run_checks_broad_cidr():
     rule = Rule("3", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow")
     findings = run_checks("v", [rule], {"broad_cidr_prefix_max": 8})

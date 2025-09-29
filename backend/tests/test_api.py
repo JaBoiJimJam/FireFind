@@ -78,7 +78,8 @@ def test_scan_basic(tmp_path, monkeypatch, fmt):
 
     # Validate severity metrics
     metrics = data.get("metrics", {})
-    assert metrics.get("high") == 2
+    assert metrics.get("critical") == 1
+    assert metrics.get("high") == 1
     assert metrics.get("medium") == 1
     assert metrics.get("total") == len(data["findings"])
 
