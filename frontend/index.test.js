@@ -60,6 +60,23 @@ test('displayFiles shows and hides uploaded files', () => {
   expect(filesSection.classList.contains('active')).toBe(false);
 });
 
+test('removeFile removes uploaded entries', () => {
+  const file = new File(['x'], 'removable.txt', { type: 'text/plain' });
+  window.handleFiles([file]);
+  const filesGrid = document.getElementById('filesGrid');
+  const uploadedBefore = window.eval('uploadedFiles');
+  expect(uploadedBefore).toHaveLength(1);
+  expect(filesGrid.innerHTML).toContain('removable.txt');
+
+  const [{ id }] = uploadedBefore;
+  window.showToast = jest.fn();
+  window.removeFile(id);
+
+  const uploadedAfter = window.eval('uploadedFiles');
+  expect(uploadedAfter).toHaveLength(0);
+  expect(filesGrid.innerHTML).not.toContain('removable.txt');
+});
+
 test('startScan posts files and updates metrics and links', async () => {
   const startButton = document.createElement('button');
   startButton.textContent = 'SCAN';
