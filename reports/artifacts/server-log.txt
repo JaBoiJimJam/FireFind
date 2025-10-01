@@ -1,0 +1,23 @@
+INFO:     Will watch for changes in these directories: ['/workspace/FireFind']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [14381] using WatchFiles
+INFO:     Started server process [14381]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     172.30.8.180:50992 - "GET / HTTP/1.1" 200 OK
+INFO:     172.30.8.180:50992 - "GET /style.css HTTP/1.1" 200 OK
+INFO:     172.30.8.180:51004 - "GET /app.js HTTP/1.1" 200 OK
+INFO:     172.30.8.180:52832 - "GET / HTTP/1.1" 200 OK
+INFO:     172.30.8.180:52832 - "GET /style.css HTTP/1.1" 200 OK
+INFO:     172.30.8.180:52834 - "GET /app.js HTTP/1.1" 200 OK
+INFO:     172.30.8.180:57616 - "GET / HTTP/1.1" 200 OK
+INFO:     172.30.8.180:57616 - "GET /style.css HTTP/1.1" 200 OK
+INFO:     172.30.8.180:57620 - "GET /app.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45970 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45970 - "GET /style.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45972 - "GET /app.js HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [14381]
+INFO:     Stopping reloader process [14294]
