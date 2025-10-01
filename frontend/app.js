@@ -195,6 +195,19 @@ function startDemo() {
     showToast('Demo files loaded successfully!');
 }
 
+// Add this helper function to generate date-formatted filename
+function generateDateFilename(baseFilename, extension) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    
+    return `${baseFilename}_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.${extension}`;
+}
+
 async function startScan(e) {
     if (uploadedFiles.length === 0) {
         showToast('Please upload files first');
@@ -229,12 +242,12 @@ async function startScan(e) {
 
         const pdfLink = document.getElementById('pdfLink');
         const csvLink = document.getElementById('csvLink');
+        
         if (data.pdf) {
             pdfLink.href = data.pdf;
-            const pdfFileName = data.pdf.split('/').filter(Boolean).pop();
-            if (pdfFileName) {
-                pdfLink.setAttribute('download', pdfFileName);
-            }
+            // Generate date-formatted filename for PDF
+            const pdfFileName = generateDateFilename('firefind_report', 'pdf');
+            pdfLink.setAttribute('download', pdfFileName);
             pdfLink.style.pointerEvents = 'auto';
             pdfLink.style.opacity = '1';
         } else {
@@ -243,12 +256,12 @@ async function startScan(e) {
             pdfLink.style.pointerEvents = 'none';
             pdfLink.style.opacity = '0.5';
         }
+        
         if (data.csv) {
             csvLink.href = data.csv;
-            const csvFileName = data.csv.split('/').filter(Boolean).pop();
-            if (csvFileName) {
+            // Generate date-formatted filename for CSV
+            const csvFileName = generateDateFilename('firefind_report', 'csv');
             csvLink.setAttribute('download', csvFileName);
-            }
             csvLink.style.pointerEvents = 'auto';
             csvLink.style.opacity = '1';
         } else {
