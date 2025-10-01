@@ -137,7 +137,8 @@ async function startScan(e) {
     });
 
     try {
-        const response = await fetch('/api/scan?save_pdf=1&save_csv=1', {
+        const scanUrl = '/api/scan?save_pdf=1&save_csv=1';
+        const response = await fetch(scanUrl, {
             method: 'POST',
             body: formData
         });
