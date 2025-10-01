@@ -47,11 +47,18 @@ fileInput.addEventListener('change', (e) => {
     handleFiles(e.target.files);
 });
 
+function createFileId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return String(Date.now() + Math.random());
+}
+
 function handleFiles(files) {
     for (let file of files) {
         if (!uploadedFiles.find(f => f.name === file.name)) {
             uploadedFiles.push({
-                id: Date.now() + Math.random(),
+                id: createFileId(),
                 name: file.name,
                 size: formatFileSize(file.size),
                 file: file
@@ -91,11 +98,13 @@ function displayFiles() {
         filesSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } else {
         filesSection.classList.remove('active');
+        filesGrid.innerHTML = '';
     }
 }
 
 function removeFile(fileId) {
-    uploadedFiles = uploadedFiles.filter(f => f.id !== fileId);
+    const normalizedId = String(fileId);
+    uploadedFiles = uploadedFiles.filter(f => String(f.id) !== normalizedId);
     displayFiles();
     showToast('File removed');
 }
