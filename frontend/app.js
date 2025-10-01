@@ -27,6 +27,68 @@ let uploadedFiles = [];
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 
+// Load files from localStorage on page load
+function loadStoredFiles() {
+    try {
+        const storedFiles = localStorage.getItem('firefind_uploaded_files');
+        if (storedFiles) {
+            const fileData = JSON.parse(storedFiles);
+            uploadedFiles = fileData.map(fileInfo => ({
+                id: fileInfo.id,
+                name: fileInfo.name,
+                size: fileInfo.size,
+                file: new File([fileInfo.content], fileInfo.name, { type: fileInfo.type })
+            }));
+            displayFiles();
+        }
+    } catch (error) {
+        console.error('Error loading stored files:', error);
+        localStorage.removeItem('firefind_uploaded_files');
+    }
+}
+
+// Save files to localStorage
+function saveFilesToStorage() {
+    try {
+        const filePromises = uploadedFiles.map(async (fileObj) => {
+            const content = await fileToBase64(fileObj.file);
+            return {
+                id: fileObj.id,
+                name: fileObj.name,
+                size: fileObj.size,
+                type: fileObj.file.type,
+                content: content
+            };
+        });
+
+        Promise.all(filePromises).then(fileData => {
+            localStorage.setItem('firefind_uploaded_files', JSON.stringify(fileData));
+        }).catch(error => {
+            console.error('Error saving files to storage:', error);
+        });
+    } catch (error) {
+        console.error('Error saving files to storage:', error);
+    }
+}
+
+// Convert file to base64 for storage
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+}
+
+// Clear stored files
+function clearStoredFiles() {
+    localStorage.removeItem('firefind_uploaded_files');
+    uploadedFiles = [];
+    displayFiles();
+    showToast('All files cleared');
+}
+
 // Drag and drop
 dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -66,6 +128,7 @@ function handleFiles(files) {
         }
     }
     displayFiles();
+    saveFilesToStorage(); // Save to localStorage after adding files
 }
 
 function formatFileSize(bytes) {
@@ -94,8 +157,19 @@ function displayFiles() {
             </div>
         `).join('');
         
-        // Smooth scroll to files section
-        filesSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Add a clear all button
+        filesGrid.innerHTML += `
+            <div class="file-card" style="text-align: center; border: 2px dashed var(--border-color);">
+                <button class="btn btn-secondary" onclick="clearStoredFiles()" style="margin: 1rem;">
+                    Clear All Files
+                </button>
+            </div>
+        `;
+        
+        // Smooth scroll to files section only if there are new files
+        if (uploadedFiles.length > 0) {
+            filesSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
     } else {
         filesSection.classList.remove('active');
         filesGrid.innerHTML = '';
@@ -106,6 +180,7 @@ function removeFile(fileId) {
     const normalizedId = String(fileId);
     uploadedFiles = uploadedFiles.filter(f => String(f.id) !== normalizedId);
     displayFiles();
+    saveFilesToStorage(); // Update localStorage after removing file
     showToast('File removed');
 }
 
@@ -116,6 +191,7 @@ function startDemo() {
         { id: 'demo3', name: 'checkpoint_firewall.csv', size: '567 KB', file: new File(['demo'], 'checkpoint_firewall.csv', { type: 'text/csv' }) }
     ];
     displayFiles();
+    saveFilesToStorage(); // Save demo files to localStorage
     showToast('Demo files loaded successfully!');
 }
 
@@ -266,11 +342,13 @@ function createParticle() {
 // Create particles periodically
 setInterval(createParticle, 300);
 
-// Initialize
-const isDevelopment =
-    typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
-
+// Initialize - Load stored files on page load
 window.addEventListener('load', () => {
+    loadStoredFiles(); // Load files from localStorage
+    
+    const isDevelopment =
+        typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
+
     if (isDevelopment) {
         console.log('%cFireFind v1.0.0', 'color: #4ECCA3; font-size: 24px; font-weight: bold;');
         console.log('%cDeveloped by Triskele Labs', 'color: #a0a0a0; font-size: 12px;');
