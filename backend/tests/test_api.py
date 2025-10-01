@@ -98,6 +98,10 @@ def test_scan_save_csv(tmp_path, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert "csv" in data
+    csv_href = data["csv"]
+    assert csv_href.startswith("/downloads/")
+    csv_path = Path("out") / Path(csv_href).name
+    assert csv_path.exists()
     assert "pdf" not in data
 
 
@@ -111,4 +115,8 @@ def test_scan_save_pdf(tmp_path, monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert "pdf" in data
+    pdf_href = data["pdf"]
+    assert pdf_href.startswith("/downloads/")
+    pdf_path = Path("out") / Path(pdf_href).name
+    assert pdf_path.exists()
     assert "csv" not in data

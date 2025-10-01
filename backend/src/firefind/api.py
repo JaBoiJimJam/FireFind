@@ -36,6 +36,23 @@ app.add_middleware(
 )
 
 
+_SEVERITY_KEYS = ("critical", "high", "medium", "low", "info")
+
+
+def _calculate_score(metrics: Dict[str, int]) -> int:
+    """Return a 0-100 security score based on severity metrics."""
+
+    weights = {
+        "critical": 30,
+        "high": 15,
+        "medium": 5,
+        "low": 2,
+    }
+    penalty = sum(metrics.get(level, 0) * weight for level, weight in weights.items())
+    score = max(0, 100 - penalty)
+    return int(score)
+
+
 @app.post("/scan")
 async def scan(
     files: List[UploadFile] = File(...),
@@ -86,7 +103,7 @@ async def scan(
         "metrics": metrics,
     }
     if csv_path:
-        response["csv"] = csv_path.as_posix()
+        response["csv"] = f"/downloads/{csv_path.name}"
     if pdf_path:
         response["pdf"] = pdf_path.as_posix()
 
