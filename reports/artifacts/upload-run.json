@@ -1,0 +1,15 @@
+{
+  "files_section_active": true,
+  "files_list": [
+    "sample1.csv\n                        31 Bytes\n                    \n                    Remove",
+    "sample2.xlsx\n                        4.85 KB\n                    \n                    Remove"
+  ],
+  "scan_button_enabled": true,
+  "console_entries": [
+    {
+      "type": "error",
+      "text": "Failed to load resource: net::ERR_CERT_AUTHORITY_INVALID"
+    }
+  ],
+  "page_errors": []
+}

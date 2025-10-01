@@ -19,6 +19,10 @@ async def chrome_devtools_config() -> dict[str, str]:
     return {}
 
 
+REPORTS_DIR = Path(__file__).resolve().parents[1] / "out"
+REPORTS_DIR.mkdir(exist_ok=True)
+app.mount("/downloads", StaticFiles(directory=str(REPORTS_DIR)), name="downloads")
+
 app.mount("/api", api_app)
 
 # Serve the frontend directory if it exists

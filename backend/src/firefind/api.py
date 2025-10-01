@@ -2,12 +2,13 @@ from __future__ import annotations
 
 """FastAPI application exposing FireFind analysis as an HTTP service."""
 
-from pathlib import Path
 import os
+from pathlib import Path
 import tempfile
 from collections import Counter
 from dataclasses import asdict
 from typing import List, Dict, Any
+from uuid import uuid4
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +35,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+_SEVERITY_KEYS = ("critical", "high", "medium", "low", "info")
+
+
+def _calculate_score(metrics: Dict[str, int]) -> int:
+    """Return a 0-100 security score based on severity metrics."""
+
+    weights = {
+        "critical": 30,
+        "high": 15,
+        "medium": 5,
+        "low": 2,
+    }
+    penalty = sum(metrics.get(level, 0) * weight for level, weight in weights.items())
+    score = max(0, 100 - penalty)
+    return int(score)
 
 
 @app.post("/scan")
@@ -63,20 +81,25 @@ async def scan(
         )
         # Build metrics by severity
         severity_counts = Counter(f.severity.lower() for f in findings)
-        metrics: Dict[str, Any] = dict(severity_counts)
+        metrics: Dict[str, Any] = {
+            key: int(severity_counts.get(key, 0)) for key in _SEVERITY_KEYS
+        }
         metrics["total"] = len(findings)
+        metrics["score"] = _calculate_score(metrics)
 
         pdf_path: Path | None = None
         csv_path: Path | None = None
 
         # Optional report generation
         if save_csv or save_pdf:
-            os.makedirs("out", exist_ok=True)
+            reports_dir = Path.cwd() / "out"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            token = uuid4().hex
             if save_csv:
-                csv_path = Path("out/findings.csv")
+                csv_path = reports_dir / f"firefind_findings_{token}.csv"
                 write_findings_csv(csv_path, findings)
             if save_pdf:
-                pdf_path = Path("out/report.pdf")
+                pdf_path = reports_dir / f"firefind_report_{token}.pdf"
                 generate_pdf(
                     pdf_path, findings, client_name="FireFind Analysis"
                 )
@@ -86,8 +109,8 @@ async def scan(
         "metrics": metrics,
     }
     if csv_path:
-        response["csv"] = csv_path.as_posix()
+        response["csv"] = f"/downloads/{csv_path.name}"
     if pdf_path:
-        response["pdf"] = pdf_path.as_posix()
+        response["pdf"] = f"/downloads/{pdf_path.name}"
 
     return response
