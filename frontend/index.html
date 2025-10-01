@@ -7,6 +7,39 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    
+    <!-- Force header size reduction -->
+    <style>
+        body header {
+            padding: 0 !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            overflow: hidden !important;
+        }
+        
+        body header nav {
+            padding: 0.25rem 2rem !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            line-height: 1 !important;
+        }
+        
+        body header nav .logo {
+            height: 50px !important;
+            width: auto !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        
+        body header nav .logo .logo-img {
+            height: 30px !important;
+            width: auto !important;
+            object-fit: scale-down !important;
+            object-position: left center !important;
+            display: block !important;
+        }
+    </style>
 </head>
 <body>
     <!-- Background -->
@@ -21,8 +54,7 @@
     <header id="header">
         <nav>
             <a href="#" class="logo">
-                <div class="logo-icon">F</div>
-                <span>FireFind</span>
+                <img src="firefind-logo.png" alt="FireFind" class="logo-img" style="height: auto !important; width: 180px !important; max-width: 200px !important; min-width: 160px !important;">
             </a>
             <ul class="nav-links">
                 <li><a href="#upload" onclick="smoothScroll(event, 'upload')">Scan</a></li>
