@@ -1,6 +1,8 @@
 __pycache__/ 
 *.pyc 
-*.pdf 
-*.csv 
+*.pdf
+*.csv
+!backend/samples/**/*.csv
+!backend/samples/**/*.CSV
 
 node_modules/
