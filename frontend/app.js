@@ -89,6 +89,54 @@ function clearStoredFiles() {
     showToast('All files cleared');
 }
 
+// File type validation
+const ALLOWED_FILE_TYPES = {
+    'text/csv': ['.csv'],
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    'application/vnd.ms-excel': ['.xls'],
+    'text/plain': ['.txt'] // In case CSV files are detected as plain text
+};
+
+const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
+
+function validateFileType(file) {
+    const fileName = file.name.toLowerCase();
+    const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+    
+    // Check file extension
+    if (!ALLOWED_EXTENSIONS.includes(fileExtension)) {
+        return {
+            valid: false,
+            error: `Invalid file type "${fileExtension}". Only CSV (.csv) and Excel (.xlsx, .xls) files are allowed.`
+        };
+    }
+    
+    // Check MIME type (additional validation)
+    const mimeType = file.type;
+    if (mimeType && !Object.keys(ALLOWED_FILE_TYPES).includes(mimeType)) {
+        // Some browsers might not detect CSV MIME type correctly, so we allow empty MIME type for CSV files
+        if (!(fileExtension === '.csv' && (mimeType === '' || mimeType === 'application/octet-stream'))) {
+            return {
+                valid: false,
+                error: `Invalid file format detected. Please ensure you're uploading a valid ${fileExtension.toUpperCase()} file.`
+            };
+        }
+    }
+    
+    return { valid: true };
+}
+
+function validateFileSize(file) {
+    const maxSize = 50 * 1024 * 1024; // 50MB limit
+    if (file.size > maxSize) {
+        return {
+            valid: false,
+            error: `File "${file.name}" is too large. Maximum file size is 50MB.`
+        };
+    }
+    return { valid: true };
+}
+
 // Drag and drop
 dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -107,6 +155,8 @@ dropZone.addEventListener('drop', (e) => {
 
 fileInput.addEventListener('change', (e) => {
     handleFiles(e.target.files);
+    // Clear the input so the same file can be selected again if needed
+    e.target.value = '';
 });
 
 function createFileId() {
@@ -117,18 +167,60 @@ function createFileId() {
 }
 
 function handleFiles(files) {
+    let validFiles = [];
+    let errors = [];
+    
     for (let file of files) {
-        if (!uploadedFiles.find(f => f.name === file.name)) {
-            uploadedFiles.push({
-                id: createFileId(),
-                name: file.name,
-                size: formatFileSize(file.size),
-                file: file
-            });
+        // Check if file already exists
+        if (uploadedFiles.find(f => f.name === file.name)) {
+            errors.push(`File "${file.name}" is already uploaded.`);
+            continue;
         }
+        
+        // Validate file type
+        const typeValidation = validateFileType(file);
+        if (!typeValidation.valid) {
+            errors.push(typeValidation.error);
+            continue;
+        }
+        
+        // Validate file size
+        const sizeValidation = validateFileSize(file);
+        if (!sizeValidation.valid) {
+            errors.push(sizeValidation.error);
+            continue;
+        }
+        
+        validFiles.push(file);
     }
-    displayFiles();
-    saveFilesToStorage(); // Save to localStorage after adding files
+    
+    // Add valid files
+    validFiles.forEach(file => {
+        uploadedFiles.push({
+            id: createFileId(),
+            name: file.name,
+            size: formatFileSize(file.size),
+            file: file
+        });
+    });
+    
+    // Show errors if any
+    if (errors.length > 0) {
+        errors.forEach(error => showToast(error, 'error'));
+    }
+    
+    // Show success message for valid files
+    if (validFiles.length > 0) {
+        const message = validFiles.length === 1 
+            ? `File "${validFiles[0].name}" uploaded successfully!`
+            : `${validFiles.length} files uploaded successfully!`;
+        showToast(message, 'success');
+    }
+    
+    if (validFiles.length > 0) {
+        displayFiles();
+        saveFilesToStorage(); // Save to localStorage after adding files
+    }
 }
 
 function formatFileSize(bytes) {
@@ -306,19 +398,31 @@ function animateMetrics() {
     });
 }
 
-function showToast(message) {
+function showToast(message, type = 'info') {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
     
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.className = `toast toast-${type}`;
     toast.textContent = message;
+    
+    // Add different styles for different toast types
+    if (type === 'error') {
+        toast.style.backgroundColor = '#ff4757';
+        toast.style.color = 'white';
+    } else if (type === 'success') {
+        toast.style.backgroundColor = 'var(--primary-green)';
+        toast.style.color = 'var(--bg-primary)';
+    }
+    
     document.body.appendChild(toast);
     
+    // Auto-remove after longer time for errors
+    const duration = type === 'error' ? 5000 : 3000;
     setTimeout(() => {
         toast.style.animation = 'slideInRight 0.3s ease reverse';
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, duration);
 }
 
 // Add floating particles effect

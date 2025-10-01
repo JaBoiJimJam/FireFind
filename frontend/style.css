@@ -1,4 +1,4 @@
-        * {
+* {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -677,27 +677,32 @@
         /* Toast */
         .toast {
             position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: var(--card-bg);
-            border: 1px solid var(--primary-green);
-            border-radius: 10px;
+            top: 20px;
+            right: 20px;
+            background: var(--accent-color);
+            color: var(--bg-primary);
             padding: 1rem 1.5rem;
-            box-shadow: 0 10px 30px rgba(78, 204, 163, 0.3);
-            animation: slideInRight 0.3s ease;
-            z-index: 10000;
+            border-radius: 8px;
             font-weight: 500;
+            z-index: 1000;
+            animation: slideInRight 0.3s ease;
+            max-width: 400px;
+            word-wrap: break-word;
+        }
+
+        .toast-error {
+            background: #ff4757 !important;
+            color: white !important;
+        }
+
+        .toast-success {
+            background: var(--primary-green) !important;
+            color: var(--bg-primary) !important;
         }
 
         @keyframes slideInRight {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
 
         /* Responsive */
