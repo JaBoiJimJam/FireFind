@@ -30,6 +30,16 @@
             overflow-x: hidden;
             line-height: 1.6;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column; /* Add flex layout */
+        }
+
+        /* Fix upload section spacing from header */
+        .upload-section {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem; /* Increased top padding from 4rem to 8rem */
+            min-height: calc(100vh - 200px); /* Ensure minimum height */
         }
 
         /* Custom Scrollbar */
@@ -291,7 +301,8 @@
         .upload-section {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 4rem 2rem;
+            padding: 8rem 2rem 4rem; /* Increased top padding from 4rem to 8rem */
+            min-height: calc(100vh - 200px); /* Ensure minimum height */
         }
 
         .drop-zone {
@@ -667,9 +678,9 @@
         footer {
             background: var(--darker-bg);
             border-top: 1px solid var(--border);
-            padding: 3rem 2rem;
-            margin-top: 6rem;
+            padding: 2rem; /* Reduced padding */
             text-align: center;
+            margin-top: auto; /* Push to bottom */
         }
 
         footer p {
@@ -736,4 +747,8 @@
                 height: 32px;
                 max-width: 150px;
             }
+        }
+
+        main {
+            flex: 1; /* This will push footer to bottom */
         }

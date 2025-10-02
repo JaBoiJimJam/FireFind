@@ -472,3 +472,22 @@ window.addEventListener('load', () => {
         console.log('%cOpen-Source Firewall Security Scanner', 'color: #00ff88; font-size: 14px;');
     }
 });
+
+function handleAboutClick(event) {
+    // Check if we're already on the index page
+    const currentPage = window.location.pathname;
+    const isIndexPage = currentPage === '/' || 
+                       currentPage.endsWith('/index.html') || 
+                       currentPage === '/index.html' ||
+                       currentPage === '';
+    
+    if (isIndexPage) {
+        // If on index page, prevent default link behavior and scroll to top
+        event.preventDefault();
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    }
+    // If not on index page, let the default link behavior work (go to index.html)
+}

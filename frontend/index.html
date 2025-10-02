@@ -57,9 +57,9 @@
                 <img src="firefind-logo.png" alt="FireFind" class="logo-img" style="height: auto !important; width: 180px !important; max-width: 200px !important; min-width: 160px !important;">
             </a>
             <ul class="nav-links">
-                <li><a href="#upload" onclick="smoothScroll(event, 'upload')">Scan</a></li>
-                <li><a href="#results" onclick="smoothScroll(event, 'results')">Results</a></li>
-                <li><a href="#reports" onclick="smoothScroll(event, 'reports')">Reports</a></li>
+                <li><a href="index.html" onclick="handleAboutClick(event)">About</a></li>
+                <li><a href="scan.html">Scan</a></li>
+                <li><a href="reports.html">Reports</a></li>
             </ul>
         </nav>
     </header>
@@ -88,77 +88,6 @@
                     <span class="stat-number">0.3s</span>
                     <span class="stat-label">Scan Time</span>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Upload -->
-    <section class="upload-section" id="upload">
-        <form id="uploadForm" method="post" enctype="multipart/form-data" onsubmit="event.preventDefault()">
-        <div class="drop-zone" id="dropZone">
-            <div class="upload-icon">📁</div>
-            <h2>Upload Firewall Configuration</h2>
-            <p>Drag and drop your CSV or XLSX files here</p>
-            <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
-                Select Files
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="startDemo()">
-                Run Demo
-            </button>
-            <input type="file" id="fileInput" name="files" class="file-input" multiple accept=".csv,.xlsx">
-        </div>
-        </form>
-    </section>
-
-    <!-- Files -->
-    <section class="files-section" id="filesSection">
-        <div class="files-grid" id="filesGrid"></div>
-        <div style="text-align: center;">
-            <button class="btn btn-primary" onclick="startScan(event)">
-                START SECURITY SCAN
-            </button>
-        </div>
-    </section>
-
-    <!-- Results -->
-    <section class="results-section" id="results">
-        <div class="results-header">
-            <h2>Analysis Complete</h2>
-            <p style="color: var(--text-muted);">Critical vulnerabilities detected - Immediate action required</p>
-        </div>
-
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-value" id="criticalCount">0</div>
-                <div class="metric-label">Critical Risks</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="highCount">0</div>
-                <div class="metric-label">High Priority</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="totalCount">0</div>
-                <div class="metric-label">Total Issues</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-value" id="score">0%</div>
-                <div class="metric-label">Security Score</div>
-            </div>
-        </div>
-
-        <div class="reports-section" id="reports">
-            <h3 style="text-align: center; color: var(--primary-green); margin-bottom: 2rem; font-size: 2rem;">Download Reports</h3>
-            <div class="reports-grid">
-                <a class="report-card" id="pdfLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                    <div class="report-icon">📊</div>
-                    <h4>PDF Report</h4>
-                    <p style="color: var(--text-muted);">High-level overview PDF</p>
-                </a>
-                <a class="report-card" id="csvLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                    <div class="report-icon">🔧</div>
-                    <h4>CSV Report</h4>
-                    <p style="color: var(--text-muted);">Detailed CSV export</p>
-                </a>
             </div>
         </div>
     </section>
