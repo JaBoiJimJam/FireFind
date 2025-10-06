@@ -99,6 +99,18 @@ uvicorn firefind.api:app --reload
 
 Then send a `POST` request to `http://localhost:8000/scan` with a CSV or XLSX file in the `file` form field. Findings are returned as JSON and optional CSV/PDF reports are saved to the `out/` directory.
 
+#### Configuration API
+
+The FastAPI service also exposes authenticated endpoints for inspecting and updating the active rules configuration:
+
+- `GET /api/config/rules` – returns the merged runtime configuration alongside revision metadata.
+- `PATCH /api/config/rules` – accepts a JSON payload with a `changes` object containing partial configuration updates. Optional `message` metadata is recorded with the revision audit trail.
+- `GET /api/config/rules/history?limit=<n>` – retrieves the most recent revision entries (defaults to 20).
+
+All configuration endpoints require a bearer token supplied via the `Authorization: Bearer <token>` header. Configure the shared secret with the `FIRE_FIND_API_TOKEN` environment variable before starting the API. Optional user attribution can be provided via the `X-Firefind-Actor` header and is recorded with every revision entry.
+
+Approved updates are persisted to the configured YAML file (defaults to `rules/rules.yaml`) and appended to a JSONL history alongside version numbers, timestamps, and actor details. The analysis service loads configuration from disk for every request, so threshold adjustments take effect immediately without restarting the backend.
+
 ### CLI Parameters
 
 - `--vendor`: Firewall vendor (currently supports: `fortinet`)
