@@ -752,3 +752,353 @@
         main {
             flex: 1; /* This will push footer to bottom */
         }
+
+        /* Admin console styles */
+        .admin-body {
+            background: var(--dark-bg);
+            color: var(--text-light);
+        }
+
+        .admin-body header {
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid rgba(78, 204, 163, 0.15);
+        }
+
+        .admin-body .nav-links a.active {
+            color: var(--primary-green);
+        }
+
+        .admin-main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 6rem 2rem 4rem;
+        }
+
+        .admin-hero {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2rem;
+            align-items: start;
+            margin-bottom: 3rem;
+        }
+
+        .admin-hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .admin-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        .admin-body .btn {
+            padding: 0.65rem 1.5rem;
+            border-radius: 12px;
+            text-transform: none;
+            letter-spacing: 0.3px;
+            font-size: 0.95rem;
+        }
+
+        .admin-body .btn::before {
+            display: none;
+        }
+
+        .admin-body .btn.btn-primary {
+            background: linear-gradient(135deg, var(--primary-green), var(--neon-green));
+            color: var(--dark-bg);
+        }
+
+        .admin-body .btn.btn-secondary {
+            background: rgba(78, 204, 163, 0.12);
+            color: var(--primary-green);
+            border: 1px solid rgba(78, 204, 163, 0.4);
+        }
+
+        .admin-body .btn.tertiary {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-light);
+            border: 1px dashed rgba(78, 204, 163, 0.4);
+        }
+
+        .validation-summary {
+            background: rgba(78, 204, 163, 0.08);
+            border: 1px solid rgba(78, 204, 163, 0.25);
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .validation-summary.has-errors {
+            border-color: rgba(255, 68, 68, 0.35);
+            background: rgba(255, 68, 68, 0.08);
+            color: #ff9f9f;
+        }
+
+        .admin-hint {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        .admin-section {
+            margin-bottom: 3.5rem;
+        }
+
+        .admin-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .admin-section-header h2 {
+            font-size: 1.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .admin-section-header p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .admin-help {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(78, 204, 163, 0.12);
+            border-radius: 12px;
+            padding: 0.85rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1.25rem;
+        }
+
+        .admin-help code {
+            background: rgba(78, 204, 163, 0.1);
+            border-radius: 6px;
+            padding: 0.1rem 0.35rem;
+            color: var(--primary-green);
+        }
+
+        .config-grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .config-card {
+            background: rgba(10, 12, 14, 0.85);
+            border: 1px solid rgba(78, 204, 163, 0.18);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        .config-card.has-error {
+            border-color: rgba(255, 68, 68, 0.35);
+            box-shadow: 0 16px 32px rgba(255, 68, 68, 0.15);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            gap: 1rem;
+        }
+
+        .card-header h3 {
+            font-size: 1.3rem;
+            color: var(--primary-green);
+        }
+
+        .card-body {
+            display: grid;
+            gap: 1.25rem;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .form-field.compact {
+            min-width: 160px;
+        }
+
+        .field-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .form-field input,
+        .form-field select,
+        .form-field textarea {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(78, 204, 163, 0.2);
+            border-radius: 10px;
+            padding: 0.6rem 0.75rem;
+            color: var(--text-light);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.95rem;
+        }
+
+        .form-field input:focus,
+        .form-field select:focus,
+        .form-field textarea:focus {
+            outline: none;
+            border-color: var(--primary-green);
+            box-shadow: 0 0 0 2px rgba(78, 204, 163, 0.15);
+        }
+
+        .textarea-field textarea {
+            resize: vertical;
+        }
+
+        .field-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .field-error {
+            font-size: 0.8rem;
+            color: #ff9f9f;
+            display: none;
+        }
+
+        .field-error.visible {
+            display: block;
+        }
+
+        .fieldset {
+            border: 1px solid rgba(78, 204, 163, 0.18);
+            border-radius: 14px;
+            padding: 1.25rem;
+            background: rgba(255, 255, 255, 0.02);
+            display: grid;
+            gap: 1rem;
+        }
+
+        .fieldset.compact {
+            padding: 0.9rem;
+        }
+
+        .fieldset-legend {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: baseline;
+        }
+
+        .fieldset-legend span:first-child {
+            font-weight: 600;
+            color: var(--primary-green);
+        }
+
+        .fieldset-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .field-grid {
+            display: grid;
+            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+
+        .overrides-list,
+        .ranges-list {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .override-row,
+        .range-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: flex-start;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(78, 204, 163, 0.12);
+            border-radius: 12px;
+            padding: 0.9rem;
+        }
+
+        .icon-btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text-light);
+            border-radius: 10px;
+            padding: 0.45rem 0.6rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .icon-btn:hover {
+            background: rgba(78, 204, 163, 0.2);
+            border-color: rgba(78, 204, 163, 0.4);
+        }
+
+        .icon-btn.danger {
+            border-color: rgba(255, 68, 68, 0.35);
+            color: #ff9f9f;
+        }
+
+        .icon-btn.danger:hover {
+            background: rgba(255, 68, 68, 0.2);
+        }
+
+        .admin-footer {
+            margin-top: 4rem;
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .admin-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 0.9rem 1.2rem;
+            border-radius: 12px;
+            background: rgba(78, 204, 163, 0.9);
+            color: var(--dark-bg);
+            font-weight: 600;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .admin-toast.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .admin-toast.error {
+            background: rgba(255, 68, 68, 0.9);
+            color: #fff;
+        }
+
+        @media (max-width: 768px) {
+            .admin-main {
+                padding: 6rem 1.25rem 3rem;
+            }
+
+            .card-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .override-row,
+            .range-row {
+                flex-direction: column;
+            }
+        }

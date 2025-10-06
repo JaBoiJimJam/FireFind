@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FireFind Admin Console</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1ZqUPI0EG1F3V9V0FvYhFf3ZC3xz97T8ne5+5pSxbFz+z1J6RztQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ipaddr.js@2.1.0/ipaddr.min.js"></script>
+</head>
+<body class="admin-body">
+    <div class="bg-animation">
+        <div class="cyber-grid"></div>
+    </div>
+    <div class="scan-line"></div>
+    <header id="header">
+        <nav>
+            <a href="#" class="logo">
+                <img src="firefind-logo.png" alt="FireFind" class="logo-img">
+            </a>
+            <ul class="nav-links">
+                <li><a href="index.html">About</a></li>
+                <li><a href="scan.html">Scan</a></li>
+                <li><a href="reports.html">Reports</a></li>
+                <li><a href="admin.html" class="active">Admin</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main class="admin-main">
+        <section class="admin-hero">
+            <div>
+                <h1>Configuration Console</h1>
+                <p>Manage FireFind risk levels, CIDR limits, and reusable port groups with immediate validation aligned with backend rules.</p>
+                <div class="admin-actions">
+                    <button id="importYamlBtn" class="btn btn-secondary"><i class="fa-solid fa-file-import"></i> Import YAML Snapshot</button>
+                    <button id="exportYamlBtn" class="btn btn-primary" disabled><i class="fa-solid fa-file-export"></i> Export YAML Snapshot</button>
+                    <input type="file" id="yamlFileInput" accept=".yml,.yaml,.json" hidden>
+                </div>
+                <p class="admin-hint">Importing merges additional keys from the source file and preserves them for export.</p>
+            </div>
+            <div class="validation-summary" id="validationSummary">Provide or import configuration to begin.</div>
+        </section>
+
+        <section class="admin-section" id="riskLevelsSection">
+            <header class="admin-section-header">
+                <div>
+                    <h2>Risk Levels</h2>
+                    <p>Define severity labels and numeric thresholds used by the risk engine.</p>
+                </div>
+                <button class="btn" id="addRiskLevelBtn"><i class="fa-solid fa-plus"></i> Add Risk Level</button>
+            </header>
+            <div class="admin-help">Severity options mirror backend enumeration (<code>critical</code>, <code>high</code>, <code>medium</code>, <code>low</code>, <code>informational</code>). Threshold minimums must not exceed maximums and negative finding counts are rejected.</div>
+            <div id="riskLevelsList" class="config-grid"></div>
+        </section>
+
+        <section class="admin-section" id="cidrSection">
+            <header class="admin-section-header">
+                <div>
+                    <h2>CIDR Limit Sets</h2>
+                    <p>Specify default and override policies controlling allowed network breadth.</p>
+                </div>
+                <button class="btn" id="addCidrSetBtn"><i class="fa-solid fa-plus"></i> Add CIDR Limit Set</button>
+            </header>
+            <div class="admin-help">Prefixes must be between /0 and /128. Provide CIDR values such as <code>10.0.0.0/8</code> or <code>2001:db8::/32</code>. Blocked and exempt entries accept newline or comma separated CIDRs and are validated using the backend parser rules.</div>
+            <div id="cidrSetsList" class="config-grid"></div>
+        </section>
+
+        <section class="admin-section" id="portGroupsSection">
+            <header class="admin-section-header">
+                <div>
+                    <h2>Port Groups</h2>
+                    <p>Define reusable port groupings for analyzers.</p>
+                </div>
+                <button class="btn" id="addPortGroupBtn"><i class="fa-solid fa-plus"></i> Add Port Group</button>
+            </header>
+            <div class="admin-help">Ports must be between 1 and 65535. Ranges cannot overlap or invert. Protocols follow backend expectations (<code>tcp</code>, <code>udp</code>, or <code>any</code>).</div>
+            <div id="portGroupsList" class="config-grid"></div>
+        </section>
+    </main>
+    <footer class="admin-footer">
+        <p>&copy; 2025 FireFind by Triskele Labs | Administrative Console</p>
+        <div id="adminToast" class="admin-toast" aria-live="polite"></div>
+    </footer>
+    <script src="admin.js"></script>
+</body>
+</html>
