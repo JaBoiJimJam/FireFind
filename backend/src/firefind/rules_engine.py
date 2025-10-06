@@ -1,107 +1,59 @@
 import ipaddress
+import logging
 from collections.abc import Mapping
-from typing import Dict, Iterable, List, Set
+from copy import deepcopy
+from typing import Dict, Iterable, List, MutableMapping, Set
+
+from .config import DEFAULT_RULES_CONFIG, RulesConfig
 from .model import Rule, Finding
 
 
-DEFAULT_CRITICAL_RISK_ADMIN_PORTS: Set[int] = {
-    4,
-    5,
-    8,
-    12,
-    21,
-    22,
-    80,
-    135,
-    443,
-    445,
-    464,
-    514,
-    1024,
-    1025,
-    1026,
-    3268,
-    3269,
-    7279,
-    27000,
-    49152,
-    65435,
-    65535,
-}
+logger = logging.getLogger(__name__)
 
-DEFAULT_HIGH_RISK_ADMIN_PORTS: Set[int] = {
-    23,
-    3389,
-    515,
-    5900,
-    5985,
-    5986,
-    8810,
-    8811,
-}
 
-DEFAULT_MEDIUM_RISK_ADMIN_PORTS: Set[int] = {
-    2,
-    3,
-    53,
-    110,
-    111,
-    137,
-    138,
-    139,
-    143,
-    161,
-    389,
-    465,
-    636,
-    993,
-    995,
-    1080,
-    1433,
-    1434,
-    1521,
-    1723,
-    1900,
-    2049,
-    2082,
-    2083,
-    2303,
-    3074,
-    3128,
-    3306,
-    4000,
-    4444,
-    5000,
-    5060,
-    5432,
-    5555,
-    5939,
-    6379,
-    6667,
-    6697,
-    8000,
-    8080,
-    8081,
-    8443,
-    8888,
-    9090,
-    9100,
-    9200,
-    10000,
-    27017,
-    28017,
-}
-
-DEFAULT_LOW_RISK_ADMIN_PORTS: Set[int] = {
-    25,
-}
-
-DEFAULT_ADMIN_PORTS = sorted(
-    DEFAULT_CRITICAL_RISK_ADMIN_PORTS
-    | DEFAULT_HIGH_RISK_ADMIN_PORTS
-    | DEFAULT_MEDIUM_RISK_ADMIN_PORTS
-    | DEFAULT_LOW_RISK_ADMIN_PORTS
+DEFAULT_CRITICAL_RISK_ADMIN_PORTS: Set[int] = set(
+    DEFAULT_RULES_CONFIG.critical_risk_admin_ports
 )
+DEFAULT_HIGH_RISK_ADMIN_PORTS: Set[int] = set(
+    DEFAULT_RULES_CONFIG.high_risk_admin_ports
+)
+DEFAULT_MEDIUM_RISK_ADMIN_PORTS: Set[int] = set(
+    DEFAULT_RULES_CONFIG.medium_risk_admin_ports
+)
+DEFAULT_LOW_RISK_ADMIN_PORTS: Set[int] = set(
+    DEFAULT_RULES_CONFIG.low_risk_admin_ports
+)
+DEFAULT_ADMIN_PORTS = sorted(DEFAULT_RULES_CONFIG.admin_ports)
+
+
+ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
+    "allow_any": {
+        "risk_levels": [],
+        "network_scope": [],
+        "port_lists": [],
+    },
+    "admin_port_exposed": {
+        "risk_levels": ["critical", "high", "medium", "low"],
+        "network_scope": [],
+        "port_lists": [
+            "admin_ports",
+            "critical_risk_admin_ports",
+            "high_risk_admin_ports",
+            "medium_risk_admin_ports",
+            "low_risk_admin_ports",
+        ],
+    },
+    "broad_cidr": {
+        "risk_levels": [],
+        "network_scope": ["broad_cidr_prefix_max", "cidr_limits"],
+        "port_lists": [],
+    },
+    "all_ports_service": {
+        "risk_levels": [],
+        "network_scope": [],
+        "port_lists": ["admin_ports"],
+    },
+}
 
 
 def parse_ports(port_str: str) -> List[int]:
@@ -158,14 +110,75 @@ def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
     return f"FR-{severity_short}-{index:03d}"
 
 
-def _normalize_port_set(values: Iterable[int | str]) -> Set[int]:
-    normalized: Set[int] = set()
-    for value in values or []:
-        try:
-            normalized.add(int(value))
-        except (TypeError, ValueError):
-            continue
-    return normalized
+def _deep_merge_dicts(
+    base: MutableMapping[str, object], override: Mapping[str, object]
+) -> MutableMapping[str, object]:
+    """Recursively merge ``override`` into ``base`` returning a copy."""
+
+    result: MutableMapping[str, object] = deepcopy(base)
+    for key, value in (override or {}).items():
+        if key in result and isinstance(result[key], Mapping) and isinstance(value, Mapping):
+            result[key] = _deep_merge_dicts(
+                result[key], value  # type: ignore[arg-type]
+            )
+        else:
+            result[key] = deepcopy(value)
+    return result
+
+
+def _coerce_rules_config(cfg) -> RulesConfig:
+    """Return a :class:`RulesConfig` instance for legacy callers."""
+
+    if isinstance(cfg, RulesConfig):
+        return cfg
+
+    if isinstance(cfg, Mapping):
+        merged = _deep_merge_dicts(
+            DEFAULT_RULES_CONFIG.to_dict(), cfg  # type: ignore[arg-type]
+        )
+        return RulesConfig.from_dict(merged)
+
+    return DEFAULT_RULES_CONFIG
+
+
+def _log_active_thresholds(cfg: RulesConfig, *, vendor: str) -> None:
+    """Emit structured logging describing the analyzer thresholds in use."""
+
+    risk_levels_payload = {
+        name: {
+            "label": definition.label,
+            "severity": definition.severity.value,
+            "thresholds": definition.thresholds.to_dict(),
+        }
+        for name, definition in sorted(cfg.risk_levels.items())
+    }
+
+    analyzer_thresholds = {
+        "admin_port_exposed": {
+            "admin_ports": sorted(cfg.admin_ports) or sorted(DEFAULT_ADMIN_PORTS),
+            "critical_ports": sorted(cfg.critical_risk_admin_ports)
+            or sorted(DEFAULT_CRITICAL_RISK_ADMIN_PORTS),
+            "high_ports": sorted(cfg.high_risk_admin_ports)
+            or sorted(DEFAULT_HIGH_RISK_ADMIN_PORTS),
+            "medium_ports": sorted(cfg.medium_risk_admin_ports)
+            or sorted(DEFAULT_MEDIUM_RISK_ADMIN_PORTS),
+            "low_ports": sorted(cfg.low_risk_admin_ports)
+            or sorted(DEFAULT_LOW_RISK_ADMIN_PORTS),
+        },
+        "broad_cidr": {
+            "broad_cidr_prefix_max": int(cfg.broad_cidr_prefix_max),
+        },
+    }
+
+    logger.info(
+        "Analyzer thresholds resolved",
+        extra={
+            "vendor": vendor,
+            "analyzers": analyzer_thresholds,
+            "risk_levels": risk_levels_payload,
+            "inventory": ANALYZER_INVENTORY,
+        },
+    )
 
 
 def classify_admin_port_severity(
@@ -213,39 +226,46 @@ def looks_internet_facing(value: str) -> bool:
     return any(token in v for token in candidates)
 
 
-def _cfg_get(cfg, key: str, default):
-    if isinstance(cfg, Mapping):
-        return cfg.get(key, default)
-    return getattr(cfg, key, default)
-
-
 def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
-    critical_risk_admin_ports = _normalize_port_set(
-        _cfg_get(cfg, "critical_risk_admin_ports", DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
-    ) or set(DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
-    high_risk_admin_ports = _normalize_port_set(
-        _cfg_get(cfg, "high_risk_admin_ports", DEFAULT_HIGH_RISK_ADMIN_PORTS)
-    ) or set(DEFAULT_HIGH_RISK_ADMIN_PORTS)
-    medium_risk_admin_ports = _normalize_port_set(
-        _cfg_get(cfg, "medium_risk_admin_ports", DEFAULT_MEDIUM_RISK_ADMIN_PORTS)
-    ) or set(DEFAULT_MEDIUM_RISK_ADMIN_PORTS)
-    low_risk_admin_ports = _normalize_port_set(
-        _cfg_get(cfg, "low_risk_admin_ports", DEFAULT_LOW_RISK_ADMIN_PORTS)
-    ) or set(DEFAULT_LOW_RISK_ADMIN_PORTS)
+    rules_cfg = _coerce_rules_config(cfg)'
 
-    admin_ports = _normalize_port_set(_cfg_get(cfg, "admin_ports", DEFAULT_ADMIN_PORTS))
+    critical_risk_admin_ports = set(rules_cfg.critical_risk_admin_ports)
+    if not critical_risk_admin_ports:
+        critical_risk_admin_ports = set(DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
+
+    high_risk_admin_ports = set(rules_cfg.high_risk_admin_ports)
+    if not high_risk_admin_ports:
+        high_risk_admin_ports = set(DEFAULT_HIGH_RISK_ADMIN_PORTS)
+
+    medium_risk_admin_ports = set(rules_cfg.medium_risk_admin_ports)
+    if not medium_risk_admin_ports:
+        medium_risk_admin_ports = set(DEFAULT_MEDIUM_RISK_ADMIN_PORTS)
+
+    low_risk_admin_ports = set(rules_cfg.low_risk_admin_ports)
+    if not low_risk_admin_ports:
+        low_risk_admin_ports = set(DEFAULT_LOW_RISK_ADMIN_PORTS)
+
+    admin_ports = set(rules_cfg.admin_ports)
     if not admin_ports:
-        admin_ports = set(DEFAULT_ADMIN_PORTS)
+        admin_ports = (
+            set(DEFAULT_ADMIN_PORTS)
+            | critical_risk_admin_ports
+            | high_risk_admin_ports
+            | medium_risk_admin_ports
+            | low_risk_admin_ports
+        )
     else:
-        admin_ports = set(admin_ports)
+        admin_ports.update(critical_risk_admin_ports)
+        admin_ports.update(high_risk_admin_ports)
+        admin_ports.update(medium_risk_admin_ports)
+        admin_ports.update(low_risk_admin_ports)
 
-    admin_ports.update(critical_risk_admin_ports)
-    admin_ports.update(high_risk_admin_ports)
-    admin_ports.update(medium_risk_admin_ports)
-    admin_ports.update(low_risk_admin_ports)
-    broad_prefix = int(
-        _cfg_get(cfg, "broad_cidr_prefix_max", 8)
-    )  # e.g., flag /0..../8 as "broad"
+    broad_prefix = int(rules_cfg.broad_cidr_prefix_max or 8)
+    if broad_prefix <= 0:
+        broad_prefix = 8
+
+    _log_active_thresholds(rules_cfg, vendor=vendor)
+
     findings: List[Finding] = []
     risk_code_counter = 1
 

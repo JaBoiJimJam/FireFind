@@ -4,7 +4,7 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
-from firefind.rules_engine import parse_ports, run_checks
+from firefind.rules_engine import ANALYZER_INVENTORY, parse_ports, run_checks
 from firefind.service import run_analysis
 from firefind.model import Rule
 
@@ -189,3 +189,18 @@ def test_run_analysis_no_seq_column(tmp_path):
     assert f.rule_id == "1"
     assert f.src == "1.1.1.1"
     assert f.dst == "2.2.2.2"
+
+
+def test_run_checks_logs_thresholds(caplog):
+    rule = Rule("1", "any", "any", "any", "any", "allow")
+
+    caplog.set_level("INFO")
+    run_checks("fortinet", [rule], {})
+
+    records = [r for r in caplog.records if r.message == "Analyzer thresholds resolved"]
+    assert records, "Expected structured logging output"
+
+    record = records[0]
+    assert "admin_port_exposed" in record.analyzers
+    assert record.vendor == "fortinet"
+    assert record.inventory == ANALYZER_INVENTORY
