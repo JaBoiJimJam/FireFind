@@ -227,7 +227,7 @@ def looks_internet_facing(value: str) -> bool:
 
 
 def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
-    rules_cfg = _coerce_rules_config(cfg)'
+    rules_cfg = _coerce_rules_config(cfg)
 
     critical_risk_admin_ports = set(rules_cfg.critical_risk_admin_ports)
     if not critical_risk_admin_ports:
