@@ -288,6 +288,14 @@ def _deep_merge(base: MutableMapping[str, Any], override: Mapping[str, Any]) -> 
     return result
 
 
+def merge_rules_config_data(
+    base: Mapping[str, Any], override: Mapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Return ``base`` updated with ``override`` using the deep merge semantics."""
+
+    return _deep_merge(dict(base), override)
+
+
 def load_rules_config(
     path: Path,
     *,
