@@ -14,6 +14,7 @@ from .rules_engine import run_checks
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
 from .service import deduplicate_findings
+from .config import load_rules_config
 from .utils import load_yaml, pick_mapping, to_rule
 
 app = typer.Typer(help="Ingest, normalize, analyze, and output reports.")
@@ -98,7 +99,7 @@ def parse(
         raise typer.BadParameter(f"{input_path} does not exist")
 
     # Load configs
-    rules_cfg = load_yaml(Path(rules))
+    rules_cfg = load_rules_config(Path(rules))
     vendor_mappings = load_yaml(Path(mappings))
     mapping = pick_mapping(vendor_mappings, vendor)
 

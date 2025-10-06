@@ -1,4 +1,5 @@
 import ipaddress
+from collections.abc import Mapping
 from typing import Dict, Iterable, List, Set
 from .model import Rule, Finding
 
@@ -212,21 +213,27 @@ def looks_internet_facing(value: str) -> bool:
     return any(token in v for token in candidates)
 
 
-def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
+def _cfg_get(cfg, key: str, default):
+    if isinstance(cfg, Mapping):
+        return cfg.get(key, default)
+    return getattr(cfg, key, default)
+
+
+def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     critical_risk_admin_ports = _normalize_port_set(
-        cfg.get("critical_risk_admin_ports", DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
+        _cfg_get(cfg, "critical_risk_admin_ports", DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
     ) or set(DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
     high_risk_admin_ports = _normalize_port_set(
-        cfg.get("high_risk_admin_ports", DEFAULT_HIGH_RISK_ADMIN_PORTS)
+        _cfg_get(cfg, "high_risk_admin_ports", DEFAULT_HIGH_RISK_ADMIN_PORTS)
     ) or set(DEFAULT_HIGH_RISK_ADMIN_PORTS)
     medium_risk_admin_ports = _normalize_port_set(
-        cfg.get("medium_risk_admin_ports", DEFAULT_MEDIUM_RISK_ADMIN_PORTS)
+        _cfg_get(cfg, "medium_risk_admin_ports", DEFAULT_MEDIUM_RISK_ADMIN_PORTS)
     ) or set(DEFAULT_MEDIUM_RISK_ADMIN_PORTS)
     low_risk_admin_ports = _normalize_port_set(
-        cfg.get("low_risk_admin_ports", DEFAULT_LOW_RISK_ADMIN_PORTS)
+        _cfg_get(cfg, "low_risk_admin_ports", DEFAULT_LOW_RISK_ADMIN_PORTS)
     ) or set(DEFAULT_LOW_RISK_ADMIN_PORTS)
 
-    admin_ports = _normalize_port_set(cfg.get("admin_ports", DEFAULT_ADMIN_PORTS))
+    admin_ports = _normalize_port_set(_cfg_get(cfg, "admin_ports", DEFAULT_ADMIN_PORTS))
     if not admin_ports:
         admin_ports = set(DEFAULT_ADMIN_PORTS)
     else:
@@ -237,7 +244,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg: Dict) -> List[Finding]:
     admin_ports.update(medium_risk_admin_ports)
     admin_ports.update(low_risk_admin_ports)
     broad_prefix = int(
-        cfg.get("broad_cidr_prefix_max", 8)
+        _cfg_get(cfg, "broad_cidr_prefix_max", 8)
     )  # e.g., flag /0..../8 as "broad"
     findings: List[Finding] = []
     risk_code_counter = 1
