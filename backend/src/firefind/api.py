@@ -7,15 +7,26 @@ from pathlib import Path
 import tempfile
 from collections import Counter
 from dataclasses import asdict
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 from uuid import uuid4
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import (
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    UploadFile,
+)
+from fastapi import status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from .service import run_analysis
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
+from .config import RulesConfigStore
 
 app = FastAPI()
 
@@ -35,6 +46,107 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def require_api_token(authorization: str = Header(default="")) -> None:
+    token = os.getenv("FIRE_FIND_API_TOKEN")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="API token is not configured",
+        )
+
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    scheme, _, credentials = authorization.partition(" ")
+    if scheme.lower() != "bearer" or credentials != token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def get_actor(
+    x_firefind_actor: str | None = Header(default=None, alias="X-Firefind-Actor")
+) -> str:
+    return (x_firefind_actor or "unknown").strip() or "unknown"
+
+
+def get_rules_config_store() -> RulesConfigStore:
+    return RulesConfigStore()
+
+
+class RulesConfigPatch(BaseModel):
+    """Incoming payload for partial rules configuration updates."""
+
+    changes: Dict[str, Any] = Field(default_factory=dict)
+    message: str | None = Field(default=None, max_length=500)
+
+
+@app.get("/api/config/rules")
+def get_rules_config(
+    _: None = Depends(require_api_token),
+    store: RulesConfigStore = Depends(get_rules_config_store),
+):
+    config = store.load_active().to_dict()
+    revision = store.latest_revision()
+    metadata = {
+        "version": revision.version if revision else 0,
+        "updated_at": revision.timestamp if revision else None,
+        "updated_by": revision.actor if revision else None,
+        "summary": revision.summary if revision else None,
+    }
+    return {"config": config, "metadata": metadata}
+
+
+@app.get("/api/config/rules/history")
+def get_rules_config_history(
+    limit: int = 20,
+    _: None = Depends(require_api_token),
+    store: RulesConfigStore = Depends(get_rules_config_store),
+):
+    history = store.get_history(limit if limit > 0 else None)
+    return {"history": history}
+
+
+@app.patch("/api/config/rules")
+def patch_rules_config(
+    payload: RulesConfigPatch = Body(...),
+    _: None = Depends(require_api_token),
+    store: RulesConfigStore = Depends(get_rules_config_store),
+    actor: str = Depends(get_actor),
+):
+    if not payload.changes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No configuration changes supplied",
+        )
+
+    try:
+        config, revision = store.update(
+            payload.changes,
+            actor=actor,
+            summary=payload.message,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    metadata = {
+        "version": revision.version,
+        "updated_at": revision.timestamp,
+        "updated_by": revision.actor,
+        "summary": revision.summary,
+    }
+    return {"config": config.to_dict(), "metadata": metadata}
 
 
 _SEVERITY_KEYS = ("critical", "high", "medium", "low", "info")

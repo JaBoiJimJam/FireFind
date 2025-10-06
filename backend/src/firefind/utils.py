@@ -3,7 +3,7 @@ from __future__ import annotations
 """Shared utility functions for FireFind modules."""
 
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Iterable, Mapping, Tuple
 import yaml
 
 from .model import Rule
@@ -54,6 +54,13 @@ def load_yaml(path: Path) -> dict:
     """Load a YAML file and return an empty dict if the file is empty."""
     with Path(path).open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def dump_yaml(path: Path, data: Mapping[str, object]) -> None:
+    """Persist ``data`` to ``path`` using a stable YAML representation."""
+
+    with Path(path).open("w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
 
 
 def pick_mapping(vendor_mappings: dict, vendor: str) -> dict:
