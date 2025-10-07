@@ -953,6 +953,7 @@
         .form-field select,
         .form-field textarea {
             background: rgba(12, 16, 18, 0.92);
+            background-color: rgba(12, 16, 18, 0.92);
             border: 1px solid rgba(78, 204, 163, 0.35);
             border-radius: 10px;
             padding: 0.6rem 0.75rem;
@@ -967,9 +968,20 @@
             color: rgba(255, 255, 255, 0.55);
         }
 
+        .form-field select {
+            color: var(--text-light);
+        }
+
         .form-field select option,
         .form-field select optgroup {
-            background-color: var(--card-bg);
+            background-color: rgba(12, 16, 18, 0.96);
+            color: var(--text-light);
+        }
+
+        .form-field select option:hover,
+        .form-field select option:checked,
+        .form-field select option:focus {
+            background-color: rgba(78, 204, 163, 0.25);
             color: var(--text-light);
         }
 
