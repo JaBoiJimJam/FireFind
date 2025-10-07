@@ -2,9 +2,19 @@ import ipaddress
 import logging
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import Dict, Iterable, List, MutableMapping, Set
+from dataclasses import dataclass
+from typing import (
+    Dict,
+    Iterable,
+    List,
+    MutableMapping,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
-from .config import DEFAULT_RULES_CONFIG, RulesConfig
+from .config import DEFAULT_RULES_CONFIG, RulesConfig, CIDRLimitPolicy
 from .model import Rule, Finding
 
 
@@ -24,6 +34,167 @@ DEFAULT_LOW_RISK_ADMIN_PORTS: Set[int] = set(
     DEFAULT_RULES_CONFIG.low_risk_admin_ports
 )
 DEFAULT_ADMIN_PORTS = sorted(DEFAULT_RULES_CONFIG.admin_ports)
+
+Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+
+
+@dataclass(frozen=True)
+class ResolvedCIDRPolicy:
+    """Policy ready for evaluation with parsed CIDR metadata."""
+
+    name: str
+    policy: CIDRLimitPolicy
+    blocked: Tuple[Network, ...]
+    exempt: Tuple[Network, ...]
+
+
+def _parse_cidr_list(values: Iterable[str]) -> Tuple[Network, ...]:
+    """Return parsed networks, ignoring entries that fail validation."""
+
+    networks: list[Network] = []
+    for value in values or []:
+        try:
+            networks.append(ipaddress.ip_network(value, strict=False))
+        except Exception:  # pragma: no cover - defensive guard
+            continue
+    return tuple(networks)
+
+
+def _resolve_cidr_policies(
+    cfg: RulesConfig,
+    *,
+    vendor: str,
+    analyzer: str = "broad_cidr",
+) -> List[ResolvedCIDRPolicy]:
+    """Expand CIDR limit sets into concrete policies with parsed metadata."""
+
+    resolved: List[ResolvedCIDRPolicy] = []
+    for name, limit_set in cfg.cidr_limits.items():
+        policy = limit_set.resolve(analyzer=analyzer, vendor=vendor)
+        resolved.append(
+            ResolvedCIDRPolicy(
+                name=name,
+                policy=policy,
+                blocked=_parse_cidr_list(policy.blocked),
+                exempt=_parse_cidr_list(policy.exempt),
+            )
+        )
+    return resolved
+
+
+def _parse_network_value(value: str) -> Optional[Network]:
+    """Attempt to normalise a rule value into a network instance."""
+
+    if is_any(value):
+        return ipaddress.ip_network("0.0.0.0/0")
+    try:
+        return ipaddress.ip_network(value, strict=False)
+    except Exception:
+        return None
+
+
+def _format_policy_message(
+    *,
+    field: str,
+    original_value: str,
+    policy: ResolvedCIDRPolicy,
+    detail: str,
+) -> str:
+    description = (policy.policy.description or "").strip()
+    message = f"{field} {original_value} {detail} ({policy.name})"
+    if description:
+        message += f" – {description}"
+    return message
+
+
+def _evaluate_value_against_policy(
+    *,
+    value: str,
+    field: str,
+    policy: ResolvedCIDRPolicy,
+    fallback_max_prefix: int,
+) -> Optional[Tuple[str, str]]:
+    network = _parse_network_value(value)
+    if network is None:
+        return None
+
+    for exempt in policy.exempt:
+        if network.subnet_of(exempt):
+            return None
+
+    for blocked in policy.blocked:
+        if network.version != blocked.version:
+            continue
+        if network == blocked or blocked.subnet_of(network):
+            detail = f"matches blocked CIDR {blocked.with_prefixlen}"
+            return "High", _format_policy_message(
+                field=field,
+                original_value=value,
+                policy=policy,
+                detail=detail,
+            )
+
+    max_prefix = policy.policy.max_prefix
+    if max_prefix is None:
+        max_prefix = fallback_max_prefix
+    if max_prefix is not None and network.prefixlen <= int(max_prefix):
+        detail = f"is broader than /{int(max_prefix)} limit"
+        return "Medium", _format_policy_message(
+            field=field,
+            original_value=value,
+            policy=policy,
+            detail=detail,
+        )
+
+    min_prefix = policy.policy.min_prefix
+    if min_prefix is not None and network.prefixlen < int(min_prefix):
+        detail = f"is broader than minimum /{int(min_prefix)} allowed"
+        return "Medium", _format_policy_message(
+            field=field,
+            original_value=value,
+            policy=policy,
+            detail=detail,
+        )
+
+    return None
+
+
+def _evaluate_policy_for_rule(
+    policy: ResolvedCIDRPolicy,
+    rule: Rule,
+    fallback_max_prefix: int,
+) -> Optional[Tuple[str, str]]:
+    messages: List[str] = []
+    severity_rank = 0
+    for field, value in (("source", rule.src), ("destination", rule.dst)):
+        result = _evaluate_value_against_policy(
+            value=value,
+            field=field,
+            policy=policy,
+            fallback_max_prefix=fallback_max_prefix,
+        )
+        if not result:
+            continue
+        severity, message = result
+        messages.append(message)
+        if severity == "High":
+            severity_rank = max(severity_rank, 2)
+        else:
+            severity_rank = max(severity_rank, 1)
+
+    if not messages:
+        return None
+
+    severity = "High" if severity_rank == 2 else "Medium"
+    return severity, "; ".join(messages)
+
+
+def _fallback_broad_messages(rule: Rule, max_prefix: int) -> List[str]:
+    messages: List[str] = []
+    for field, value in (("source", rule.src), ("destination", rule.dst)):
+        if is_broad_cidr(value, max_prefix):
+            messages.append(f"{field} {value} is broader than /{max_prefix}")
+    return messages
 
 
 ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
@@ -263,6 +434,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     broad_prefix = int(rules_cfg.broad_cidr_prefix_max or 8)
     if broad_prefix <= 0:
         broad_prefix = 8
+    cidr_policies = _resolve_cidr_policies(rules_cfg, vendor=vendor)
+    use_fallback_cidr = not cidr_policies
 
     _log_active_thresholds(rules_cfg, vendor=vendor)
 
@@ -326,7 +499,31 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             )
 
         # Broad CIDR (src or dst)
-        if is_broad_cidr(r.src, broad_prefix) or is_broad_cidr(r.dst, broad_prefix):
+        cidr_messages: List[str] = []
+        cidr_severity_rank = 0
+        for policy in cidr_policies:
+            result = _evaluate_policy_for_rule(
+                policy,
+                r,
+                broad_prefix,
+            )
+            if not result:
+                continue
+            severity, message = result
+            cidr_messages.append(message)
+            if severity == "High":
+                cidr_severity_rank = max(cidr_severity_rank, 2)
+            else:
+                cidr_severity_rank = max(cidr_severity_rank, 1)
+
+        if not cidr_messages and use_fallback_cidr:
+            fallback_messages = _fallback_broad_messages(r, broad_prefix)
+            if fallback_messages:
+                cidr_messages.extend(fallback_messages)
+                cidr_severity_rank = max(cidr_severity_rank, 1)
+
+        if cidr_messages:
+            cidr_severity = "High" if cidr_severity_rank == 2 else "Medium"
             findings.append(
                 Finding(
                     vendor,
@@ -337,8 +534,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     r.port,
                     r.action,
                     finding_type="broad_cidr",
-                    severity="Medium",
-                    rationale=f"Network prefix is very broad (/{broad_prefix} or larger)",
+                    severity=cidr_severity,
+                    rationale="; ".join(cidr_messages),
                     source_file=r.source_file,
                 )
             )

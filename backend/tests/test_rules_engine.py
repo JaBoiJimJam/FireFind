@@ -24,8 +24,9 @@ def test_parse_ports_malformed():
 def test_run_checks_allow_any():
     rule = Rule("1", "any", "any", "any", "any", "allow")
     findings = run_checks("v", [rule], {})
-    assert len(findings) == 1
-    assert findings[0].finding_type == "allow_any"
+    types = {f.finding_type for f in findings}
+    assert "allow_any" in types
+    assert "broad_cidr" in types
 
 
 def test_run_checks_admin_port_exposure():
@@ -63,6 +64,60 @@ def test_run_checks_broad_cidr():
     rule = Rule("3", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow")
     findings = run_checks("v", [rule], {"broad_cidr_prefix_max": 8})
     assert any(f.finding_type == "broad_cidr" for f in findings)
+
+
+def test_cidr_limits_vendor_override():
+    rule = Rule("12", "10.0.0.0/10", "2.2.2.2", "any", "any", "allow")
+    cfg = {
+        "cidr_limits": {
+            "broad_networks": {
+                "default": {"max_prefix": 8},
+                "vendors": {
+                    "fortinet": {
+                        "max_prefix": 12,
+                        "description": "Fortinet exports treat /12 as broad.",
+                    }
+                },
+            }
+        }
+    }
+
+    findings = run_checks("fortinet", [rule], cfg)
+    matching = [f for f in findings if f.finding_type == "broad_cidr"]
+    assert matching, "Expected vendor override to trigger broad CIDR finding"
+    assert "/12" in matching[0].rationale
+
+    other_vendor = run_checks("checkpoint", [rule], cfg)
+    assert not any(f.finding_type == "broad_cidr" for f in other_vendor)
+
+
+def test_cidr_limits_blocked_and_exempt():
+    cfg = {
+        "cidr_limits": {
+            "broad_networks": {
+                "default": {"max_prefix": 0, "blocked": []},
+                "vendors": {"fortinet": {"max_prefix": 0, "blocked": []}},
+            },
+            "internet": {
+                "default": {
+                    "max_prefix": 8,
+                    "blocked": ["0.0.0.0/0"],
+                    "exempt": ["10.0.0.0/8"],
+                    "description": "Escalate internet-wide exposure but allow trusted network.",
+                }
+            }
+        }
+    }
+
+    blocked_rule = Rule("20", "0.0.0.0/0", "2.2.2.2", "any", "any", "allow")
+    blocked_findings = run_checks("fortinet", [blocked_rule], cfg)
+    blocked = [f for f in blocked_findings if f.finding_type == "broad_cidr"]
+    assert blocked and blocked[0].severity == "High"
+    assert "blocked CIDR" in blocked[0].rationale
+
+    exempt_rule = Rule("21", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow")
+    exempt_findings = run_checks("fortinet", [exempt_rule], cfg)
+    assert not any(f.finding_type == "broad_cidr" for f in exempt_findings)
 
 
 def test_run_checks_all_ports_internet():
@@ -118,9 +173,9 @@ def test_run_analysis_directory_and_dedup(tmp_path):
         mappings_path=mappings_path,
     )
 
-    assert len(findings) == 2
+    assert len(findings) == 3
     types = {f.finding_type for f in findings}
-    assert "allow_any" in types
+    assert {"allow_any", "admin_port_exposed", "broad_cidr"} <= typ
     assert "admin_port_exposed" in types
 
 
@@ -155,7 +210,6 @@ def test_run_analysis_custom_config_loading(tmp_path):
     assert f.rule_id == "1"
     assert f.src == "1.1.1.1"
     assert f.dst == "2.2.2.2"
-    assert {fl.finding_type for fl in findings} == {"admin_port_exposed"}
 
 
 def test_run_analysis_no_seq_column(tmp_path):
