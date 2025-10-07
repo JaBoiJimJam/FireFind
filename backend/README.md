@@ -121,24 +121,41 @@ Approved updates are persisted to the configured YAML file (defaults to `rules/r
 - `--mappings`: Path to vendor column mappings YAML file
 - `--version`: Show the application's version and exit
 
-## Configuration Files
+## Configuration Overview
 
-### Rules Configuration (`rules/rules.yaml`)
+FireFind ships with sensible defaults, but production deployments should review
+the configuration options below to align the analysis engine with internal
+policies.
 
-Defines security analysis rules:
-- **admin_ports**: List of administrative ports to flag
-- **broad_cidr_prefix_max**: Maximum CIDR prefix length to consider "broad"
+### Core Files
 
-### Vendor Mappings (`rules/vendor_mappings.yaml`)
+- **Rules Configuration (`rules/rules.yaml`)** – Controls the security analysis
+  heuristics. Extend the file or point the backend at a bespoke path to tune
+  severity thresholds, CIDR limits, and reusable port collections.
+- **Vendor Mappings (`rules/vendor_mappings.yaml`)** – Maps vendor-specific
+  column names to the normalized fields the analyzers expect (rule id, source,
+  destination, protocol, service, action, and comments).
 
-Maps vendor-specific column names to standardized field names:
-- `rule_id`: Rule identifier columns
-- `src`: Source address columns
-- `dst`: Destination address columns
-- `proto`: Protocol columns
-- `port`: Port/service columns
-- `action`: Action (allow/deny) columns
-- `comment`: Comment/description columns
+Copy `rules.config.sample.yaml` to a safe location, tailor the contents, and set
+`FIRE_FIND_RULES_CONFIG` to point at the custom file before launching the
+service. When the API receives rule updates it persists them alongside a
+revision history (`*.history.jsonl`). Override the history location with
+`FIRE_FIND_RULES_HISTORY` if you need to store the audit trail elsewhere (for
+example on a shared network volume).
+
+### Runtime Environment Variables
+
+| Variable | Purpose |
+| --- | --- |
+| `FIRE_FIND_API_TOKEN` | Shared bearer token required by the configuration API endpoints. Generate a strong random value and keep it secret. |
+| `FIRE_FIND_ALLOW_ORIGINS` | Optional CORS allow-list for the FastAPI server (defaults to `*`). Provide a comma-separated list for production launches. |
+| `FIRE_FIND_RULES_CONFIG` | Absolute path to the active rules configuration file. Defaults to `backend/rules/rules.yaml`. |
+| `FIRE_FIND_RULES_HISTORY` | Optional override for the JSONL revision log. Defaults to `<rules file name>.history.jsonl` next to the config file. |
+
+Export these variables in your process manager (e.g. systemd, Docker, or a CI
+runner) so the CLI and API share a consistent configuration baseline. Remember
+to mount the configuration files read/write if you expect operators to patch
+rules via the API.
 
 ## Input File Format
 
