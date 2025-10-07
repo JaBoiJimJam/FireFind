@@ -6,6 +6,26 @@
         { value: 'low', label: 'Low' },
         { value: 'informational', label: 'Informational' },
     ];
+    const severityOptionValues = severityOptions.map((option) => option.value);
+
+    const comparatorOptions = [
+        { value: 'equals', label: 'Equals' },
+        { value: 'not_equals', label: 'Does not equal' },
+        { value: 'contains', label: 'Contains' },
+        { value: 'not_contains', label: 'Does not contain' },
+        { value: 'greater_than', label: 'Greater than' },
+        { value: 'less_than', label: 'Less than' },
+        { value: 'between', label: 'Between' },
+        { value: 'matches_port_group', label: 'Matches port group' },
+        { value: 'matches_admin_port', label: 'Matches admin port' },
+        { value: 'starts_with', label: 'Starts with' },
+        { value: 'ends_with', label: 'Ends with' },
+        { value: 'in', label: 'In list' },
+    ];
+    const comparatorValueModes = {
+        multi: new Set(['in', 'matches_port_group', 'between']),
+        none: new Set(['matches_admin_port']),
+    };
 
     const DEFAULT_RULE_CONDITIONS_YAML = 'logic: all\nconditions: []\ngroups: []\n';
     const DEFAULT_ANALYZERS_YAML = '{}\n';
@@ -32,6 +52,524 @@
     let lastValidationMessage = '';
     const defaultValidationOptions = { suppressErrorToast: false };
     let validationOptions = { ...defaultValidationOptions };
+    let ruleListView = null;
+    let ruleEditor = null;
+
+    // ---------------------------------------------------------------------
+    // Rule logic helpers
+    // ---------------------------------------------------------------------
+
+    function createConditionGroup(logic = 'all') {
+        return {
+            id: generateId('group'),
+            logic: logic === 'any' ? 'any' : 'all',
+            conditions: [],
+            groups: [],
+        };
+    }
+
+    function createConditionEntry() {
+        return {
+            id: generateId('condition'),
+            field: '',
+            comparator: 'equals',
+            value: '',
+            values: [],
+        };
+    }
+
+    function cloneConditionGroup(group) {
+        const base = createConditionGroup(group?.logic);
+        const cloned = {
+            ...base,
+            id: group?.id || base.id,
+            logic: group?.logic === 'any' ? 'any' : 'all',
+            conditions: Array.isArray(group?.conditions)
+                ? group.conditions.map((condition) => ({
+                      id: condition?.id || generateId('condition'),
+                      field: condition?.field ? String(condition.field) : '',
+                      comparator: condition?.comparator ? String(condition.comparator) : 'equals',
+                      value: condition?.value === null || condition?.value === undefined ? '' : String(condition.value),
+                      values: Array.isArray(condition?.values)
+                          ? condition.values.map((value) => String(value)).filter(Boolean)
+                          : [],
+                  }))
+                : [],
+            groups: Array.isArray(group?.groups)
+                ? group.groups.map((child) => cloneConditionGroup(child))
+                : [],
+        };
+        return cloned;
+    }
+
+    function normalizeConditionGroup(raw) {
+        if (!raw || typeof raw !== 'object') {
+            return createConditionGroup();
+        }
+        const group = createConditionGroup(raw.logic);
+        group.id = raw.id || group.id;
+        group.logic = raw.logic === 'any' ? 'any' : 'all';
+        group.conditions = Array.isArray(raw.conditions)
+            ? raw.conditions.map((entry) => normalizeConditionEntry(entry))
+            : [];
+        group.groups = Array.isArray(raw.groups)
+            ? raw.groups.map((child) => normalizeConditionGroup(child))
+            : [];
+        return group;
+    }
+
+    function normalizeConditionEntry(raw) {
+        const entry = createConditionEntry();
+        if (!raw || typeof raw !== 'object') {
+            return entry;
+        }
+        entry.id = raw.id || entry.id;
+        entry.field = raw.field ? String(raw.field) : '';
+        entry.comparator = raw.comparator ? String(raw.comparator) : 'equals';
+        if (Array.isArray(raw.values)) {
+            entry.values = raw.values.map((value) => String(value)).filter((value) => value !== '');
+        } else if (raw.values !== undefined && raw.values !== null) {
+            entry.values = splitList(raw.values);
+        }
+        if (raw.value !== undefined && raw.value !== null) {
+            entry.value = String(raw.value);
+        } else if (entry.values.length === 1 && raw.value === undefined) {
+            entry.value = entry.values[0];
+            entry.values = [];
+        }
+        return entry;
+    }
+
+    function conditionGroupToParsed(group) {
+        const safeGroup = group || createConditionGroup();
+        return {
+            logic: safeGroup.logic === 'any' ? 'any' : 'all',
+            conditions: Array.isArray(safeGroup.conditions)
+                ? safeGroup.conditions
+                      .map((entry) => conditionEntryToParsed(entry))
+                      .filter((entry) => entry !== null)
+                : [],
+            groups: Array.isArray(safeGroup.groups)
+                ? safeGroup.groups.map((child) => conditionGroupToParsed(child))
+                : [],
+        };
+    }
+
+    function conditionEntryToParsed(entry) {
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+        const field = (entry.field || '').trim();
+        const comparator = (entry.comparator || '').trim();
+        if (!field || !comparator) {
+            return null;
+        }
+        const parsed = {
+            field,
+            comparator,
+        };
+        const hasMultiValues = Array.isArray(entry.values) && entry.values.some((value) => String(value).trim() !== '');
+        if (hasMultiValues) {
+            parsed.values = entry.values
+                .map((value) => String(value).trim())
+                .filter((value) => value !== '')
+                .map((value) => tryConvertValue(value));
+        } else {
+            const value = entry.value === undefined || entry.value === null ? '' : String(entry.value).trim();
+            if (value !== '') {
+                parsed.value = tryConvertValue(value);
+            }
+        }
+        return parsed;
+    }
+
+    function tryConvertValue(value) {
+        const numeric = Number(value);
+        if (!Number.isNaN(numeric) && String(numeric) === value) {
+            return numeric;
+        }
+        if (value === 'true') {
+            return true;
+        }
+        if (value === 'false') {
+            return false;
+        }
+        return value;
+    }
+
+    function createThresholds() {
+        return {
+            min_score: '',
+            max_score: '',
+            min_findings: '',
+            max_findings: '',
+        };
+    }
+
+    function cloneThresholds(raw) {
+        const base = createThresholds();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        Object.keys(base).forEach((key) => {
+            const value = raw[key];
+            base[key] = value === null || value === undefined ? '' : String(value);
+        });
+        return base;
+    }
+
+    function clonePerRiskThresholds(raw) {
+        const result = {};
+        if (!raw || typeof raw !== 'object') {
+            return result;
+        }
+        Object.entries(raw).forEach(([risk, value]) => {
+            result[risk] = cloneThresholds(value);
+        });
+        return result;
+    }
+
+    function clonePerRiskPortMap(raw) {
+        const result = {};
+        if (!raw || typeof raw !== 'object') {
+            return result;
+        }
+        Object.entries(raw).forEach(([risk, values]) => {
+            result[risk] = Array.isArray(values)
+                ? values.map((entry) => String(entry).trim()).filter(Boolean)
+                : splitList(values);
+        });
+        return result;
+    }
+
+    function createSeverityOverrideMap() {
+        return severityOptionValues.reduce((acc, severity) => {
+            acc[severity] = '';
+            return acc;
+        }, {});
+    }
+
+    function createAnalyzerEntry() {
+        return {
+            id: generateId('analyzer'),
+            key: '',
+            enabled: true,
+            notes: '',
+            severityOverrides: createSeverityOverrideMap(),
+            baselineThresholds: createThresholds(),
+            perRiskThresholds: {},
+            baselineAdminPorts: [],
+            perRiskAdminPorts: {},
+        };
+    }
+
+    function cloneAnalyzerEntry(entry) {
+        const base = createAnalyzerEntry();
+        if (!entry || typeof entry !== 'object') {
+            return base;
+        }
+        const severityOverrides = createSeverityOverrideMap();
+        Object.entries(entry.severityOverrides || {}).forEach(([severity, value]) => {
+            if (severityOptionValues.includes(severity)) {
+                severityOverrides[severity] = value === null || value === undefined ? '' : String(value);
+            }
+        });
+        return {
+            ...base,
+            id: entry.id || base.id,
+            key: entry.key ? String(entry.key) : '',
+            enabled: entry.enabled === false ? false : true,
+            notes: entry.notes ? String(entry.notes) : '',
+            severityOverrides,
+            baselineThresholds: cloneThresholds(entry.baselineThresholds),
+            perRiskThresholds: clonePerRiskThresholds(entry.perRiskThresholds),
+            baselineAdminPorts: Array.isArray(entry.baselineAdminPorts)
+                ? entry.baselineAdminPorts.map((value) => String(value)).filter(Boolean)
+                : splitList(entry.baselineAdminPorts),
+            perRiskAdminPorts: clonePerRiskPortMap(entry.perRiskAdminPorts),
+        };
+    }
+
+    function normalizeAnalyzerEntries(raw) {
+        if (!raw || typeof raw !== 'object') {
+            return [createAnalyzerEntry()];
+        }
+        const entries = Object.entries(raw).map(([key, value]) => {
+            const base = createAnalyzerEntry();
+            const severityOverrides = createSeverityOverrideMap();
+            Object.entries(value?.severity_overrides || {}).forEach(([severity, override]) => {
+                if (severityOptionValues.includes(severity)) {
+                    severityOverrides[severity] = override === null || override === undefined ? '' : String(override);
+                }
+            });
+            const perRiskThresholds = {};
+            Object.entries(value?.per_risk_thresholds || {}).forEach(([riskKey, thresholds]) => {
+                perRiskThresholds[riskKey] = cloneThresholds(thresholds);
+            });
+            const adminPorts = value?.admin_ports || {};
+            const baselineAdminPorts = Array.isArray(adminPorts.baseline)
+                ? adminPorts.baseline.map((entry) => String(entry)).filter(Boolean)
+                : splitList(adminPorts.baseline);
+            const perRiskAdminPorts = {};
+            Object.entries(adminPorts.per_risk_overrides || {}).forEach(([riskKey, ports]) => {
+                perRiskAdminPorts[riskKey] = Array.isArray(ports)
+                    ? ports.map((entry) => String(entry)).filter(Boolean)
+                    : splitList(ports);
+            });
+
+            return {
+                ...base,
+                id: generateId('analyzer'),
+                key: key ? String(key) : '',
+                enabled: value?.enabled === false ? false : true,
+                notes: value?.notes ? String(value.notes) : '',
+                severityOverrides,
+                baselineThresholds: cloneThresholds(value?.thresholds),
+                perRiskThresholds,
+                baselineAdminPorts,
+                perRiskAdminPorts,
+            };
+        });
+        return entries.length > 0 ? entries : [createAnalyzerEntry()];
+    }
+
+    function analyzerEntriesToParsed(entries) {
+        const result = {};
+        if (!Array.isArray(entries)) {
+            return result;
+        }
+        entries.forEach((entry) => {
+            const key = (entry.key || '').trim();
+            if (!key) {
+                return;
+            }
+            const payload = {
+                enabled: entry.enabled !== false,
+            };
+            if (entry.notes && entry.notes.trim().length > 0) {
+                payload.notes = entry.notes.trim();
+            }
+            const severityOverrides = {};
+            Object.entries(entry.severityOverrides || {}).forEach(([severity, value]) => {
+                const trimmed = typeof value === 'string' ? value.trim() : value;
+                if (severityOptionValues.includes(severity) && trimmed) {
+                    severityOverrides[severity] = trimmed;
+                }
+            });
+            if (Object.keys(severityOverrides).length > 0) {
+                payload.severity_overrides = severityOverrides;
+            }
+
+            const thresholds = thresholdsForExport(entry.baselineThresholds);
+            if (thresholds) {
+                payload.thresholds = thresholds;
+            }
+            const perRiskThresholds = {};
+            Object.entries(entry.perRiskThresholds || {}).forEach(([riskKey, thresholdsValue]) => {
+                const converted = thresholdsForExport(thresholdsValue);
+                if (converted) {
+                    perRiskThresholds[riskKey] = converted;
+                }
+            });
+            if (Object.keys(perRiskThresholds).length > 0) {
+                payload.per_risk_thresholds = perRiskThresholds;
+            }
+
+            const adminPorts = adminPortsForExport(entry);
+            if (adminPorts) {
+                payload.admin_ports = adminPorts;
+            }
+
+            result[key] = payload;
+        });
+        return result;
+    }
+
+    function thresholdsForExport(source) {
+        if (!source || typeof source !== 'object') {
+            return null;
+        }
+        const payload = {};
+        let hasValue = false;
+        Object.entries(source).forEach(([key, value]) => {
+            const numberValue = toNumber(value);
+            if (numberValue !== null && numberValue !== undefined) {
+                payload[key] = numberValue;
+                hasValue = true;
+            }
+        });
+        return hasValue ? payload : null;
+    }
+
+    function adminPortsForExport(entry) {
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+        const baseline = normalizePortNumbers(entry.baselineAdminPorts);
+        const perRisk = {};
+        Object.entries(entry.perRiskAdminPorts || {}).forEach(([riskKey, values]) => {
+            const ports = normalizePortNumbers(values);
+            if (ports.length > 0) {
+                perRisk[riskKey] = ports;
+            }
+        });
+        if (baseline.length === 0 && Object.keys(perRisk).length === 0) {
+            return null;
+        }
+        const payload = {};
+        if (baseline.length > 0) {
+            payload.baseline = baseline;
+        }
+        if (Object.keys(perRisk).length > 0) {
+            payload.per_risk_overrides = perRisk;
+        }
+        return payload;
+    }
+
+    function normalizePortNumbers(values) {
+        if (!Array.isArray(values)) {
+            if (values === undefined || values === null) {
+                return [];
+            }
+            if (typeof values === 'string') {
+                values = splitList(values);
+            } else {
+                values = [values];
+            }
+        }
+        const seen = new Set();
+        const result = [];
+        values.forEach((value) => {
+            const numeric = toNumber(value);
+            if (numeric === null || numeric === undefined) {
+                return;
+            }
+            const port = Math.round(numeric);
+            if (Number.isInteger(port) && port >= 1 && port <= 65535 && !seen.has(port)) {
+                seen.add(port);
+                result.push(port);
+            }
+        });
+        return result.sort((a, b) => a - b);
+    }
+
+    function ensureConditionTree(rule) {
+        if (!rule) {
+            return;
+        }
+        if (!rule.conditionTree) {
+            if (isPlainObject(rule.parsedConditions)) {
+                rule.conditionTree = normalizeConditionGroup(rule.parsedConditions);
+            } else {
+                rule.conditionTree = createConditionGroup();
+            }
+        }
+    }
+
+    function ensureAnalyzerEntries(rule) {
+        if (!rule) {
+            return;
+        }
+        if (!Array.isArray(rule.analyzerEntries) || rule.analyzerEntries.length === 0) {
+            if (isPlainObject(rule.parsedAnalyzers) && Object.keys(rule.parsedAnalyzers).length > 0) {
+                rule.analyzerEntries = normalizeAnalyzerEntries(rule.parsedAnalyzers);
+            } else {
+                rule.analyzerEntries = [createAnalyzerEntry()];
+            }
+        }
+    }
+
+    function syncRuleConditions(rule) {
+        if (!rule) {
+            return;
+        }
+        ensureConditionTree(rule);
+        rule.parsedConditions = conditionGroupToParsed(rule.conditionTree);
+        rule.conditionsText = toYamlString(rule.parsedConditions, DEFAULT_RULE_CONDITIONS_YAML);
+    }
+
+    function syncRuleAnalyzers(rule) {
+        if (!rule) {
+            return;
+        }
+        ensureAnalyzerEntries(rule);
+        rule.parsedAnalyzers = analyzerEntriesToParsed(rule.analyzerEntries);
+        rule.analyzersText = toYamlString(rule.parsedAnalyzers, DEFAULT_ANALYZERS_YAML);
+    }
+
+    function getRuleDisplayName(rule) {
+        const label = (rule?.label || '').trim();
+        if (label) {
+            return label;
+        }
+        const key = (rule?.key || '').trim();
+        if (key) {
+            return key;
+        }
+        return 'New rule definition';
+    }
+
+    function getPrimaryAnalyzer(rule) {
+        if (!rule || !Array.isArray(rule.analyzerEntries)) {
+            return createAnalyzerEntry();
+        }
+        return (
+            rule.analyzerEntries.find((entry) => (entry.key || '').trim().length > 0) ||
+            rule.analyzerEntries[0] ||
+            createAnalyzerEntry()
+        );
+    }
+
+    function getPrimarySeverity(entry) {
+        if (!entry || !entry.severityOverrides) {
+            return 'Not set';
+        }
+        for (let index = 0; index < severityOptionValues.length; index += 1) {
+            const severity = severityOptionValues[index];
+            const value = entry.severityOverrides[severity];
+            if (value && String(value).trim().length > 0) {
+                return String(value).trim();
+            }
+        }
+        return 'Not set';
+    }
+
+    function isRuleEnabled(rule) {
+        if (!rule || !Array.isArray(rule.analyzerEntries)) {
+            return true;
+        }
+        return rule.analyzerEntries.some((entry) => entry.enabled !== false);
+    }
+
+    function setRuleEnabled(rule, enabled) {
+        if (!rule) {
+            return;
+        }
+        ensureAnalyzerEntries(rule);
+        rule.analyzerEntries.forEach((entry) => {
+            entry.enabled = !!enabled;
+        });
+        syncRuleAnalyzers(rule);
+    }
+
+    function getConditionStats(group) {
+        if (!group || typeof group !== 'object') {
+            return { conditions: 0, groups: 0 };
+        }
+        let conditionCount = Array.isArray(group.conditions)
+            ? group.conditions.filter((condition) => (condition.field || '').trim()).length
+            : 0;
+        let groupCount = Array.isArray(group.groups) ? group.groups.length : 0;
+        if (Array.isArray(group.groups)) {
+            group.groups.forEach((child) => {
+                const stats = getConditionStats(child);
+                conditionCount += stats.conditions;
+                groupCount += stats.groups;
+            });
+        }
+        return { conditions: conditionCount, groups: groupCount };
+    }
+
 
     const selectors = {
         riskList: '#riskLevelsList',
@@ -597,116 +1135,1085 @@
         if (!container) {
             return;
         }
-        container.innerHTML = '';
-        configState.ruleLogic.forEach((rule) => {
-            const card = document.createElement('article');
-            card.className = 'config-card rule-logic-card';
-            card.dataset.ruleId = rule.id;
+        if (!ruleListView) {
+            ruleListView = createRuleList(container);
+        }
+        ruleListView.update(configState.ruleLogic);
+    }
 
-            const header = document.createElement('div');
-            header.className = 'card-header';
-            const title = document.createElement('h3');
-            const updateTitle = () => {
-                const preferred = (rule.label || '').trim() || (rule.key || '').trim();
-                title.textContent = preferred || 'New rule definition';
-            };
-            updateTitle();
-            header.appendChild(title);
+    function createRuleList(container) {
+        container.classList.add('rule-logic-container');
+        return {
+            update(rules) {
+                container.innerHTML = '';
+                if (!Array.isArray(rules) || rules.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty-state';
+                    empty.textContent = 'No rule definitions configured yet. Add a rule to begin authoring logic.';
+                    container.appendChild(empty);
+                    return;
+                }
+                rules.forEach((rule, index) => {
+                    ensureConditionTree(rule);
+                    ensureAnalyzerEntries(rule);
+                    const card = buildRuleCard(rule, index);
+                    container.appendChild(card);
+                    updateRulePreview(card, rule);
+                });
+            },
+        };
+    }
 
-            const deleteBtn = document.createElement('button');
-            deleteBtn.type = 'button';
-            deleteBtn.className = 'icon-btn danger';
-            deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-            deleteBtn.title = 'Delete rule definition';
-            deleteBtn.addEventListener('click', () => {
-                configState.ruleLogic = configState.ruleLogic.filter((item) => item.id !== rule.id);
-                renderRuleLogic();
-                runValidation();
-                showToast(`Removed rule definition '${(rule.label || rule.key || 'unnamed').trim() || 'unnamed'}'.`);
+    function buildRuleCard(rule, index) {
+        const card = document.createElement('article');
+        card.className = 'config-card rule-logic-card';
+        card.dataset.ruleId = rule.id;
+
+        const header = document.createElement('div');
+        header.className = 'card-header rule-card-header';
+
+        const titleGroup = document.createElement('div');
+        titleGroup.className = 'rule-card-header-info';
+        const title = document.createElement('h3');
+        title.className = 'rule-card-title';
+        title.textContent = getRuleDisplayName(rule);
+        title.id = `${rule.id}-title`;
+        titleGroup.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'rule-card-meta';
+        const primaryAnalyzer = getPrimaryAnalyzer(rule);
+        const severityLabel = getPrimarySeverity(primaryAnalyzer);
+        const conditionStats = getConditionStats(rule.conditionTree);
+
+        meta.appendChild(createMetaItem('fa-microchip', primaryAnalyzer.key ? primaryAnalyzer.key : 'Unassigned analyzer'));
+        meta.appendChild(createMetaItem('fa-signal', `Severity: ${severityLabel}`));
+        const conditionSummary = `${conditionStats.conditions} condition${conditionStats.conditions === 1 ? '' : 's'}`;
+        const groupSummary = `${conditionStats.groups} nested group${conditionStats.groups === 1 ? '' : 's'}`;
+        meta.appendChild(createMetaItem('fa-diagram-project', `${conditionSummary}, ${groupSummary}`));
+        titleGroup.appendChild(meta);
+        header.appendChild(titleGroup);
+
+        const actions = document.createElement('div');
+        actions.className = 'rule-card-actions';
+
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'toggle rule-enable-toggle';
+        toggleLabel.setAttribute('aria-label', `Toggle ${getRuleDisplayName(rule)} enabled state`);
+        const toggleInput = document.createElement('input');
+        toggleInput.type = 'checkbox';
+        toggleInput.checked = isRuleEnabled(rule);
+        toggleInput.addEventListener('change', (event) => {
+            setRuleEnabled(rule, event.target.checked);
+            runValidation({ suppressErrorToast: true });
+            renderRuleLogic();
+        });
+        const toggleSlider = document.createElement('span');
+        toggleSlider.className = 'toggle-slider';
+        toggleLabel.appendChild(toggleInput);
+        toggleLabel.appendChild(toggleSlider);
+        actions.appendChild(toggleLabel);
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn btn-secondary rule-edit-btn';
+        editBtn.innerHTML = '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Edit';
+        editBtn.addEventListener('click', () => openRuleEditor(rule, index));
+        actions.appendChild(editBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'icon-btn danger';
+        deleteBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
+        deleteBtn.setAttribute('aria-label', `Delete ${getRuleDisplayName(rule)}`);
+        deleteBtn.addEventListener('click', () => {
+            configState.ruleLogic = configState.ruleLogic.filter((item) => item.id !== rule.id);
+            renderRuleLogic();
+            runValidation();
+            showToast(`Removed rule definition '${getRuleDisplayName(rule)}'.`);
+        });
+        actions.appendChild(deleteBtn);
+
+        header.appendChild(actions);
+        card.appendChild(header);
+
+        const body = document.createElement('div');
+        body.className = 'card-body rule-card-body';
+
+        const description = document.createElement('p');
+        description.className = 'rule-card-description';
+        description.textContent = (rule.description || '').trim() || 'No description provided yet.';
+        body.appendChild(description);
+
+        const detailList = document.createElement('dl');
+        detailList.className = 'rule-detail-list';
+        appendDetail(detailList, 'Rule identifier', (rule.key || '').trim() || '—');
+        appendDetail(detailList, 'Rule ID', (rule.ruleId || '').trim() || '—');
+        appendDetail(
+            detailList,
+            'Analyzers configured',
+            Array.isArray(rule.analyzerEntries)
+                ? rule.analyzerEntries.filter((entry) => (entry.key || '').trim()).length || '0'
+                : '0',
+        );
+        appendDetail(detailList, 'Condition logic', `${conditionSummary}, ${groupSummary}`);
+        body.appendChild(detailList);
+
+        const preview = document.createElement('div');
+        preview.className = 'rule-card-preview';
+        const previewHeading = document.createElement('h4');
+        previewHeading.textContent = 'Validation';
+        preview.appendChild(previewHeading);
+        const previewList = document.createElement('ul');
+        previewList.className = 'rule-validation-list';
+        previewList.setAttribute('role', 'list');
+        previewList.dataset.role = 'rule-validation-summary';
+        preview.appendChild(previewList);
+        body.appendChild(preview);
+
+        const errors = document.createElement('div');
+        errors.className = 'rule-card-errors';
+        ['general', 'key', 'ruleId', 'label', 'conditions', 'analyzers', 'thresholds', 'adminPorts'].forEach((key) => {
+            const errorEl = document.createElement('div');
+            errorEl.className = 'field-error';
+            errorEl.dataset.errorKey = key;
+            errors.appendChild(errorEl);
+        });
+        body.appendChild(errors);
+
+        card.appendChild(body);
+        return card;
+    }
+
+    function createMetaItem(iconClass, text) {
+        const item = document.createElement('span');
+        item.className = 'rule-card-meta-item';
+        const icon = document.createElement('i');
+        icon.className = `fa-solid ${iconClass}`;
+        icon.setAttribute('aria-hidden', 'true');
+        item.appendChild(icon);
+        item.appendChild(document.createTextNode(` ${text}`));
+        return item;
+    }
+
+    function appendDetail(container, term, value) {
+        const dt = document.createElement('dt');
+        dt.textContent = term;
+        const dd = document.createElement('dd');
+        dd.textContent = value;
+        container.appendChild(dt);
+        container.appendChild(dd);
+    }
+
+    function updateRulePreview(card, rule) {
+        if (!card) {
+            return;
+        }
+        const list = card.querySelector('[data-role="rule-validation-summary"]');
+        if (!list) {
+            return;
+        }
+        list.innerHTML = '';
+        const messages = Array.isArray(rule.validationMessages) ? rule.validationMessages : [];
+        if (messages.length === 0) {
+            const item = document.createElement('li');
+            item.className = 'validation-success';
+            item.textContent = 'Rule is valid.';
+            list.appendChild(item);
+            return;
+        }
+        messages.forEach((message) => {
+            const item = document.createElement('li');
+            item.textContent = message;
+            list.appendChild(item);
+        });
+    }
+
+    function openRuleEditor(rule, index = 0) {
+        if (!ruleEditor) {
+            ruleEditor = createRuleEditor();
+        }
+        ruleEditor.open(rule, index);
+    }
+
+    function createRuleEditor() {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop hidden';
+        backdrop.dataset.component = 'rule-editor';
+
+        const modal = document.createElement('div');
+        modal.className = 'modal rule-editor-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'ruleEditorTitle');
+        backdrop.appendChild(modal);
+
+        const header = document.createElement('header');
+        header.className = 'modal-header';
+        const title = document.createElement('h2');
+        title.id = 'ruleEditorTitle';
+        title.textContent = 'Edit rule';
+        header.appendChild(title);
+        const subtitle = document.createElement('p');
+        subtitle.className = 'modal-subtitle';
+        subtitle.textContent = 'Configure metadata, condition groups, analyzer overrides, and validation thresholds.';
+        header.appendChild(subtitle);
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'icon-btn';
+        closeBtn.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i><span class="sr-only">Close editor</span>';
+        header.appendChild(closeBtn);
+        modal.appendChild(header);
+
+        const form = document.createElement('form');
+        form.className = 'rule-editor-form';
+        form.noValidate = true;
+        modal.appendChild(form);
+
+        const metadataSection = document.createElement('section');
+        metadataSection.className = 'rule-editor-section';
+        metadataSection.dataset.section = 'metadata';
+        form.appendChild(metadataSection);
+
+        const conditionsSection = document.createElement('section');
+        conditionsSection.className = 'rule-editor-section';
+        conditionsSection.dataset.section = 'conditions';
+        form.appendChild(conditionsSection);
+
+        const analyzersSection = document.createElement('section');
+        analyzersSection.className = 'rule-editor-section';
+        analyzersSection.dataset.section = 'analyzers';
+        form.appendChild(analyzersSection);
+
+        const validationSection = document.createElement('section');
+        validationSection.className = 'rule-editor-section';
+        validationSection.dataset.section = 'validation';
+        const validationHeading = document.createElement('h3');
+        validationHeading.textContent = 'Validation summary';
+        validationSection.appendChild(validationHeading);
+        const validationList = document.createElement('ul');
+        validationList.className = 'rule-validation-list';
+        validationList.setAttribute('role', 'list');
+        validationList.dataset.role = 'editor-validation-summary';
+        validationSection.appendChild(validationList);
+        form.appendChild(validationSection);
+
+        const footer = document.createElement('footer');
+        footer.className = 'modal-footer';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.textContent = 'Cancel';
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'submit';
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.textContent = 'Save rule';
+        footer.appendChild(cancelBtn);
+        footer.appendChild(saveBtn);
+        modal.appendChild(footer);
+
+        document.body.appendChild(backdrop);
+
+        let activeRule = null;
+        let draft = null;
+        let returnFocus = null;
+        const errorTargets = new Map();
+
+        function open(rule) {
+            activeRule = rule;
+            ensureConditionTree(rule);
+            ensureAnalyzerEntries(rule);
+            draft = createRuleDraft(rule);
+            title.textContent = `Edit rule – ${getRuleDisplayName(draft)}`;
+            renderMetadataSection();
+            renderConditionSection();
+            renderAnalyzerSection();
+            collectErrorTargets();
+            updateDraftValidation();
+            backdrop.classList.add('visible');
+            backdrop.classList.remove('hidden');
+            backdrop.hidden = false;
+            returnFocus = document.activeElement;
+            focusFirstField();
+            updateFocusableElements();
+        }
+
+        function close() {
+            backdrop.classList.remove('visible');
+            backdrop.classList.add('hidden');
+            backdrop.hidden = true;
+            activeRule = null;
+            draft = null;
+            if (returnFocus && typeof returnFocus.focus === 'function') {
+                returnFocus.focus();
+            }
+        }
+
+        function collectErrorTargets() {
+            errorTargets.clear();
+            backdrop.querySelectorAll('.field-error[data-error-key]').forEach((element) => {
+                const key = element.dataset.errorKey;
+                if (key) {
+                    errorTargets.set(key, element);
+                }
             });
-            header.appendChild(deleteBtn);
-            card.appendChild(header);
+        }
 
-            const body = document.createElement('div');
-            body.className = 'card-body';
+        function applyEditorErrors(errors = {}) {
+            errorTargets.forEach((element, key) => {
+                const message = errors[key];
+                if (message) {
+                    element.textContent = message;
+                    element.classList.add('visible');
+                } else {
+                    element.textContent = '';
+                    element.classList.remove('visible');
+                }
+            });
+        }
 
-            body.appendChild(
-                createTextField('Rule Identifier', rule.key, (value) => {
-                    rule.key = value;
-                    updateTitle();
-                    runValidation({ suppressErrorToast: true });
+        function renderMetadataSection() {
+            metadataSection.innerHTML = '';
+            const heading = document.createElement('h3');
+            heading.textContent = 'Rule metadata';
+            metadataSection.appendChild(heading);
+
+            const grid = document.createElement('div');
+            grid.className = 'editor-grid';
+            grid.appendChild(
+                createTextField('Rule identifier', draft.key, (value) => {
+                    draft.key = value;
+                    title.textContent = `Edit rule – ${getRuleDisplayName(draft)}`;
+                    updateDraftValidation();
                 }, {
                     placeholder: 'admin_port_exposed',
-                    help: 'Unique key used in the rules YAML mapping.',
+                    help: 'Unique key used within the exported YAML rules mapping.',
                     errorKey: 'key',
+                    spellcheck: false,
                 }),
             );
-
-            body.appendChild(
-                createTextField('Rule ID', rule.ruleId, (value) => {
-                    rule.ruleId = value;
-                    runValidation({ suppressErrorToast: true });
+            grid.appendChild(
+                createTextField('Rule ID', draft.ruleId, (value) => {
+                    draft.ruleId = value;
+                    updateDraftValidation();
                 }, {
                     placeholder: 'admin_port_exposed',
-                    help: 'Identifier persisted inside the rule definition. Defaults to the rule identifier when omitted.',
+                    help: 'Defaults to the rule identifier when omitted.',
                     errorKey: 'ruleId',
+                    spellcheck: false,
                 }),
             );
-
-            body.appendChild(
-                createTextField('Label', rule.label, (value) => {
-                    rule.label = value;
-                    updateTitle();
-                    runValidation({ suppressErrorToast: true });
+            grid.appendChild(
+                createTextField('Label', draft.label, (value) => {
+                    draft.label = value;
+                    title.textContent = `Edit rule – ${getRuleDisplayName(draft)}`;
+                    updateDraftValidation();
                 }, {
                     placeholder: 'Administrative Port Exposure',
                     errorKey: 'label',
                 }),
             );
+            metadataSection.appendChild(grid);
+
+            metadataSection.appendChild(
+                createTextareaField('Description', draft.description, (value) => {
+                    draft.description = value;
+                    updateDraftValidation();
+                }, {
+                    rows: 4,
+                    placeholder: 'Explain what the rule detects and how results should be interpreted.',
+                    errorKey: 'description',
+                }),
+            );
+        }
+
+        function renderConditionSection() {
+            conditionsSection.innerHTML = '';
+            const heading = document.createElement('h3');
+            heading.textContent = 'Condition groups';
+            conditionsSection.appendChild(heading);
+            const help = document.createElement('p');
+            help.className = 'section-hint';
+            help.textContent = 'Construct nested ALL/ANY groups with field comparators to describe when the rule should trigger.';
+            conditionsSection.appendChild(help);
+
+            const treeContainer = document.createElement('div');
+            treeContainer.className = 'condition-tree';
+            conditionsSection.appendChild(treeContainer);
+            renderConditionGroupEditor(treeContainer, draft.conditionTree, []);
+        }
+
+        function renderAnalyzerSection() {
+            analyzersSection.innerHTML = '';
+            const heading = document.createElement('h3');
+            heading.textContent = 'Analyzer overrides';
+            analyzersSection.appendChild(heading);
+            const help = document.createElement('p');
+            help.className = 'section-hint';
+            help.textContent = 'Bind analyzers to this rule, configure severity overrides, thresholds, and administrative port handling.';
+            analyzersSection.appendChild(help);
+
+            const list = document.createElement('div');
+            list.className = 'analyzer-editor-list';
+            analyzersSection.appendChild(list);
+
+            draft.analyzerEntries.forEach((entry, index) => {
+                list.appendChild(createAnalyzerEditor(entry, index));
+            });
+
+            const addButton = document.createElement('button');
+            addButton.type = 'button';
+            addButton.className = 'btn btn-secondary';
+            addButton.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i> Add analyzer';
+            addButton.addEventListener('click', () => {
+                const newEntry = createAnalyzerEntry();
+                draft.analyzerEntries.push(newEntry);
+                renderAnalyzerSection();
+                updateDraftValidation();
+                requestAnimationFrame(() => {
+                    const field = analyzersSection.querySelector(`[data-analyzer-id="${newEntry.id}"] input[type="text"]`);
+                    field?.focus();
+                });
+            });
+            analyzersSection.appendChild(addButton);
+            collectErrorTargets();
+        }
+
+        function renderConditionGroupEditor(container, group, path) {
+            const groupWrapper = document.createElement('div');
+            groupWrapper.className = 'condition-group';
+            groupWrapper.dataset.groupId = group.id;
+
+            const headerRow = document.createElement('div');
+            headerRow.className = 'condition-group-header';
+            const logicLabel = document.createElement('label');
+            logicLabel.className = 'condition-logic-label';
+            logicLabel.textContent = 'Logic';
+            const logicSelect = document.createElement('select');
+            logicSelect.className = 'condition-logic-select';
+            const allOption = document.createElement('option');
+            allOption.value = 'all';
+            allOption.textContent = 'ALL conditions must match';
+            const anyOption = document.createElement('option');
+            anyOption.value = 'any';
+            anyOption.textContent = 'ANY condition may match';
+            logicSelect.appendChild(allOption);
+            logicSelect.appendChild(anyOption);
+            logicSelect.value = group.logic === 'any' ? 'any' : 'all';
+            logicSelect.addEventListener('change', (event) => {
+                group.logic = event.target.value === 'any' ? 'any' : 'all';
+                updateDraftValidation();
+            });
+            logicLabel.appendChild(logicSelect);
+            headerRow.appendChild(logicLabel);
+
+            if (path.length > 0) {
+                const removeGroupBtn = document.createElement('button');
+                removeGroupBtn.type = 'button';
+                removeGroupBtn.className = 'icon-btn danger';
+                removeGroupBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i><span class="sr-only">Remove group</span>';
+                removeGroupBtn.addEventListener('click', () => {
+                    const parentGroup = getGroupAtPath(draft.conditionTree, path.slice(0, -1));
+                    if (!parentGroup) {
+                        return;
+                    }
+                    parentGroup.groups.splice(path[path.length - 1], 1);
+                    groupWrapper.remove();
+                    updateDraftValidation();
+                    collectErrorTargets();
+                });
+                headerRow.appendChild(removeGroupBtn);
+            }
+
+            groupWrapper.appendChild(headerRow);
+
+            const conditionList = document.createElement('div');
+            conditionList.className = 'condition-list';
+            group.conditions.forEach((condition) => {
+                conditionList.appendChild(createConditionRow(group, condition));
+            });
+            groupWrapper.appendChild(conditionList);
+
+            const addConditionBtn = document.createElement('button');
+            addConditionBtn.type = 'button';
+            addConditionBtn.className = 'btn btn-tertiary';
+            addConditionBtn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i> Add condition';
+            addConditionBtn.addEventListener('click', () => {
+                const newCondition = createConditionEntry();
+                group.conditions.push(newCondition);
+                const row = createConditionRow(group, newCondition);
+                conditionList.appendChild(row);
+                updateDraftValidation();
+                requestAnimationFrame(() => {
+                    row.querySelector('input')?.focus();
+                });
+                collectErrorTargets();
+            });
+
+            const addGroupBtn = document.createElement('button');
+            addGroupBtn.type = 'button';
+            addGroupBtn.className = 'btn btn-tertiary';
+            addGroupBtn.innerHTML = '<i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Add nested group';
+            addGroupBtn.addEventListener('click', () => {
+                const newGroup = createConditionGroup('all');
+                group.groups.push(newGroup);
+                renderConditionGroupEditor(childrenContainer, newGroup, [...path, group.groups.length - 1]);
+                updateDraftValidation();
+                collectErrorTargets();
+            });
+
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'condition-actions';
+            actionsRow.appendChild(addConditionBtn);
+            actionsRow.appendChild(addGroupBtn);
+            groupWrapper.appendChild(actionsRow);
+
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'condition-children';
+            group.groups.forEach((childGroup, childIndex) => {
+                renderConditionGroupEditor(childrenContainer, childGroup, [...path, childIndex]);
+            });
+            groupWrapper.appendChild(childrenContainer);
+
+            container.appendChild(groupWrapper);
+        }
+
+        function getGroupAtPath(group, path) {
+            let current = group;
+            for (let index = 0; index < path.length; index += 1) {
+                if (!current || !Array.isArray(current.groups)) {
+                    return null;
+                }
+                current = current.groups[path[index]];
+            }
+            return current;
+        }
+
+        function createConditionRow(group, condition) {
+            const row = document.createElement('div');
+            row.className = 'condition-row';
+            row.dataset.conditionId = condition.id;
+
+            const fieldInput = document.createElement('input');
+            fieldInput.type = 'text';
+            fieldInput.className = 'condition-field-input';
+            fieldInput.placeholder = 'Field';
+            fieldInput.value = condition.field || '';
+            fieldInput.addEventListener('input', (event) => {
+                condition.field = event.target.value;
+                updateDraftValidation();
+            });
+            row.appendChild(fieldInput);
+
+            const comparatorSelect = document.createElement('select');
+            comparatorSelect.className = 'condition-comparator-select';
+            comparatorOptions.forEach((option) => {
+                const opt = document.createElement('option');
+                opt.value = option.value;
+                opt.textContent = option.label;
+                comparatorSelect.appendChild(opt);
+            });
+            comparatorSelect.value = condition.comparator || 'equals';
+            comparatorSelect.addEventListener('change', (event) => {
+                condition.comparator = event.target.value;
+                adjustValueFields();
+                updateDraftValidation();
+            });
+            row.appendChild(comparatorSelect);
+
+            const valueWrapper = document.createElement('div');
+            valueWrapper.className = 'condition-value-wrapper';
+            const valueInput = document.createElement('input');
+            valueInput.type = 'text';
+            valueInput.placeholder = 'Value';
+            valueInput.value = condition.value || '';
+            valueInput.addEventListener('input', (event) => {
+                condition.value = event.target.value;
+                updateDraftValidation();
+            });
+            valueWrapper.appendChild(valueInput);
+
+            const multiWrapper = document.createElement('div');
+            multiWrapper.className = 'condition-multi-wrapper';
+            const multiTextarea = document.createElement('textarea');
+            multiTextarea.rows = 2;
+            multiTextarea.placeholder = 'Value per line';
+            multiTextarea.value = Array.isArray(condition.values) ? condition.values.join('\n') : '';
+            multiTextarea.addEventListener('input', (event) => {
+                condition.values = splitList(event.target.value);
+                updateDraftValidation();
+            });
+            multiWrapper.appendChild(multiTextarea);
+
+            row.appendChild(valueWrapper);
+            row.appendChild(multiWrapper);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'icon-btn danger';
+            removeBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i><span class="sr-only">Remove condition</span>';
+            removeBtn.addEventListener('click', () => {
+                const index = group.conditions.indexOf(condition);
+                if (index >= 0) {
+                    group.conditions.splice(index, 1);
+                }
+                row.remove();
+                updateDraftValidation();
+                collectErrorTargets();
+            });
+            row.appendChild(removeBtn);
+
+            const errorEl = document.createElement('div');
+            errorEl.className = 'field-error';
+            errorEl.dataset.errorKey = `condition_${condition.id}`;
+            row.appendChild(errorEl);
+
+            function adjustValueFields() {
+                const comparator = condition.comparator || 'equals';
+                const isMulti = comparatorValueModes.multi.has(comparator);
+                const noValue = comparatorValueModes.none.has(comparator);
+                if (noValue) {
+                    valueInput.value = '';
+                    condition.value = '';
+                    multiTextarea.value = '';
+                    condition.values = [];
+                }
+                valueWrapper.classList.toggle('hidden', isMulti || noValue);
+                multiWrapper.classList.toggle('hidden', !isMulti);
+            }
+
+            adjustValueFields();
+            return row;
+        }
+
+        function createAnalyzerEditor(entry, index) {
+            const panel = document.createElement('div');
+            panel.className = 'analyzer-panel';
+            panel.dataset.analyzerId = entry.id;
+
+            const heading = document.createElement('header');
+            heading.className = 'analyzer-panel-header';
+            const title = document.createElement('h4');
+            title.textContent = entry.key ? entry.key : `Analyzer ${index + 1}`;
+            heading.appendChild(title);
+
+            const enabledToggle = document.createElement('label');
+            enabledToggle.className = 'toggle';
+            enabledToggle.setAttribute('aria-label', `Toggle analyzer ${index + 1}`);
+            const enabledInput = document.createElement('input');
+            enabledInput.type = 'checkbox';
+            enabledInput.checked = entry.enabled !== false;
+            enabledInput.addEventListener('change', (event) => {
+                entry.enabled = event.target.checked;
+                updateDraftValidation();
+            });
+            const enabledSlider = document.createElement('span');
+            enabledSlider.className = 'toggle-slider';
+            enabledToggle.appendChild(enabledInput);
+            enabledToggle.appendChild(enabledSlider);
+            heading.appendChild(enabledToggle);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'icon-btn danger';
+            removeBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i><span class="sr-only">Remove analyzer</span>';
+            removeBtn.addEventListener('click', () => {
+                draft.analyzerEntries.splice(index, 1);
+                renderAnalyzerSection();
+                updateDraftValidation();
+            });
+            heading.appendChild(removeBtn);
+
+            panel.appendChild(heading);
+
+            const body = document.createElement('div');
+            body.className = 'analyzer-panel-body';
 
             body.appendChild(
-                createTextareaField('Description', rule.description, (value) => {
-                    rule.description = value;
-                    runValidation({ suppressErrorToast: true });
+                createTextField('Analyzer key', entry.key, (value) => {
+                    entry.key = value;
+                    title.textContent = value.trim() || `Analyzer ${index + 1}`;
+                    updateDraftValidation();
+                }, {
+                    spellcheck: false,
+                    errorKey: `analyzer_${entry.id}_key`,
+                    placeholder: 'admin_port_exposed',
+                }),
+            );
+
+            body.appendChild(
+                createTextareaField('Notes', entry.notes, (value) => {
+                    entry.notes = value;
                 }, {
                     rows: 3,
-                    placeholder: 'Explain what the rule detects and how it should be interpreted.',
+                    placeholder: 'Explain analyzer-specific behaviour for this rule.',
                 }),
             );
 
-            body.appendChild(
-                createTextareaField('Conditions (YAML)', rule.conditionsText, (value) => {
-                    rule.conditionsText = value;
-                    runValidation({ suppressErrorToast: true });
+            const severityTable = document.createElement('div');
+            severityTable.className = 'severity-grid';
+            severityOptions.forEach((option) => {
+                const label = document.createElement('label');
+                label.className = 'form-field compact';
+                label.innerHTML = `<span class="field-label">${option.label}</span>`;
+                const select = document.createElement('select');
+                const inheritOption = document.createElement('option');
+                inheritOption.value = '';
+                inheritOption.textContent = 'Inherit';
+                select.appendChild(inheritOption);
+                severityOptions.forEach((severity) => {
+                    const opt = document.createElement('option');
+                    opt.value = severity.value;
+                    opt.textContent = severity.label;
+                    select.appendChild(opt);
+                });
+                select.value = entry.severityOverrides?.[option.value] || '';
+                select.addEventListener('change', (event) => {
+                    entry.severityOverrides[option.value] = event.target.value;
+                    updateDraftValidation();
+                });
+                label.appendChild(select);
+                severityTable.appendChild(label);
+            });
+            body.appendChild(severityTable);
+
+            const thresholds = document.createElement('div');
+            thresholds.className = 'thresholds-section';
+            const thresholdsHeading = document.createElement('h5');
+            thresholdsHeading.textContent = 'Thresholds';
+            thresholds.appendChild(thresholdsHeading);
+            thresholds.appendChild(createThresholdGrid(entry.baselineThresholds, (key, value) => {
+                entry.baselineThresholds[key] = value;
+                updateDraftValidation();
+            }, `analyzer_${entry.id}_thresholds`));
+
+            const perRiskContainer = document.createElement('div');
+            perRiskContainer.className = 'per-risk-container';
+            const perRiskHeading = document.createElement('h6');
+            perRiskHeading.textContent = 'Per risk overrides';
+            perRiskContainer.appendChild(perRiskHeading);
+            Object.entries(entry.perRiskThresholds || {}).forEach(([riskKey, value]) => {
+                perRiskContainer.appendChild(createRiskThresholdEditor(entry, riskKey, value));
+            });
+            const addRiskBtn = document.createElement('button');
+            addRiskBtn.type = 'button';
+            addRiskBtn.className = 'btn btn-tertiary';
+            addRiskBtn.textContent = 'Add risk override';
+            addRiskBtn.addEventListener('click', () => {
+                const newKey = '';
+                entry.perRiskThresholds[newKey] = createThresholds();
+                renderAnalyzerSection();
+                updateDraftValidation();
+            });
+            perRiskContainer.appendChild(addRiskBtn);
+            thresholds.appendChild(perRiskContainer);
+            body.appendChild(thresholds);
+
+            const adminPorts = document.createElement('div');
+            adminPorts.className = 'admin-port-section';
+            const portsHeading = document.createElement('h5');
+            portsHeading.textContent = 'Administrative ports';
+            adminPorts.appendChild(portsHeading);
+
+            adminPorts.appendChild(
+                createTextareaField('Baseline ports', entry.baselineAdminPorts.join('\n'), (value) => {
+                    entry.baselineAdminPorts = splitList(value);
+                    updateDraftValidation();
                 }, {
-                    rows: 8,
-                    placeholder: 'logic: all\nconditions: []\ngroups: []',
-                    help: 'Structured condition tree describing how findings are generated.',
-                    errorKey: 'conditions',
-                    monospace: true,
+                    rows: 3,
+                    placeholder: '22\n443\n3389',
+                    errorKey: `analyzer_${entry.id}_baseline_ports`,
                     spellcheck: false,
                 }),
             );
 
-            body.appendChild(
-                createTextareaField('Analyzers (YAML)', rule.analyzersText, (value) => {
-                    rule.analyzersText = value;
-                    runValidation({ suppressErrorToast: true });
+            const perRiskPorts = document.createElement('div');
+            perRiskPorts.className = 'per-risk-container';
+            const portsSubHeading = document.createElement('h6');
+            portsSubHeading.textContent = 'Per risk overrides';
+            perRiskPorts.appendChild(portsSubHeading);
+            Object.entries(entry.perRiskAdminPorts || {}).forEach(([riskKey, values]) => {
+                perRiskPorts.appendChild(createRiskPortEditor(entry, riskKey, values));
+            });
+            const addPortRisk = document.createElement('button');
+            addPortRisk.type = 'button';
+            addPortRisk.className = 'btn btn-tertiary';
+            addPortRisk.textContent = 'Add risk override';
+            addPortRisk.addEventListener('click', () => {
+                entry.perRiskAdminPorts[''] = [];
+                renderAnalyzerSection();
+                updateDraftValidation();
+            });
+            perRiskPorts.appendChild(addPortRisk);
+            adminPorts.appendChild(perRiskPorts);
+
+            body.appendChild(adminPorts);
+
+            const analyzerErrors = document.createElement('div');
+            analyzerErrors.className = 'analyzer-errors';
+            ['analyzer', 'thresholds', 'adminPorts'].forEach((key) => {
+                const error = document.createElement('div');
+                error.className = 'field-error';
+                error.dataset.errorKey = `analyzer_${entry.id}_${key}`;
+                analyzerErrors.appendChild(error);
+            });
+            body.appendChild(analyzerErrors);
+
+            panel.appendChild(body);
+            return panel;
+        }
+
+        function createThresholdGrid(source, onChange, errorKeyPrefix) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'threshold-grid';
+            const fields = [
+                { key: 'min_score', label: 'Min score' },
+                { key: 'max_score', label: 'Max score' },
+                { key: 'min_findings', label: 'Min findings' },
+                { key: 'max_findings', label: 'Max findings' },
+            ];
+            fields.forEach((field) => {
+                wrapper.appendChild(
+                    createNumberField(field.label, source[field.key], (value) => {
+                        source[field.key] = value;
+                        onChange(field.key, value);
+                    }, {
+                        min: 0,
+                        errorKey: `${errorKeyPrefix}_${field.key}`,
+                        compact: true,
+                    }),
+                );
+            });
+            return wrapper;
+        }
+
+        function createRiskThresholdEditor(entry, riskKey, thresholds) {
+            const container = document.createElement('div');
+            container.className = 'per-risk-entry';
+            let currentKey = riskKey;
+
+            const keyField = createTextField('Risk key', riskKey, (value) => {
+                const normalized = value.trim();
+                if (normalized === currentKey) {
+                    updateDraftValidation();
+                    return;
+                }
+                const existing = entry.perRiskThresholds[currentKey] || thresholds;
+                delete entry.perRiskThresholds[currentKey];
+                entry.perRiskThresholds[normalized] = existing;
+                currentKey = normalized;
+                renderAnalyzerSection();
+                updateDraftValidation();
+            }, {
+                errorKey: `analyzer_${entry.id}_risk_${riskKey}_key`,
+            });
+            container.appendChild(keyField);
+
+            container.appendChild(
+                createThresholdGrid(thresholds, (key, value) => {
+                    thresholds[key] = value;
+                    updateDraftValidation();
+                }, `analyzer_${entry.id}_risk_${riskKey}`),
+            );
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'icon-btn danger';
+            removeBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i><span class="sr-only">Remove risk override</span>';
+            removeBtn.addEventListener('click', () => {
+                delete entry.perRiskThresholds[currentKey];
+                renderAnalyzerSection();
+                updateDraftValidation();
+            });
+            container.appendChild(removeBtn);
+            return container;
+        }
+
+        function createRiskPortEditor(entry, riskKey, values) {
+            const container = document.createElement('div');
+            container.className = 'per-risk-entry';
+            let currentKey = riskKey;
+
+            const keyField = createTextField('Risk key', riskKey, (value) => {
+                const normalized = value.trim();
+                if (normalized === currentKey) {
+                    updateDraftValidation();
+                    return;
+                }
+                const existing = entry.perRiskAdminPorts[currentKey] || values;
+                delete entry.perRiskAdminPorts[currentKey];
+                entry.perRiskAdminPorts[normalized] = Array.isArray(existing) ? existing : splitList(existing);
+                currentKey = normalized;
+                renderAnalyzerSection();
+                updateDraftValidation();
+            }, {
+                errorKey: `analyzer_${entry.id}_port_risk_${riskKey}_key`,
+            });
+            container.appendChild(keyField);
+
+            container.appendChild(
+                createTextareaField('Ports', Array.isArray(values) ? values.join('\n') : '', (value) => {
+                    entry.perRiskAdminPorts[currentKey] = splitList(value);
+                    updateDraftValidation();
                 }, {
-                    rows: 8,
-                    placeholder: 'analyzer_key:\n  enabled: true\n  notes: ...',
-                    help: 'Analyzer-specific overrides including severity tiers and administrative port configuration.',
-                    errorKey: 'analyzers',
-                    monospace: true,
+                    rows: 2,
+                    placeholder: '22\n443',
+                    errorKey: `analyzer_${entry.id}_port_risk_${riskKey}`,
                     spellcheck: false,
                 }),
             );
 
-            body.appendChild(createFieldError('general'));
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'icon-btn danger';
+            removeBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i><span class="sr-only">Remove port override</span>';
+            removeBtn.addEventListener('click', () => {
+                delete entry.perRiskAdminPorts[currentKey];
+                renderAnalyzerSection();
+                updateDraftValidation();
+            });
+            container.appendChild(removeBtn);
+            return container;
+        }
 
-            card.appendChild(body);
-            container.appendChild(card);
+        function renderValidationSummary(messages = []) {
+            validationList.innerHTML = '';
+            if (!messages || messages.length === 0) {
+                const item = document.createElement('li');
+                item.className = 'validation-success';
+                item.textContent = 'Rule is valid.';
+                validationList.appendChild(item);
+                return;
+            }
+            messages.forEach((message) => {
+                const item = document.createElement('li');
+                item.textContent = message;
+                validationList.appendChild(item);
+            });
+        }
+
+        function updateDraftValidation() {
+            if (!draft) {
+                return;
+            }
+            const simulatedRule = {
+                ...activeRule,
+                key: draft.key,
+                ruleId: draft.ruleId,
+                label: draft.label,
+                description: draft.description,
+                conditionTree: draft.conditionTree,
+                analyzerEntries: draft.analyzerEntries,
+            };
+            const result = validateRule(simulatedRule, {
+                allRules: configState.ruleLogic,
+                currentRuleId: activeRule?.id,
+            });
+            renderValidationSummary(result.messages);
+            applyEditorErrors(result.detailedErrors);
+        }
+
+        function focusFirstField() {
+            const firstInput = modal.querySelector('input, textarea, select, button');
+            firstInput?.focus();
+        }
+
+        let focusable = [];
+        function updateFocusableElements() {
+            focusable = Array.from(
+                modal.querySelectorAll(
+                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+                ),
+            ).filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'));
+        }
+
+        modal.addEventListener('keydown', (event) => {
+            if (event.key === 'Tab') {
+                updateFocusableElements();
+                if (focusable.length === 0) {
+                    event.preventDefault();
+                    return;
+                }
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (event.shiftKey) {
+                    if (document.activeElement === first) {
+                        event.preventDefault();
+                        last.focus();
+                    }
+                } else if (document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            } else if (event.key === 'Escape') {
+                close();
+            }
         });
+
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            if (!draft || !activeRule) {
+                return;
+            }
+            const simulatedRule = {
+                ...activeRule,
+                key: draft.key,
+                ruleId: draft.ruleId,
+                label: draft.label,
+                description: draft.description,
+                conditionTree: draft.conditionTree,
+                analyzerEntries: draft.analyzerEntries,
+            };
+            const result = validateRule(simulatedRule, {
+                allRules: configState.ruleLogic,
+                currentRuleId: activeRule.id,
+            });
+            if (Object.keys(result.detailedErrors || {}).length > 0) {
+                applyEditorErrors(result.detailedErrors);
+                renderValidationSummary(result.messages);
+                showToast('Resolve validation issues before saving this rule.', true);
+                return;
+            }
+            activeRule.key = draft.key;
+            activeRule.ruleId = draft.ruleId;
+            activeRule.label = draft.label;
+            activeRule.description = draft.description;
+            activeRule.conditionTree = cloneConditionGroup(draft.conditionTree);
+            activeRule.analyzerEntries = draft.analyzerEntries.map((entry) => cloneAnalyzerEntry(entry));
+            syncRuleConditions(activeRule);
+            syncRuleAnalyzers(activeRule);
+            runValidation({ suppressErrorToast: true });
+            renderRuleLogic();
+            close();
+            showToast(`Saved rule '${getRuleDisplayName(activeRule)}'.`);
+        });
+
+        cancelBtn.addEventListener('click', () => close());
+        closeBtn.addEventListener('click', () => close());
+        backdrop.addEventListener('mousedown', (event) => {
+            if (event.target === backdrop) {
+                close();
+            }
+        });
+
+        return {
+            open,
+            close,
+        };
+    }
+
+    function createRuleDraft(rule) {
+        return {
+            id: rule.id,
+            key: rule.key || '',
+            ruleId: rule.ruleId || '',
+            label: rule.label || '',
+            description: rule.description || '',
+            conditionTree: cloneConditionGroup(rule.conditionTree),
+            analyzerEntries: Array.isArray(rule.analyzerEntries)
+                ? rule.analyzerEntries.map((entry) => cloneAnalyzerEntry(entry))
+                : [createAnalyzerEntry()],
+        };
     }
 
     function createTextField(labelText, value, onInput, options = {}) {
@@ -929,6 +2436,12 @@
                 }
             });
             card.classList.toggle('has-error', hasError);
+            if (card.classList.contains('rule-logic-card')) {
+                const rule = configState.ruleLogic.find((entry) => entry.id === id);
+                if (rule) {
+                    updateRulePreview(card, rule);
+                }
+            }
         });
     }
 
@@ -1156,63 +2669,376 @@
 
     function validateRuleLogic() {
         const errors = {};
-        const identifierCounts = {};
-        configState.ruleLogic.forEach((rule) => {
-            const ruleErrors = {};
-            const identifier = (rule.key || '').trim();
-            if (!identifier) {
-                ruleErrors.key = 'Rule identifier is required.';
-            } else {
-                const normalized = identifier.toLowerCase();
-                identifierCounts[normalized] = (identifierCounts[normalized] || 0) + 1;
+        const allRules = configState.ruleLogic || [];
+        allRules.forEach((rule) => {
+            const result = validateRule(rule, { allRules, currentRuleId: rule.id });
+            rule.validationMessages = result.messages;
+            if (Object.keys(result.fieldErrors).length > 0) {
+                errors[rule.id] = result.fieldErrors;
             }
+        });
+        return errors;
+    }
 
-            const ruleId = (rule.ruleId || '').trim() || identifier;
-            if (!ruleId) {
-                ruleErrors.ruleId = 'Rule ID is required.';
-            }
+    function validateRule(rule, context = {}) {
+        const fieldErrors = {};
+        const detailedErrors = {};
+        const messages = [];
 
-            if (!(rule.label || '').trim()) {
-                ruleErrors.label = 'Label is required.';
-            }
+        if (!rule) {
+            return { fieldErrors, detailedErrors, messages };
+        }
 
-            const conditionsResult = parseYamlForValidation(rule.conditionsText, {
-                allowEmpty: false,
-                expectObject: true,
+        ensureConditionTree(rule);
+        ensureAnalyzerEntries(rule);
+        syncRuleConditions(rule);
+        syncRuleAnalyzers(rule);
+
+        const identifier = (rule.key || '').trim();
+        if (!identifier) {
+            const message = 'Rule identifier is required.';
+            fieldErrors.key = message;
+            detailedErrors.key = message;
+            messages.push(message);
+        } else if (!/^[-_a-zA-Z0-9]+$/.test(identifier)) {
+            const message = 'Rule identifier must contain only letters, numbers, underscores or dashes.';
+            fieldErrors.key = message;
+            detailedErrors.key = message;
+            messages.push(message);
+        } else if (Array.isArray(context.allRules)) {
+            const duplicate = context.allRules.some((candidate) => {
+                if (context.currentRuleId && candidate.id === context.currentRuleId) {
+                    return false;
+                }
+                return (candidate.key || '').trim().toLowerCase() === identifier.toLowerCase();
             });
-            if (conditionsResult.error) {
-                ruleErrors.conditions = conditionsResult.error;
+            if (duplicate) {
+                const message = 'Rule identifier must be unique.';
+                fieldErrors.key = message;
+                detailedErrors.key = message;
+                messages.push(message);
             }
-            rule.parsedConditions = conditionsResult.parsed;
+        }
 
-            const analyzersResult = parseYamlForValidation(rule.analyzersText, {
-                allowEmpty: true,
-                expectObject: true,
-                defaultValue: {},
+        const ruleId = (rule.ruleId || '').trim();
+        if (!ruleId) {
+            const message = 'Rule ID is required.';
+            fieldErrors.ruleId = message;
+            detailedErrors.ruleId = message;
+            messages.push(message);
+        }
+
+        const label = (rule.label || '').trim();
+        if (!label) {
+            const message = 'Label is required.';
+            fieldErrors.label = message;
+            detailedErrors.label = message;
+            messages.push(message);
+        }
+
+        const conditionResult = validateConditionGroupStructure(rule.conditionTree);
+        if (conditionResult.messages.length > 0) {
+            fieldErrors.conditions = conditionResult.messages[0];
+            messages.push(...conditionResult.messages);
+        }
+        Object.assign(detailedErrors, conditionResult.detailed);
+
+        const analyzerResult = validateAnalyzerEntries(rule.analyzerEntries, context);
+        if (analyzerResult.analyzerMessage) {
+            fieldErrors.analyzers = analyzerResult.analyzerMessage;
+        }
+        if (analyzerResult.thresholdMessage) {
+            fieldErrors.thresholds = analyzerResult.thresholdMessage;
+        }
+        if (analyzerResult.adminPortMessage) {
+            fieldErrors.adminPorts = analyzerResult.adminPortMessage;
+        }
+        if (analyzerResult.messages.length > 0) {
+            messages.push(...analyzerResult.messages);
+        }
+        Object.assign(detailedErrors, analyzerResult.detailed);
+
+        const uniqueMessages = Array.from(new Set(messages.filter(Boolean)));
+        return {
+            fieldErrors,
+            detailedErrors,
+            messages: uniqueMessages,
+        };
+    }
+
+    function validateConditionGroupStructure(group) {
+        const detailed = {};
+        const messages = [];
+        if (!group || typeof group !== 'object') {
+            messages.push('Define at least one condition group.');
+            return { detailed, messages };
+        }
+
+        const logic = group.logic === 'any' ? 'any' : group.logic === 'all' ? 'all' : null;
+        if (!logic) {
+            const message = 'Group logic must be ALL or ANY.';
+            messages.push(message);
+        }
+        group.logic = logic || 'all';
+
+        const hasConditions = Array.isArray(group.conditions) && group.conditions.length > 0;
+        const hasGroups = Array.isArray(group.groups) && group.groups.length > 0;
+        if (!hasConditions && !hasGroups) {
+            messages.push('Each group must contain at least one condition or nested group.');
+        }
+
+        if (Array.isArray(group.conditions)) {
+            group.conditions.forEach((condition) => {
+                const errors = [];
+                const field = (condition.field || '').trim();
+                const comparator = (condition.comparator || '').trim();
+                if (!field) {
+                    errors.push('Field is required.');
+                }
+                if (!comparator) {
+                    errors.push('Comparator is required.');
+                }
+                const requiresValue = comparator && !comparatorValueModes.none.has(comparator);
+                const isMulti = comparatorValueModes.multi.has(comparator);
+                if (requiresValue && isMulti) {
+                    const values = Array.isArray(condition.values)
+                        ? condition.values.map((value) => String(value).trim()).filter(Boolean)
+                        : [];
+                    if (values.length === 0) {
+                        errors.push('Provide at least one value.');
+                    }
+                    if (comparator === 'between' && values.length > 0 && values.length < 2) {
+                        errors.push('Provide two values for the between comparator.');
+                    }
+                } else if (requiresValue && !isMulti) {
+                    const value = (condition.value || '').trim();
+                    if (!value) {
+                        errors.push('Value is required.');
+                    }
+                }
+                if (errors.length > 0) {
+                    const message = errors.join(' ');
+                    detailed[`condition_${condition.id}`] = message;
+                    messages.push(`Condition '${field || 'unnamed'}': ${message}`);
+                }
             });
-            if (analyzersResult.error) {
-                ruleErrors.analyzers = analyzersResult.error;
-            }
-            rule.parsedAnalyzers = analyzersResult.parsed;
+        }
 
-            if (Object.keys(ruleErrors).length > 0) {
-                errors[rule.id] = ruleErrors;
+        if (Array.isArray(group.groups)) {
+            group.groups.forEach((child) => {
+                const childResult = validateConditionGroupStructure(child);
+                Object.assign(detailed, childResult.detailed);
+                messages.push(...childResult.messages);
+            });
+        }
+
+        return { detailed, messages };
+    }
+
+    function validateAnalyzerEntries(entries, context = {}) {
+        const detailed = {};
+        const messages = [];
+        let analyzerMessage = '';
+        let thresholdMessage = '';
+        let adminPortMessage = '';
+
+        if (!Array.isArray(entries) || entries.length === 0) {
+            analyzerMessage = 'Configure at least one analyzer binding.';
+            messages.push(analyzerMessage);
+            return { detailed, messages, analyzerMessage, thresholdMessage, adminPortMessage };
+        }
+
+        const keyCounts = {};
+        entries.forEach((entry) => {
+            const key = (entry.key || '').trim().toLowerCase();
+            if (key) {
+                keyCounts[key] = (keyCounts[key] || 0) + 1;
             }
         });
 
-        Object.entries(identifierCounts).forEach(([identifier, count]) => {
-            if (count > 1) {
-                configState.ruleLogic.forEach((rule) => {
-                    if ((rule.key || '').trim().toLowerCase() === identifier) {
-                        if (!errors[rule.id]) {
-                            errors[rule.id] = {};
-                        }
-                        errors[rule.id].key = 'Rule identifier must be unique.';
-                    }
+        entries.forEach((entry, index) => {
+            const key = (entry.key || '').trim();
+            const displayName = key || `Analyzer ${index + 1}`;
+            if (!key) {
+                const message = 'Analyzer key is required.';
+                detailed[`analyzer_${entry.id}_key`] = message;
+                messages.push(`${displayName}: ${message}`);
+            } else if (!/^[-_a-zA-Z0-9]+$/.test(key)) {
+                const message = 'Analyzer key must contain only letters, numbers, underscores or dashes.';
+                detailed[`analyzer_${entry.id}_key`] = message;
+                messages.push(`${displayName}: ${message}`);
+            } else if (keyCounts[key.toLowerCase()] > 1) {
+                const message = 'Analyzer key must be unique within the rule.';
+                detailed[`analyzer_${entry.id}_key`] = message;
+                messages.push(`${displayName}: ${message}`);
+            }
+
+            Object.entries(entry.severityOverrides || {}).forEach(([severity, value]) => {
+                if (!value) {
+                    return;
+                }
+                const normalized = String(value).toLowerCase();
+                if (!severityOptionValues.includes(normalized)) {
+                    const message = `Severity override for ${severity} must be a recognised severity.`;
+                    detailed[`analyzer_${entry.id}_analyzer`] = message;
+                    messages.push(`${displayName}: ${message}`);
+                }
+            });
+
+            const thresholdResult = validateThresholdValues(entry.baselineThresholds, `analyzer_${entry.id}_thresholds`);
+            if (thresholdResult.hasError) {
+                Object.assign(detailed, thresholdResult.detailed);
+                thresholdMessage = 'Review analyzer threshold values.';
+                thresholdResult.messages.forEach((message) => {
+                    messages.push(`${displayName}: ${message}`);
                 });
             }
+
+            Object.entries(entry.perRiskThresholds || {}).forEach(([riskKey, values]) => {
+                const normalizedKey = (riskKey || '').trim();
+                const riskLabel = normalizedKey || 'unnamed risk override';
+                if (!normalizedKey) {
+                    const message = 'Risk key is required for threshold override.';
+                    detailed[`analyzer_${entry.id}_risk_${riskKey}_key`] = message;
+                    messages.push(`${displayName}: ${message}`);
+                }
+                const result = validateThresholdValues(values, `analyzer_${entry.id}_risk_${riskKey}`);
+                if (result.hasError) {
+                    Object.assign(detailed, result.detailed);
+                    thresholdMessage = 'Review analyzer threshold values.';
+                    result.messages.forEach((message) => {
+                        messages.push(`${displayName} (${riskLabel}): ${message}`);
+                    });
+                }
+            });
+
+            const baselinePortErrors = validateAdminPortList(entry.baselineAdminPorts || []);
+            if (baselinePortErrors.length > 0) {
+                detailed[`analyzer_${entry.id}_baseline_ports`] = baselinePortErrors.join(' ');
+                adminPortMessage = 'Resolve administrative port validation issues.';
+                messages.push(`${displayName}: ${baselinePortErrors.join(' ')}`);
+            }
+
+            Object.entries(entry.perRiskAdminPorts || {}).forEach(([riskKey, ports]) => {
+                const normalizedKey = (riskKey || '').trim();
+                const riskLabel = normalizedKey || 'unnamed risk override';
+                if (!normalizedKey) {
+                    const message = 'Risk key is required for port override.';
+                    detailed[`analyzer_${entry.id}_port_risk_${riskKey}_key`] = message;
+                    adminPortMessage = 'Resolve administrative port validation issues.';
+                    messages.push(`${displayName}: ${message}`);
+                }
+                const portErrors = validateAdminPortList(Array.isArray(ports) ? ports : splitList(ports));
+                if (portErrors.length > 0) {
+                    detailed[`analyzer_${entry.id}_port_risk_${riskKey}`] = portErrors.join(' ');
+                    adminPortMessage = 'Resolve administrative port validation issues.';
+                    messages.push(`${displayName} (${riskLabel}): ${portErrors.join(' ')}`);
+                }
+            });
         });
 
+        if (!entries.some((entry) => (entry.key || '').trim())) {
+            analyzerMessage = 'Configure at least one analyzer binding.';
+        } else if (!analyzerMessage && messages.some((message) => message.includes('Analyzer key'))) {
+            analyzerMessage = 'Resolve analyzer key validation issues.';
+        } else if (!analyzerMessage && messages.length > 0) {
+            analyzerMessage = 'Review analyzer configuration.';
+        }
+
+        return {
+            detailed,
+            messages,
+            analyzerMessage,
+            thresholdMessage,
+            adminPortMessage,
+        };
+    }
+
+    function validateThresholdValues(thresholds, keyPrefix) {
+        const detailed = {};
+        const messages = [];
+        let hasError = false;
+        if (!thresholds || typeof thresholds !== 'object') {
+            return { detailed, messages, hasError };
+        }
+        const normalized = {};
+        const labels = {
+            min_score: 'Minimum score',
+            max_score: 'Maximum score',
+            min_findings: 'Minimum findings',
+            max_findings: 'Maximum findings',
+        };
+        Object.entries(labels).forEach(([key, label]) => {
+            const raw = thresholds[key];
+            if (raw === '' || raw === null || raw === undefined) {
+                normalized[key] = null;
+                return;
+            }
+            const numeric = toNumber(raw);
+            if (numeric === null || numeric < 0) {
+                const message = `${label} must be a number greater than or equal to zero.`;
+                detailed[`${keyPrefix}_${key}`] = message;
+                messages.push(message);
+                hasError = true;
+            } else {
+                normalized[key] = numeric;
+            }
+        });
+
+        if (
+            normalized.min_score !== undefined &&
+            normalized.min_score !== null &&
+            normalized.max_score !== undefined &&
+            normalized.max_score !== null &&
+            normalized.min_score > normalized.max_score
+        ) {
+            const message = 'Minimum score cannot exceed maximum score.';
+            detailed[`${keyPrefix}_min_score`] = message;
+            detailed[`${keyPrefix}_max_score`] = message;
+            messages.push(message);
+            hasError = true;
+        }
+
+        if (
+            normalized.min_findings !== undefined &&
+            normalized.min_findings !== null &&
+            normalized.max_findings !== undefined &&
+            normalized.max_findings !== null &&
+            normalized.min_findings > normalized.max_findings
+        ) {
+            const message = 'Minimum findings cannot exceed maximum findings.';
+            detailed[`${keyPrefix}_min_findings`] = message;
+            detailed[`${keyPrefix}_max_findings`] = message;
+            messages.push(message);
+            hasError = true;
+        }
+
+        return { detailed, messages, hasError };
+    }
+
+    function validateAdminPortList(values) {
+        const errors = [];
+        const seen = new Set();
+        const duplicates = new Set();
+        (Array.isArray(values) ? values : splitList(values)).forEach((value) => {
+            const trimmed = String(value).trim();
+            if (!trimmed) {
+                return;
+            }
+            const numeric = Number(trimmed);
+            if (!Number.isInteger(numeric) || numeric < 1 || numeric > 65535) {
+                errors.push(`'${trimmed}' must be between 1 and 65535.`);
+                return;
+            }
+            if (seen.has(numeric)) {
+                duplicates.add(numeric);
+            } else {
+                seen.add(numeric);
+            }
+        });
+        duplicates.forEach((value) => {
+            errors.push(`Port ${value} is duplicated.`);
+        });
         return errors;
     }
 
@@ -1593,6 +3419,8 @@
     }
 
     function createRuleDefinition() {
+        const parsedConditions = createDefaultRuleConditions();
+        const parsedAnalyzers = {};
         return {
             id: generateId('rule'),
             key: '',
@@ -1601,8 +3429,11 @@
             description: '',
             conditionsText: DEFAULT_RULE_CONDITIONS_YAML,
             analyzersText: DEFAULT_ANALYZERS_YAML,
-            parsedConditions: createDefaultRuleConditions(),
-            parsedAnalyzers: {},
+            parsedConditions,
+            parsedAnalyzers,
+            conditionTree: normalizeConditionGroup(parsedConditions),
+            analyzerEntries: normalizeAnalyzerEntries(parsedAnalyzers),
+            validationMessages: [],
         };
     }
 
@@ -1623,6 +3454,8 @@
             analyzersText: toYamlString(isPlainObject(analyzers) ? analyzers : {}, DEFAULT_ANALYZERS_YAML),
             parsedConditions: isPlainObject(conditions) ? cloneObject(conditions) : createDefaultRuleConditions(),
             parsedAnalyzers: isPlainObject(analyzers) ? cloneObject(analyzers) : {},
+            conditionTree: normalizeConditionGroup(isPlainObject(conditions) ? conditions : createDefaultRuleConditions()),
+            analyzerEntries: normalizeAnalyzerEntries(isPlainObject(analyzers) ? analyzers : {}),
         };
     }
 
@@ -2032,6 +3865,15 @@
             description: rule.description ? String(rule.description) : '',
             conditionsText,
             analyzersText,
+            parsedConditions: isPlainObject(rule.parsedConditions)
+                ? cloneObject(rule.parsedConditions)
+                : createDefaultRuleConditions(),
+            parsedAnalyzers: isPlainObject(rule.parsedAnalyzers) ? cloneObject(rule.parsedAnalyzers) : {},
+            conditionTree: cloneConditionGroup(rule.conditionTree),
+            analyzerEntries: Array.isArray(rule.analyzerEntries)
+                ? rule.analyzerEntries.map((entry) => cloneAnalyzerEntry(entry))
+                : [],
+            validationMessages: Array.isArray(rule.validationMessages) ? [...rule.validationMessages] : [],
         };
     }
 
@@ -2202,6 +4044,9 @@
             analyzersText,
             parsedConditions: conditionsResult.parsed ?? createDefaultRuleConditions(),
             parsedAnalyzers: analyzersResult.parsed ?? {},
+            conditionTree: normalizeConditionGroup(conditionsResult.parsed ?? createDefaultRuleConditions()),
+            analyzerEntries: normalizeAnalyzerEntries(analyzersResult.parsed ?? {}),
+            validationMessages: Array.isArray(raw.validationMessages) ? raw.validationMessages : [],
         };
     }
 
