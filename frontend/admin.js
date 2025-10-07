@@ -19,6 +19,7 @@
         cidrLimitSets: {},
         portGroups: {},
     };
+    let lastValidationMessage = '';
 
     const selectors = {
         riskList: '#riskLevelsList',
@@ -697,9 +698,15 @@
         if (allErrors.length === 0) {
             summary.textContent = 'Configuration is valid and ready to export.';
             summary.classList.remove('has-errors');
+            lastValidationMessage = '';
         } else {
-            summary.textContent = allErrors[0];
+            const firstError = allErrors[0];
+            summary.textContent = firstError;
             summary.classList.add('has-errors');
+            if (lastValidationMessage !== firstError) {
+                showToast(firstError, true);
+                lastValidationMessage = firstError;
+            }
         }
     }
 

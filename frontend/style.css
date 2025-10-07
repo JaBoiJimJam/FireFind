@@ -831,12 +831,19 @@
             border-radius: 12px;
             font-size: 0.95rem;
             line-height: 1.4;
+            position: sticky;
+            top: 1rem;
+            align-self: start;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(6px);
+            transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
         }
 
         .validation-summary.has-errors {
-            border-color: rgba(255, 68, 68, 0.35);
-            background: rgba(255, 68, 68, 0.08);
-            color: #ff9f9f;
+            border-color: rgba(255, 68, 68, 0.45);
+            background: rgba(255, 68, 68, 0.15);
+            color: #ffb4b4;
+            box-shadow: 0 20px 44px rgba(255, 68, 68, 0.2);
         }
 
         .admin-hint {
