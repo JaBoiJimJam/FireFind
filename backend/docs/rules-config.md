@@ -94,6 +94,26 @@ analyzers or reporting layers. Each entry expands to a
 
 Future analyzers can consume these canonical groups instead of redefining ports.
 
+## Rule Logic Definitions
+
+Rule logic is captured in the `rules` map. Every rule contains three key
+components:
+
+1. **Base definition** (`id`, `label`, `description`) that drives UI copy and
+   reporting labels.
+2. **Condition groups** expressed with `logic: all|any` and lists of field
+   comparators. Conditions support rich comparators such as `matches_port_group`,
+   numeric thresholds, and nested groups for OR logic.
+3. **Analyzer metadata** that toggles analyzers on/off, maps severities, and
+   links administrative port tiers back to the global lists.
+
+See [`RuleDefinition`](../src/firefind/config/schema.py) for the Python data
+model and [`types/rules-config.ts`](../../types/rules-config.ts) for the matching
+TypeScript contract with Zod validation helpers. The migration utilities in
+[`config.migrations`](../src/firefind/config/migrations.py) automatically
+populate this structure when loading legacy YAML files that lack the `rules`
+section.
+
 ## Rationale Fields
 
 Rationale metadata provides traceability for risk decisions. Populate
