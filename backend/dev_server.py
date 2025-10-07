@@ -4,8 +4,19 @@ from pathlib import Path
 from typing import Any, Final
 
 from fastapi import HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
 from firefind.api import app
+
+# Add permissive CORS for the dev server so the frontend can access the API locally.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", include_in_schema=False)
@@ -66,6 +77,7 @@ async def delete_report(filename: str) -> dict[str, str]:
 
     candidate.unlink()
     return {"message": f"File {filename} deleted successfully"}
+
 
 # Serve the frontend directory if it exists
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
