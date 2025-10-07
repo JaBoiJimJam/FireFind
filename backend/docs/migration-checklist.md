@@ -47,6 +47,8 @@ analysis outputs after the upgrade.
       expected rule changes.
 - [ ] Query `GET /api/config/rules/history?limit=5` to ensure the revision log is
       still accessible and recording new entries.
+- [ ] Execute the manual QA runbook (`reports/manual-qa-runbook.md`) to validate
+      rule editing, YAML export/import parity, and legacy dictionary behaviour.
 - [ ] Check service logs and monitoring dashboards for errors or unusual latency.
 
 ## 6. Sign-Off

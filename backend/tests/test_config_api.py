@@ -63,6 +63,21 @@ def test_get_rules_returns_active_configuration(config_client):
     assert "critical" in payload["config"]["risk_levels"]
 
 
+def test_get_rules_populates_defaults_for_empty_file(config_client):
+    client, config_path, _ = config_client
+    config_path.write_text("{}\n", encoding="utf-8")
+
+    resp = client.get("/api/config/rules", headers=auth_headers())
+    assert resp.status_code == 200
+    payload = resp.json()
+    config = payload["config"]
+    assert isinstance(config["admin_ports"], list)
+    assert len(config["admin_ports"]) > 0
+    # Defaults from shipped schema should be included even when the file is empty
+    assert "risk_levels" in config and config["risk_levels"]
+    assert "rules" in config and config["rules"]
+
+
 def test_patch_rules_updates_file_and_history(config_client):
     client, config_path, history_path = config_client
     patch_body = {
@@ -194,6 +209,25 @@ def test_put_rules_rejects_malformed_condition_tree(config_client):
     )
 
     assert resp.status_code == 422
+
+
+def test_put_rules_rejects_invalid_threshold_ranges(config_client):
+    client, _, _ = config_client
+    payload = {
+        "thresholds": {
+            "critical": {"min_score": 90, "max_score": 20},
+        }
+    }
+
+    resp = client.put(
+        "/api/config/rules",
+        headers=auth_headers(),
+        json=payload,
+    )
+
+    assert resp.status_code == 422
+    body = resp.json()
+    assert any("min_score" in (error.get("msg", "").lower()) for error in body.get("detail", []))
 
 
 def test_patch_rules_rejects_noop_changes(config_client):
