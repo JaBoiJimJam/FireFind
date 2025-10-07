@@ -9,7 +9,9 @@ xlrd>=2.0.0
 
 # Web API
 fastapi
-uvicorn
+uvicorn[standard]
+python-multipart
+httpx
 
 # PDF generation - Using fpdf for professional reports
 fpdf2>=2.7.0
@@ -23,8 +25,9 @@ seaborn
 netaddr>=0.8.0
 
 # Development dependencies
-pytest>=7.0.0
-pytest-cov>=4.0.0
+pytest
+pytest-asyncio
+pytest-cov
 black>=23.0.0
 flake8>=6.0.0
 
