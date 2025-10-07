@@ -33,7 +33,7 @@
         <section class="admin-hero">
             <div>
                 <h1>Configuration Console</h1>
-                <p>Manage FireFind risk levels, CIDR limits, and reusable port groups with immediate validation aligned with backend rules.</p>
+                <p>Manage FireFind risk levels, CIDR limits, reusable port groups, and the analyzer rule logic powering detection with immediate validation aligned with backend rules.</p>
                 <div class="admin-actions">
                     <button id="importYamlBtn" class="btn btn-secondary"><i class="fa-solid fa-file-import"></i> Import YAML Snapshot</button>
                     <button id="exportYamlBtn" class="btn btn-primary" disabled><i class="fa-solid fa-file-export"></i> Export YAML Snapshot</button>
@@ -78,6 +78,18 @@
             </header>
             <div class="admin-help">Ports must be between 1 and 65535. Ranges cannot overlap or invert. Protocols follow backend expectations (<code>tcp</code>, <code>udp</code>, or <code>any</code>).</div>
             <div id="portGroupsList" class="config-grid"></div>
+        </section>
+
+        <section class="admin-section" id="ruleLogicSection">
+            <header class="admin-section-header">
+                <div>
+                    <h2>Rule Logic</h2>
+                    <p>Author analyzer rule definitions, including condition logic and analyzer overrides.</p>
+                </div>
+                <button class="btn" id="addRuleLogicBtn"><i class="fa-solid fa-plus"></i> Add Rule Definition</button>
+            </header>
+            <div class="admin-help">Conditions and analyzers accept YAML that maps directly to the backend schema. Provide a logic tree describing rule criteria and analyzer-specific metadata, including severity overrides and administrative port tiers.</div>
+            <div id="ruleLogicList" class="config-grid"></div>
         </section>
     </main>
     <footer class="admin-footer">
