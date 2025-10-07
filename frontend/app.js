@@ -24,8 +24,37 @@ window.addEventListener('scroll', () => {
 
 // File handling
 let uploadedFiles = [];
+
+// Only set up these elements if they exist on the page
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
+
+// Only add event listeners if elements exist
+if (dropZone) {
+    // Drag and drop
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        handleFiles(e.dataTransfer.files);
+    });
+}
+
+if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+        // Clear the input so the same file can be selected again if needed
+        e.target.value = '';
+    });
+}
 
 // Load files from localStorage on page load
 function loadStoredFiles() {
@@ -137,28 +166,7 @@ function validateFileSize(file) {
     return { valid: true };
 }
 
-// Drag and drop
-dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('drag-over');
-});
-
-dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('drag-over');
-});
-
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    handleFiles(e.dataTransfer.files);
-});
-
-fileInput.addEventListener('change', (e) => {
-    handleFiles(e.target.files);
-    // Clear the input so the same file can be selected again if needed
-    e.target.value = '';
-});
-
+// File ID creation
 function createFileId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
         return crypto.randomUUID();
@@ -166,6 +174,7 @@ function createFileId() {
     return String(Date.now() + Math.random());
 }
 
+// File handling
 function handleFiles(files) {
     let validFiles = [];
     let errors = [];
