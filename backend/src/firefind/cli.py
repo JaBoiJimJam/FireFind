@@ -135,7 +135,7 @@ def parse(
     rules_norm: List[Rule] = []
     seen_rules = set()
     for row in raw_rows:
-        r = to_rule(row, mapping)
+        r = to_rule(row, mapping, vendor=vendor)
         if not r:
             continue
         key = (r.rule_id, r.src, r.dst, r.proto, r.port, r.action)

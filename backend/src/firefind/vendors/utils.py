@@ -45,3 +45,39 @@ def normalize_header(h: str) -> str:
     """Normalize header strings for consistent mapping."""
 
     return h.strip().lower().replace(" ", "_") if h else ""
+
+
+_ACTION_SYNONYMS = {
+    "accept": "allow",
+    "allow": "allow",
+    "pass": "allow",
+    "permit": "allow",
+    "enable": "allow",
+    "enabled": "allow",
+    "drop": "deny",
+    "deny": "deny",
+    "block": "deny",
+    "blocked": "deny",
+    "reject": "deny",
+    "discard": "deny",
+    "disable": "deny",
+    "disabled": "deny",
+    "refuse": "deny",
+    "monitor": "monitor",
+    "log": "monitor",
+}
+
+
+def normalize_action(value: str, default: str = "allow") -> str:
+    """Return a canonical action keyword for heterogeneous exports."""
+
+    raw = (value or "").strip()
+    if not raw:
+        raw = default
+
+    lowered = raw.lower()
+    normalised = _ACTION_SYNONYMS.get(lowered)
+    if normalised:
+        return normalised
+
+    return lowered

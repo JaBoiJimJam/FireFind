@@ -16,8 +16,13 @@ def test_load_yaml_empty(tmp_path):
 
 def test_pick_mapping_case_insensitive():
     mappings = {"Fortinet": {"rule_id": ["Seq #"]}, "cisco": {"rule_id": ["Id"]}}
-    assert pick_mapping(mappings, "FORTINET") == {"rule_id": ["Seq #"]}
-    assert pick_mapping(mappings, "Cisco") == {"rule_id": ["Id"]}
+    fortinet = pick_mapping(mappings, "FORTINET")
+    assert fortinet["__vendor__"] == "Fortinet"
+    assert fortinet["rule_id"] == ["Seq #"]
+
+    cisco = pick_mapping(mappings, "Cisco")
+    assert cisco["__vendor__"] == "cisco"
+    assert cisco["rule_id"] == ["Id"]
 
 
 def test_sniff_proto_port_variants():
@@ -31,6 +36,8 @@ def test_sniff_proto_port_variants():
     assert sniff_proto_port(row5) == ("any", "80,443")
     row6 = {"Service": "ALL"}
     assert sniff_proto_port(row6) == ("any", "ALL")
+    row7 = {"Ports": "TCP/443"}
+    assert sniff_proto_port(row7) == ("any", "TCP/443")
     row4 = {}
     assert sniff_proto_port(row4) == ("any", "any")
 
@@ -56,7 +63,7 @@ def test_to_rule_and_noise():
         "Dstintf": "virtual-wan-link",
         "Comment": "test",
     }
-    rule = to_rule(row, mapping)
+    rule = to_rule(row, mapping, vendor="fortinet")
     assert isinstance(rule, Rule)
     assert rule.port == "80"
     assert rule.service == "HTTP"
@@ -64,4 +71,4 @@ def test_to_rule_and_noise():
     assert rule.dst_interface == "virtual-wan-link"
 
     noise_row = {"Seq #": "", "Source": "", "Dest": "", "Service": ""}
-    assert to_rule(noise_row, mapping) is None
+    assert to_rule(noise_row, mapping, vendor="fortinet") is None
