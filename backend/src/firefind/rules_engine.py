@@ -224,6 +224,11 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
         "network_scope": [],
         "port_lists": ["admin_ports"],
     },
+    "rule_overlap": {
+        "risk_levels": [],
+        "network_scope": ["rule_overlap"],
+        "port_lists": [],
+    },
 }
 
 
@@ -267,6 +272,243 @@ def is_broad_cidr(value: str, max_prefixlen: int) -> bool:
         return net.prefixlen <= max_prefixlen
     except Exception:
         return False
+
+
+def _normalize_protocol(proto: str) -> str:
+    return (proto or "").strip().lower()
+
+
+def _protocol_covers(covering: str, target: str) -> bool:
+    covering_norm = _normalize_protocol(covering)
+    target_norm = _normalize_protocol(target)
+    if covering_norm in {"", "any", "*", "all"}:
+        return True
+    if target_norm in {"", "any", "*", "all"}:
+        return covering_norm in {"", "any", "*", "all"}
+    return covering_norm == target_norm
+
+
+def _normalize_port_text(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _ports_cover(covering: str, target: str) -> bool:
+    covering_norm = _normalize_port_text(covering)
+    target_norm = _normalize_port_text(target)
+
+    if is_all_ports(covering) or covering_norm in {"", "any", "*"}:
+        return True
+
+    if is_all_ports(target) or target_norm in {"", "any", "*"}:
+        return is_all_ports(covering) or covering_norm in {"", "any", "*"}
+
+    covering_ports = set(parse_ports(covering))
+    target_ports = set(parse_ports(target))
+
+    if covering_ports and target_ports:
+        return target_ports.issubset(covering_ports)
+
+    if covering_ports or target_ports:
+        return False
+
+    return covering_norm == target_norm
+
+
+def _network_covers(covering: str, target: str) -> bool:
+    if is_any(covering):
+        return True
+    if is_any(target):
+        return is_any(covering)
+
+    covering_net = _parse_network_value(covering)
+    target_net = _parse_network_value(target)
+
+    if covering_net and target_net and covering_net.version == target_net.version:
+        return target_net.subnet_of(covering_net)
+
+    covering_norm = (covering or "").strip().lower()
+    target_norm = (target or "").strip().lower()
+    return covering_norm == target_norm
+
+
+def _describe_network_overlap(covering: str, target: str, field: str) -> Optional[str]:
+    covering_norm = (covering or "").strip().lower()
+    target_norm = (target or "").strip().lower()
+    if covering_norm == target_norm:
+        return None
+    return f"{field} {target or 'any'} is covered by {covering or 'any'}"
+
+
+def _describe_protocol_overlap(covering: str, target: str) -> Optional[str]:
+    covering_norm = _normalize_protocol(covering)
+    target_norm = _normalize_protocol(target)
+    if covering_norm == target_norm or target_norm in {"", "any", "*", "all"}:
+        return None
+    return f"protocol {target or 'any'} is treated as {covering or 'any'}"
+
+
+def _describe_port_overlap(covering: str, target: str) -> Optional[str]:
+    covering_norm = _normalize_port_text(covering)
+    target_norm = _normalize_port_text(target)
+    if covering_norm == target_norm or target_norm in {"", "any", "*"}:
+        return None
+    if is_all_ports(covering) and not is_all_ports(target):
+        return f"ports {target or 'any'} are included in all-ports rule"
+    covering_ports = set(parse_ports(covering))
+    target_ports = set(parse_ports(target))
+    if covering_ports and target_ports and covering_ports != target_ports:
+        return f"ports {sorted(target_ports)} are covered by {sorted(covering_ports)}"
+    return None
+
+
+def _rule_scope_covers(covering: Rule, target: Rule) -> Tuple[bool, List[str]]:
+    notes: List[str] = []
+
+    if not _network_covers(covering.src, target.src):
+        return False, []
+    network_note = _describe_network_overlap(covering.src, target.src, "source")
+    if network_note:
+        notes.append(network_note)
+
+    if not _network_covers(covering.dst, target.dst):
+        return False, []
+    destination_note = _describe_network_overlap(covering.dst, target.dst, "destination")
+    if destination_note:
+        notes.append(destination_note)
+
+    if not _protocol_covers(covering.proto, target.proto):
+        return False, []
+    protocol_note = _describe_protocol_overlap(covering.proto, target.proto)
+    if protocol_note:
+        notes.append(protocol_note)
+
+    if not _ports_cover(covering.port, target.port):
+        return False, []
+    port_note = _describe_port_overlap(covering.port, target.port)
+    if port_note:
+        notes.append(port_note)
+
+    return True, notes
+
+
+def _normalize_action(action: str) -> str:
+    value = (action or "").strip().lower()
+    if not value:
+        return "other"
+    if action_allows_traffic(action):
+        return "allow"
+    if value.startswith(("deny", "block", "drop", "reject")):
+        return "deny"
+    return value
+
+
+def _actions_conflict(first: str, second: str) -> bool:
+    first_norm = _normalize_action(first)
+    second_norm = _normalize_action(second)
+    if first_norm == second_norm:
+        return False
+    allowish = {"allow"}
+    denyish = {"deny"}
+    return (first_norm in allowish and second_norm in denyish) or (
+        first_norm in denyish and second_norm in allowish
+    )
+
+
+def _resolve_overlap_severity(value: object, fallback: str) -> str:
+    raw = getattr(value, "value", value)
+    text = str(raw or fallback).strip()
+    if not text:
+        return fallback
+    return text[0].upper() + text[1:]
+
+
+def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> List[Finding]:
+    settings = getattr(cfg, "rule_overlap", None)
+    if settings is None:
+        return []
+
+    max_rules = int(getattr(settings, "max_rules_evaluated", 0) or 0)
+    max_pairs = int(getattr(settings, "max_rule_pairs", 0) or 0)
+
+    if max_rules > 0:
+        evaluated_rules = rules[:max_rules]
+    else:
+        evaluated_rules = list(rules)
+
+    findings: List[Finding] = []
+    comparisons = 0
+    limit_reached = False
+
+    for index, candidate in enumerate(evaluated_rules):
+        for covering in evaluated_rules[:index]:
+            comparisons += 1
+            if max_pairs > 0 and comparisons > max_pairs:
+                limit_reached = True
+                break
+
+            covers, notes = _rule_scope_covers(covering, candidate)
+            if not covers:
+                continue
+
+            if _actions_conflict(covering.action, candidate.action):
+                severity = _resolve_overlap_severity(settings.shadowed_severity, "Medium")
+                rationale_bits = [
+                    (
+                        f"Rule {candidate.rule_id} is shadowed by earlier rule "
+                        f"{covering.rule_id} ({covering.action} vs {candidate.action})."
+                    )
+                ]
+                if notes:
+                    rationale_bits.append("Overlap details: " + "; ".join(notes))
+                findings.append(
+                    Finding(
+                        vendor,
+                        candidate.rule_id,
+                        candidate.src,
+                        candidate.dst,
+                        candidate.proto,
+                        candidate.port,
+                        candidate.action,
+                        finding_type="shadowed_rule",
+                        severity=severity,
+                        rationale=" ".join(rationale_bits),
+                        source_file=candidate.source_file,
+                    )
+                )
+                break
+
+            covering_action = _normalize_action(covering.action)
+            candidate_action = _normalize_action(candidate.action)
+            if covering_action != candidate_action:
+                continue
+
+            severity = _resolve_overlap_severity(settings.redundant_severity, "Low")
+            rationale_bits = [
+                f"Rule {candidate.rule_id} is redundant because earlier rule {covering.rule_id} already applies."
+            ]
+            if notes:
+                rationale_bits.append("Overlap details: " + "; ".join(notes))
+            findings.append(
+                Finding(
+                    vendor,
+                    candidate.rule_id,
+                    candidate.src,
+                    candidate.dst,
+                    candidate.proto,
+                    candidate.port,
+                    candidate.action,
+                    finding_type="redundant_rule",
+                    severity=severity,
+                    rationale=" ".join(rationale_bits),
+                    source_file=candidate.source_file,
+                )
+            )
+            break
+
+        if limit_reached:
+            break
+
+    return findings
 
 
 def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
@@ -339,6 +581,12 @@ def _log_active_thresholds(cfg: RulesConfig, *, vendor: str) -> None:
         "broad_cidr": {
             "broad_cidr_prefix_max": int(cfg.broad_cidr_prefix_max),
         },
+        "rule_overlap": {
+            "max_rules_evaluated": int(cfg.rule_overlap.max_rules_evaluated),
+            "max_rule_pairs": int(cfg.rule_overlap.max_rule_pairs),
+            "redundant_severity": cfg.rule_overlap.redundant_severity.value,
+            "shadowed_severity": cfg.rule_overlap.shadowed_severity.value,
+        },
     }
 
     logger.info(
@@ -399,6 +647,7 @@ def looks_internet_facing(value: str) -> bool:
 
 def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     rules_cfg = _coerce_rules_config(cfg)
+    rules_list = list(rules)
 
     critical_risk_admin_ports = set(rules_cfg.critical_risk_admin_ports)
     if not critical_risk_admin_ports:
@@ -442,7 +691,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     findings: List[Finding] = []
     risk_code_counter = 1
 
-    for r in rules:
+    for r in rules_list:
         # Allow-any
         if (
             action_allows_traffic(r.action)
@@ -565,6 +814,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     source_file=r.source_file,
                 )
             )
+
+    findings.extend(_analyze_rule_overlap(rules_list, rules_cfg, vendor))
 
     return findings
 

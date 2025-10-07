@@ -156,6 +156,67 @@ def test_run_checks_all_ports_internal_scope():
     assert matching[0].severity == "Medium"
 
 
+def test_run_checks_flags_redundant_rule():
+    broad_deny = Rule(
+        "100",
+        "192.168.0.0/16",
+        "10.0.0.0/24",
+        "tcp",
+        "TCP/9000",
+        "deny",
+    )
+    specific_deny = Rule(
+        "200",
+        "192.168.1.0/24",
+        "10.0.0.0/24",
+        "tcp",
+        "TCP/9000",
+        "deny",
+    )
+
+    findings = run_checks(
+        "vendor",
+        [broad_deny, specific_deny],
+        {"rule_overlap": {"redundant_severity": "medium"}},
+    )
+
+    redundant = [f for f in findings if f.finding_type == "redundant_rule"]
+    assert redundant, "Expected redundant rule finding"
+    assert redundant[0].rule_id == "200"
+    assert redundant[0].severity == "Medium"
+
+
+def test_run_checks_flags_shadowed_rule():
+    deny_rule = Rule(
+        "300",
+        "any",
+        "10.0.0.0/16",
+        "tcp",
+        "TCP/9000",
+        "deny",
+    )
+    allow_rule = Rule(
+        "400",
+        "any",
+        "10.0.1.0/24",
+        "tcp",
+        "TCP/9000",
+        "allow",
+    )
+
+    findings = run_checks(
+        "vendor",
+        [deny_rule, allow_rule],
+        {"rule_overlap": {"shadowed_severity": "high"}},
+    )
+
+    shadowed = [f for f in findings if f.finding_type == "shadowed_rule"]
+    assert shadowed, "Expected shadowed rule finding"
+    assert shadowed[0].rule_id == "400"
+    assert shadowed[0].severity == "High"
+    assert "Rule 400" in shadowed[0].rationale
+
+
 def test_run_analysis_directory_and_dedup(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
