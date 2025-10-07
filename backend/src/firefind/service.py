@@ -14,6 +14,7 @@ from typing import Dict, List, Tuple
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
 from .rules_engine import run_checks, generate_risk_code
+from .config import load_rules_config
 from .utils import load_yaml, pick_mapping, to_rule
 
 
@@ -117,7 +118,7 @@ def run_analysis(
     """
 
     # Load configs
-    rules_cfg = load_yaml(Path(rules_path))
+    rules_cfg = load_rules_config(Path(rules_path))
     vendor_mappings = load_yaml(Path(mappings_path))
     mapping = pick_mapping(vendor_mappings, vendor)
 
@@ -139,7 +140,7 @@ def run_analysis(
     rules_norm: List[Rule] = []
     seen_rules = set()
     for row in raw_rows:
-        r = to_rule(row, mapping)
+        r = to_rule(row, mapping, vendor=vendor)
         if not r:
             continue
         key = (r.rule_id, r.src, r.dst, r.proto, r.port, r.action)

@@ -4,7 +4,7 @@ A comprehensive firewall configuration analysis tool that identifies security vu
 
 ## Features
 
-- **Multi-vendor Support**: Currently supports Fortinet firewalls with extensible architecture for other vendors
+- **Multi-vendor Support**: Supports Fortinet, Sophos, Barracuda, Check Point, and WatchGuard exports with an extensible architecture for additional vendors
 - **CSV/XLSX Input**: Analyzes firewall configurations from exported CSV or Excel files
 - **Security Analysis**: Identifies common security issues like overly permissive rules, admin port exposure, and broad CIDR ranges
 - **Dual Output**: Generates both CSV reports and PDF summaries
@@ -99,9 +99,21 @@ uvicorn firefind.api:app --reload
 
 Then send a `POST` request to `http://localhost:8000/scan` with a CSV or XLSX file in the `file` form field. Findings are returned as JSON and optional CSV/PDF reports are saved to the `out/` directory.
 
+#### Configuration API
+
+The FastAPI service also exposes authenticated endpoints for inspecting and updating the active rules configuration:
+
+- `GET /api/config/rules` – returns the merged runtime configuration alongside revision metadata.
+- `PATCH /api/config/rules` – accepts a JSON payload with a `changes` object containing partial configuration updates. Optional `message` metadata is recorded with the revision audit trail.
+- `GET /api/config/rules/history?limit=<n>` – retrieves the most recent revision entries (defaults to 20).
+
+All configuration endpoints require a bearer token supplied via the `Authorization: Bearer <token>` header. Configure the shared secret with the `FIRE_FIND_API_TOKEN` environment variable before starting the API. Optional user attribution can be provided via the `X-Firefind-Actor` header and is recorded with every revision entry.
+
+Approved updates are persisted to the configured YAML file (defaults to `rules/rules.yaml`) and appended to a JSONL history alongside version numbers, timestamps, and actor details. The analysis service loads configuration from disk for every request, so threshold adjustments take effect immediately without restarting the backend.
+
 ### CLI Parameters
 
-- `--vendor`: Firewall vendor (currently supports: `fortinet`)
+- `--vendor`: Firewall vendor (`fortinet`, `sophos`, `barracuda`, `checkpoint`, `watchguard`)
 - `--input`: Directory containing CSV/XLSX firewall configuration files
 - `--out-csv`: Output path for CSV findings report
 - `--out-pdf`: Output path for PDF summary report
@@ -109,35 +121,80 @@ Then send a `POST` request to `http://localhost:8000/scan` with a CSV or XLSX fi
 - `--mappings`: Path to vendor column mappings YAML file
 - `--version`: Show the application's version and exit
 
-## Configuration Files
+## Configuration Overview
 
-### Rules Configuration (`rules/rules.yaml`)
+FireFind ships with sensible defaults, but production deployments should review
+the configuration options below to align the analysis engine with internal
+policies.
 
-Defines security analysis rules:
-- **admin_ports**: List of administrative ports to flag
-- **broad_cidr_prefix_max**: Maximum CIDR prefix length to consider "broad"
+### Core Files
 
-### Vendor Mappings (`rules/vendor_mappings.yaml`)
+- **Rules Configuration (`rules/rules.yaml`)** – Controls the security analysis
+  heuristics. Extend the file or point the backend at a bespoke path to tune
+  severity thresholds, CIDR limits, and reusable port collections.
+- **Vendor Mappings (`rules/vendor_mappings.yaml`)** – Maps vendor-specific
+  column names to the normalized fields the analyzers expect (rule id, source,
+  destination, protocol, service, action, and comments).
 
-Maps vendor-specific column names to standardized field names:
-- `rule_id`: Rule identifier columns
-- `src`: Source address columns
-- `dst`: Destination address columns
-- `proto`: Protocol columns
-- `port`: Port/service columns
-- `action`: Action (allow/deny) columns
-- `comment`: Comment/description columns
+Copy `rules.config.sample.yaml` to a safe location, tailor the contents, and set
+`FIRE_FIND_RULES_CONFIG` to point at the custom file before launching the
+service. When the API receives rule updates it persists them alongside a
+revision history (`*.history.jsonl`). Override the history location with
+`FIRE_FIND_RULES_HISTORY` if you need to store the audit trail elsewhere (for
+example on a shared network volume).
+
+### Runtime Environment Variables
+
+| Variable | Purpose |
+| --- | --- |
+| `FIRE_FIND_API_TOKEN` | Shared bearer token required by the configuration API endpoints. Generate a strong random value and keep it secret. |
+| `FIRE_FIND_ALLOW_ORIGINS` | Optional CORS allow-list for the FastAPI server (defaults to `*`). Provide a comma-separated list for production launches. |
+| `FIRE_FIND_RULES_CONFIG` | Absolute path to the active rules configuration file. Defaults to `backend/rules/rules.yaml`. |
+| `FIRE_FIND_RULES_HISTORY` | Optional override for the JSONL revision log. Defaults to `<rules file name>.history.jsonl` next to the config file. |
+
+Export these variables in your process manager (e.g. systemd, Docker, or a CI
+runner) so the CLI and API share a consistent configuration baseline. Remember
+to mount the configuration files read/write if you expect operators to patch
+rules via the API.
 
 ## Input File Format
 
 FireFind accepts CSV or XLSX files with firewall rule data. The tool automatically maps vendor-specific column names to standard fields using the vendor mappings configuration.
 
-**Example Fortinet columns**:
-- Rule ID: `Seq #`, `ID`, `Policyid`
-- Source: `Source Value`, `Source`, `Address`
-- Destination: `Destination Value`, `Destination`, `Address.1`
-- Service: `Service`, `Service.1`, `Port`
-- Action: `Action`
+- **Example Fortinet columns**:
+  - Rule ID: `Seq #`, `ID`, `Policyid`
+  - Source: `Source Value`, `Source`, `Address`
+  - Destination: `Destination Value`, `Destination`, `Address.1`
+  - Service: `Service`, `Service.1`, `Port`
+  - Action: `Action`
+
+- **Example Sophos columns**:
+  - Rule ID: `Rule ID`
+  - Source: `Source Networks`
+  - Destination: `Destination Networks`
+  - Service: `Services`
+  - Action: `Action`
+
+- **Example Barracuda columns**:
+  - Rule ID: `Rule #`
+  - Source: `Source`
+  - Destination: `Destination`
+  - Service: `Service`
+  - Action: `Action`
+
+- **Example Check Point columns**:
+  - Rule ID: `Name`
+  - Source: `Source`
+  - Destination: `Destination`
+  - Service: `Services & Applications`
+  - Action: `Action`
+
+- **Example WatchGuard columns**:
+  - Rule ID: `Policy Name`
+  - Source: `From`
+  - Destination: `To`
+  - Service: `Protocols` / `Port`
+  - Action: `Action` / `Enable`
 
 ## Output Reports
 
@@ -162,6 +219,28 @@ Executive summary with:
 - Python 3.8+
 - See `requirements.txt` for package dependencies
 - Windows/Linux/macOS compatible
+
+### Testing
+
+Backend and frontend suites ship with unit, integration, and end-to-end
+coverage. Common commands:
+
+```bash
+# Backend validation helpers and configuration API endpoints
+pytest backend/tests/test_config_schema.py
+pytest backend/tests/test_config_api.py::test_get_rules_populates_defaults_for_empty_file
+
+# Frontend rule management components (Jest)
+npm run test:frontend
+
+# Install Playwright browsers once, then execute UI CRUD flows
+npx playwright install --with-deps
+npm run test:e2e
+```
+
+`npm run test:e2e` automatically launches `./start_dev.sh`, drives the admin
+console to create/update/delete a rule, and verifies the configuration persists
+across reloads.
 
 ## Troubleshooting
 

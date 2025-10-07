@@ -14,6 +14,7 @@ from .rules_engine import run_checks
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
 from .service import deduplicate_findings
+from .config import load_rules_config
 from .utils import load_yaml, pick_mapping, to_rule
 
 app = typer.Typer(help="Ingest, normalize, analyze, and output reports.")
@@ -98,7 +99,7 @@ def parse(
         raise typer.BadParameter(f"{input_path} does not exist")
 
     # Load configs
-    rules_cfg = load_yaml(Path(rules))
+    rules_cfg = load_rules_config(Path(rules))
     vendor_mappings = load_yaml(Path(mappings))
     mapping = pick_mapping(vendor_mappings, vendor)
 
@@ -106,8 +107,12 @@ def parse(
     raw_rows = []
     if input_path.is_dir():
         typer.echo(f"Input is a directory → scanning for CSV/XLSX in {input_path}")
-        files = list(sorted(input_path.glob("*.csv"))) + list(sorted(input_path.glob("*.xlsx")))
-        
+        files = [
+            f
+            for f in sorted(input_path.iterdir())
+            if f.is_file() and f.suffix.lower() in {".csv", ".xlsx"}
+        ]
+
         # Filter out temporary Excel files (starting with ~$)
         files = [f for f in files if not f.name.startswith("~$")]
         
@@ -130,7 +135,7 @@ def parse(
     rules_norm: List[Rule] = []
     seen_rules = set()
     for row in raw_rows:
-        r = to_rule(row, mapping)
+        r = to_rule(row, mapping, vendor=vendor)
         if not r:
             continue
         key = (r.rule_id, r.src, r.dst, r.proto, r.port, r.action)

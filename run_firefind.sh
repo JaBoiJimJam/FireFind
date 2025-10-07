@@ -4,6 +4,11 @@ set -e
 # Name of the virtual environment folder
 VENV_DIR="venv"
 
+if [ -z "${FIRE_FIND_API_TOKEN:-}" ]; then
+    export FIRE_FIND_API_TOKEN="dev-admin-token"
+    echo "[run_firefind] FIRE_FIND_API_TOKEN not set; using development default 'dev-admin-token'."
+fi
+
 # Create virtual environment if it doesn't exist
 if [ ! -d "$VENV_DIR" ]; then
     echo "Creating virtual environment..."

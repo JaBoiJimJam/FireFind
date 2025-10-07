@@ -81,6 +81,28 @@ def test_directory_with_dummy_csv(tmp_path):
     assert result.exit_code == 0
 
 
+def test_directory_with_uppercase_extension(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "dummy.CSV").write_text("Seq #,Service,Action\n1,TCP/80,allow\n")
+    result = runner.invoke(
+        cli_app,
+        [
+            "--input",
+            str(data_dir),
+            "--rules",
+            str(RULES_PATH),
+            "--mappings",
+            str(MAPPINGS_PATH),
+            "--out-csv",
+            str(tmp_path / "out.csv"),
+            "--out-pdf",
+            str(tmp_path / "out.pdf"),
+        ],
+    )
+    assert result.exit_code == 0
+
+
 def test_version_option():
     result = runner.invoke(cli_app, ["--version"])
     assert result.exit_code == 0

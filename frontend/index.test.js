@@ -7,6 +7,22 @@ const path = require('path');
 
 let scriptLoaded = false;
 
+function createLocalStorageMock() {
+  let store = {};
+  return {
+    getItem: jest.fn((key) => (key in store ? store[key] : null)),
+    setItem: jest.fn((key, value) => {
+      store[key] = String(value);
+    }),
+    removeItem: jest.fn((key) => {
+      delete store[key];
+    }),
+    clear: jest.fn(() => {
+      store = {};
+    }),
+  };
+}
+
 function loadApp() {
   document.body.innerHTML = `
     <div id="dropZone"></div>
@@ -22,6 +38,10 @@ function loadApp() {
     </div>
   `;
   window.HTMLElement.prototype.scrollIntoView = jest.fn();
+  Object.defineProperty(window, 'localStorage', {
+    value: createLocalStorageMock(),
+    configurable: true,
+  });
   if (!scriptLoaded) {
     jest.spyOn(window, 'setInterval').mockImplementation(() => {});
     const script = fs
@@ -48,12 +68,12 @@ test('formatFileSize formats bytes correctly', () => {
 });
 
 test('displayFiles shows and hides uploaded files', () => {
-  const file = new File(['x'], 'file.txt', { type: 'text/plain' });
+  const file = new File(['x'], 'file.csv', { type: 'text/csv' });
   window.handleFiles([file]);
   const filesSection = document.getElementById('filesSection');
   const filesGrid = document.getElementById('filesGrid');
   expect(filesSection.classList.contains('active')).toBe(true);
-  expect(filesGrid.innerHTML).toContain('file.txt');
+  expect(filesGrid.innerHTML).toContain('file.csv');
 
   window.eval('uploadedFiles = []');
   window.displayFiles();
@@ -61,12 +81,12 @@ test('displayFiles shows and hides uploaded files', () => {
 });
 
 test('removeFile removes uploaded entries', () => {
-  const file = new File(['x'], 'removable.txt', { type: 'text/plain' });
+  const file = new File(['x'], 'removable.csv', { type: 'text/csv' });
   window.handleFiles([file]);
   const filesGrid = document.getElementById('filesGrid');
   const uploadedBefore = window.eval('uploadedFiles');
   expect(uploadedBefore).toHaveLength(1);
-  expect(filesGrid.innerHTML).toContain('removable.txt');
+  expect(filesGrid.innerHTML).toContain('removable.csv');
 
   const [{ id }] = uploadedBefore;
   window.showToast = jest.fn();
@@ -74,7 +94,7 @@ test('removeFile removes uploaded entries', () => {
 
   const uploadedAfter = window.eval('uploadedFiles');
   expect(uploadedAfter).toHaveLength(0);
-  expect(filesGrid.innerHTML).not.toContain('removable.txt');
+  expect(filesGrid.innerHTML).not.toContain('removable.csv');
 });
 
 test('startScan posts files and updates metrics and links', async () => {
@@ -82,8 +102,9 @@ test('startScan posts files and updates metrics and links', async () => {
   startButton.textContent = 'SCAN';
   document.body.appendChild(startButton);
 
-  const file = new File(['x'], 'file.txt', { type: 'text/plain' });
+  const file = new File(['x'], 'file.csv', { type: 'text/csv' });
   window.handleFiles([file]);
+  expect(window.eval('uploadedFiles.length')).toBe(1);
 
   const mockResponse = {
     metrics: { critical: 1, high: 2, total: 3, score: 75 },
@@ -94,11 +115,12 @@ test('startScan posts files and updates metrics and links', async () => {
     ok: true,
     json: async () => mockResponse,
   });
+  global.fetch = window.fetch;
 
   await window.startScan({ target: startButton });
 
   expect(window.fetch).toHaveBeenCalledWith(
-    '/api/scan',
+    '/api/scan?save_pdf=1&save_csv=1',
     expect.objectContaining({ method: 'POST' })
   );
   expect(document.getElementById('criticalCount').textContent).toBe('1');
@@ -133,11 +155,12 @@ test('startScan uploads xlsx files correctly', async () => {
     ok: true,
     json: async () => ({ metrics: {}, findings: [] }),
   });
+  global.fetch = window.fetch;
 
   await window.startScan({ target: startButton });
 
   expect(window.fetch).toHaveBeenCalledWith(
-    '/api/scan',
+    '/api/scan?save_pdf=1&save_csv=1',
     expect.objectContaining({ method: 'POST' })
   );
   const formData = window.fetch.mock.calls[0][1].body;
