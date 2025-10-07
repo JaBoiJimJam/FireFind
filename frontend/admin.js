@@ -7,10 +7,19 @@
         { value: 'informational', label: 'Informational' },
     ];
 
+    const DEFAULT_RULE_CONDITIONS_YAML = 'logic: all\nconditions: []\ngroups: []\n';
+    const DEFAULT_ANALYZERS_YAML = '{}\n';
+
+    const ruleConfigApi = createRuleConfigApi();
+    if (typeof window !== 'undefined') {
+        window.firefindRuleConfigApi = ruleConfigApi;
+    }
+
     const configState = {
         riskLevels: [],
         cidrLimitSets: [],
         portGroups: [],
+        ruleLogic: [],
     };
 
     let passthroughConfig = {};
@@ -18,6 +27,7 @@
         riskLevels: {},
         cidrLimitSets: {},
         portGroups: {},
+        ruleLogic: {},
     };
     let lastValidationMessage = '';
     const defaultValidationOptions = { suppressErrorToast: false };
@@ -27,6 +37,7 @@
         riskList: '#riskLevelsList',
         cidrList: '#cidrSetsList',
         portList: '#portGroupsList',
+        ruleList: '#ruleLogicList',
         validationSummary: '#validationSummary',
         exportButton: '#exportYamlBtn',
         importButton: '#importYamlBtn',
@@ -37,17 +48,19 @@
     const STORAGE_KEY = 'firefind:admin-state:v1';
     const storageAvailable = checkLocalStorageAvailability();
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
         restoreStateFromCache();
         bindStaticActions();
         renderAll();
         runValidation();
+        await loadInitialConfigFromApi();
     });
 
     function bindStaticActions() {
         const addRiskBtn = document.getElementById('addRiskLevelBtn');
         const addCidrBtn = document.getElementById('addCidrSetBtn');
         const addPortBtn = document.getElementById('addPortGroupBtn');
+        const addRuleBtn = document.getElementById('addRuleLogicBtn');
         const exportBtn = document.querySelector(selectors.exportButton);
         const importBtn = document.querySelector(selectors.importButton);
         const importInput = document.querySelector(selectors.importInput);
@@ -71,6 +84,13 @@
             renderPortGroups();
             runValidation({ suppressErrorToast: true });
             showToast('New port group added. Add ranges and protocol details to complete configuration.');
+        });
+
+        addRuleBtn?.addEventListener('click', () => {
+            configState.ruleLogic.push(createRuleDefinition());
+            renderRuleLogic();
+            runValidation({ suppressErrorToast: true });
+            showToast('New rule definition added. Provide identifiers, conditions, and analyzer overrides.');
         });
 
         exportBtn?.addEventListener('click', () => {
@@ -116,6 +136,39 @@
         renderRiskLevels();
         renderCidrSets();
         renderPortGroups();
+        renderRuleLogic();
+    }
+
+    async function loadInitialConfigFromApi() {
+        if (!shouldLoadConfigFromApi()) {
+            return;
+        }
+        try {
+            const response = await ruleConfigApi.fetchConfig();
+            if (response && typeof response === 'object' && response.config && typeof response.config === 'object') {
+                applyImportedConfig(response.config);
+                showToast('Loaded configuration from backend.', false);
+            }
+        } catch (error) {
+            console.warn('Failed to load configuration from backend.', error);
+        }
+    }
+
+    function shouldLoadConfigFromApi() {
+        const hasPassthroughData =
+            passthroughConfig &&
+            typeof passthroughConfig === 'object' &&
+            Object.keys(passthroughConfig).length > 0;
+        return !hasPassthroughData && isEditorStateEmpty();
+    }
+
+    function isEditorStateEmpty() {
+        return (
+            configState.riskLevels.length === 0 &&
+            configState.cidrLimitSets.length === 0 &&
+            configState.portGroups.length === 0 &&
+            configState.ruleLogic.length === 0
+        );
     }
 
     function renderRiskLevels() {
@@ -539,6 +592,123 @@
         });
     }
 
+    function renderRuleLogic() {
+        const container = document.querySelector(selectors.ruleList);
+        if (!container) {
+            return;
+        }
+        container.innerHTML = '';
+        configState.ruleLogic.forEach((rule) => {
+            const card = document.createElement('article');
+            card.className = 'config-card rule-logic-card';
+            card.dataset.ruleId = rule.id;
+
+            const header = document.createElement('div');
+            header.className = 'card-header';
+            const title = document.createElement('h3');
+            const updateTitle = () => {
+                const preferred = (rule.label || '').trim() || (rule.key || '').trim();
+                title.textContent = preferred || 'New rule definition';
+            };
+            updateTitle();
+            header.appendChild(title);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'icon-btn danger';
+            deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+            deleteBtn.title = 'Delete rule definition';
+            deleteBtn.addEventListener('click', () => {
+                configState.ruleLogic = configState.ruleLogic.filter((item) => item.id !== rule.id);
+                renderRuleLogic();
+                runValidation();
+                showToast(`Removed rule definition '${(rule.label || rule.key || 'unnamed').trim() || 'unnamed'}'.`);
+            });
+            header.appendChild(deleteBtn);
+            card.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'card-body';
+
+            body.appendChild(
+                createTextField('Rule Identifier', rule.key, (value) => {
+                    rule.key = value;
+                    updateTitle();
+                    runValidation({ suppressErrorToast: true });
+                }, {
+                    placeholder: 'admin_port_exposed',
+                    help: 'Unique key used in the rules YAML mapping.',
+                    errorKey: 'key',
+                }),
+            );
+
+            body.appendChild(
+                createTextField('Rule ID', rule.ruleId, (value) => {
+                    rule.ruleId = value;
+                    runValidation({ suppressErrorToast: true });
+                }, {
+                    placeholder: 'admin_port_exposed',
+                    help: 'Identifier persisted inside the rule definition. Defaults to the rule identifier when omitted.',
+                    errorKey: 'ruleId',
+                }),
+            );
+
+            body.appendChild(
+                createTextField('Label', rule.label, (value) => {
+                    rule.label = value;
+                    updateTitle();
+                    runValidation({ suppressErrorToast: true });
+                }, {
+                    placeholder: 'Administrative Port Exposure',
+                    errorKey: 'label',
+                }),
+            );
+
+            body.appendChild(
+                createTextareaField('Description', rule.description, (value) => {
+                    rule.description = value;
+                    runValidation({ suppressErrorToast: true });
+                }, {
+                    rows: 3,
+                    placeholder: 'Explain what the rule detects and how it should be interpreted.',
+                }),
+            );
+
+            body.appendChild(
+                createTextareaField('Conditions (YAML)', rule.conditionsText, (value) => {
+                    rule.conditionsText = value;
+                    runValidation({ suppressErrorToast: true });
+                }, {
+                    rows: 8,
+                    placeholder: 'logic: all\nconditions: []\ngroups: []',
+                    help: 'Structured condition tree describing how findings are generated.',
+                    errorKey: 'conditions',
+                    monospace: true,
+                    spellcheck: false,
+                }),
+            );
+
+            body.appendChild(
+                createTextareaField('Analyzers (YAML)', rule.analyzersText, (value) => {
+                    rule.analyzersText = value;
+                    runValidation({ suppressErrorToast: true });
+                }, {
+                    rows: 8,
+                    placeholder: 'analyzer_key:\n  enabled: true\n  notes: ...',
+                    help: 'Analyzer-specific overrides including severity tiers and administrative port configuration.',
+                    errorKey: 'analyzers',
+                    monospace: true,
+                    spellcheck: false,
+                }),
+            );
+
+            body.appendChild(createFieldError('general'));
+
+            card.appendChild(body);
+            container.appendChild(card);
+        });
+    }
+
     function createTextField(labelText, value, onInput, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
@@ -623,8 +793,20 @@
         if (options.placeholder) {
             textarea.placeholder = options.placeholder;
         }
+        if (options.monospace) {
+            textarea.classList.add('code-textarea');
+        }
+        if (options.spellcheck !== undefined) {
+            textarea.spellcheck = options.spellcheck;
+        }
         textarea.addEventListener('input', (event) => onInput(event.target.value));
         wrapper.appendChild(textarea);
+        if (options.help) {
+            const help = document.createElement('div');
+            help.className = 'field-hint';
+            help.textContent = options.help;
+            wrapper.appendChild(help);
+        }
         wrapper.appendChild(createFieldError(options.errorKey));
         return wrapper;
     }
@@ -685,6 +867,7 @@
             riskLevels: validateRiskLevels(),
             cidrLimitSets: validateCidrSets(),
             portGroups: validatePortGroups(),
+            ruleLogic: validateRuleLogic(),
         };
         applyValidationState();
         updateExportState();
@@ -696,6 +879,7 @@
         applySectionValidation('.risk-level-card', validationState.riskLevels);
         applySectionValidation('.cidr-card', validationState.cidrLimitSets);
         applySectionValidation('.port-group-card', validationState.portGroups);
+        applySectionValidation('.rule-logic-card', validationState.ruleLogic);
 
         const summary = document.querySelector(selectors.validationSummary);
         if (!summary) {
@@ -705,6 +889,7 @@
             ...Object.values(validationState.riskLevels || {}).flatMap((value) => Object.values(value)),
             ...Object.values(validationState.cidrLimitSets || {}).flatMap((value) => Object.values(value)),
             ...Object.values(validationState.portGroups || {}).flatMap((value) => Object.values(value)),
+            ...Object.values(validationState.ruleLogic || {}).flatMap((value) => Object.values(value)),
         ].filter(Boolean);
 
         if (allErrors.length === 0) {
@@ -724,7 +909,11 @@
 
     function applySectionValidation(selector, sectionErrors) {
         document.querySelectorAll(selector).forEach((card) => {
-            const id = card.dataset.levelId || card.dataset.setId || card.dataset.groupId;
+            const id =
+                card.dataset.levelId ||
+                card.dataset.setId ||
+                card.dataset.groupId ||
+                card.dataset.ruleId;
             const errors = sectionErrors[id] || {};
             let hasError = false;
             card.querySelectorAll('.field-error').forEach((errorEl) => {
@@ -758,6 +947,7 @@
             configState.riskLevels.length > 0 ||
             configState.cidrLimitSets.length > 0 ||
             configState.portGroups.length > 0 ||
+            configState.ruleLogic.length > 0 ||
             Object.keys(passthroughConfig || {}).length > 0;
         exportBtn.disabled = hasErrors || !hasData;
     }
@@ -964,6 +1154,68 @@
         return errors;
     }
 
+    function validateRuleLogic() {
+        const errors = {};
+        const identifierCounts = {};
+        configState.ruleLogic.forEach((rule) => {
+            const ruleErrors = {};
+            const identifier = (rule.key || '').trim();
+            if (!identifier) {
+                ruleErrors.key = 'Rule identifier is required.';
+            } else {
+                const normalized = identifier.toLowerCase();
+                identifierCounts[normalized] = (identifierCounts[normalized] || 0) + 1;
+            }
+
+            const ruleId = (rule.ruleId || '').trim() || identifier;
+            if (!ruleId) {
+                ruleErrors.ruleId = 'Rule ID is required.';
+            }
+
+            if (!(rule.label || '').trim()) {
+                ruleErrors.label = 'Label is required.';
+            }
+
+            const conditionsResult = parseYamlForValidation(rule.conditionsText, {
+                allowEmpty: false,
+                expectObject: true,
+            });
+            if (conditionsResult.error) {
+                ruleErrors.conditions = conditionsResult.error;
+            }
+            rule.parsedConditions = conditionsResult.parsed;
+
+            const analyzersResult = parseYamlForValidation(rule.analyzersText, {
+                allowEmpty: true,
+                expectObject: true,
+                defaultValue: {},
+            });
+            if (analyzersResult.error) {
+                ruleErrors.analyzers = analyzersResult.error;
+            }
+            rule.parsedAnalyzers = analyzersResult.parsed;
+
+            if (Object.keys(ruleErrors).length > 0) {
+                errors[rule.id] = ruleErrors;
+            }
+        });
+
+        Object.entries(identifierCounts).forEach(([identifier, count]) => {
+            if (count > 1) {
+                configState.ruleLogic.forEach((rule) => {
+                    if ((rule.key || '').trim().toLowerCase() === identifier) {
+                        if (!errors[rule.id]) {
+                            errors[rule.id] = {};
+                        }
+                        errors[rule.id].key = 'Rule identifier must be unique.';
+                    }
+                });
+            }
+        });
+
+        return errors;
+    }
+
     function validatePolicy(policy) {
         const errors = {};
         const maxPrefix = toNumber(policy.max_prefix);
@@ -1025,6 +1277,7 @@
             risk_levels: riskLevelsRaw = {},
             cidr_limits: cidrLimitsRaw = {},
             port_groups: portGroupsRaw = {},
+            rules: ruleLogicRaw = {},
             ...rest
         } = parsed;
 
@@ -1032,6 +1285,9 @@
         configState.riskLevels = Object.entries(riskLevelsRaw || {}).map(([name, value]) => createRiskLevelFromYaml(name, value));
         configState.cidrLimitSets = Object.entries(cidrLimitsRaw || {}).map(([name, value]) => createCidrSetFromYaml(name, value));
         configState.portGroups = Object.entries(portGroupsRaw || {}).map(([name, value]) => createPortGroupFromYaml(name, value));
+        configState.ruleLogic = Object.entries(ruleLogicRaw || {}).map(([name, value]) =>
+            createRuleDefinitionFromYaml(name, value),
+        );
 
         renderAll();
         runValidation();
@@ -1142,6 +1398,29 @@
             };
         });
         snapshot.port_groups = portGroups;
+
+        const rules = {};
+        configState.ruleLogic.forEach((rule) => {
+            const key = (rule.key || '').trim();
+            if (!key) {
+                return;
+            }
+            const ruleId = (rule.ruleId || '').trim() || key;
+            const conditions = isPlainObject(rule.parsedConditions)
+                ? cloneObject(rule.parsedConditions)
+                : createDefaultRuleConditions();
+            const analyzers = isPlainObject(rule.parsedAnalyzers)
+                ? cloneObject(rule.parsedAnalyzers)
+                : {};
+            rules[key] = {
+                id: ruleId,
+                label: (rule.label || '').trim() || ruleId,
+                description: (rule.description || '').trim(),
+                conditions,
+                analyzers,
+            };
+        });
+        snapshot.rules = rules;
 
         return snapshot;
     }
@@ -1313,6 +1592,40 @@
         };
     }
 
+    function createRuleDefinition() {
+        return {
+            id: generateId('rule'),
+            key: '',
+            ruleId: '',
+            label: '',
+            description: '',
+            conditionsText: DEFAULT_RULE_CONDITIONS_YAML,
+            analyzersText: DEFAULT_ANALYZERS_YAML,
+            parsedConditions: createDefaultRuleConditions(),
+            parsedAnalyzers: {},
+        };
+    }
+
+    function createRuleDefinitionFromYaml(name, value) {
+        const base = createRuleDefinition();
+        const conditions = value && typeof value === 'object' ? value.conditions : undefined;
+        const analyzers = value && typeof value === 'object' ? value.analyzers : undefined;
+        return {
+            ...base,
+            key: name || '',
+            ruleId: value?.id ? String(value.id) : String(name || ''),
+            label: value?.label ? String(value.label) : '',
+            description: value?.description ? String(value.description) : '',
+            conditionsText: toYamlString(
+                isPlainObject(conditions) ? conditions : createDefaultRuleConditions(),
+                DEFAULT_RULE_CONDITIONS_YAML,
+            ),
+            analyzersText: toYamlString(isPlainObject(analyzers) ? analyzers : {}, DEFAULT_ANALYZERS_YAML),
+            parsedConditions: isPlainObject(conditions) ? cloneObject(conditions) : createDefaultRuleConditions(),
+            parsedAnalyzers: isPlainObject(analyzers) ? cloneObject(analyzers) : {},
+        };
+    }
+
     function createRange() {
         return {
             id: generateId('range'),
@@ -1374,6 +1687,83 @@
             .split(/[,\n]/)
             .map((item) => item.trim())
             .filter(Boolean);
+    }
+
+    function parseYamlForValidation(text, options = {}) {
+        const { allowEmpty = true, expectObject = false, defaultValue = null } = options;
+        const raw = typeof text === 'string' ? text.trim() : '';
+        if (!raw) {
+            if (allowEmpty) {
+                if (defaultValue !== null && defaultValue !== undefined) {
+                    return { parsed: defaultValue, error: null };
+                }
+                if (expectObject) {
+                    return { parsed: {}, error: null };
+                }
+                return { parsed: null, error: null };
+            }
+            return { parsed: null, error: 'Value is required.' };
+        }
+        try {
+            const parsed = window.jsyaml.load(raw);
+            if (expectObject && (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))) {
+                return { parsed: null, error: 'YAML must resolve to an object.' };
+            }
+            if (parsed === undefined || parsed === null) {
+                if (defaultValue !== null && defaultValue !== undefined) {
+                    return { parsed: defaultValue, error: null };
+                }
+                if (expectObject) {
+                    return { parsed: {}, error: null };
+                }
+            }
+            return { parsed: parsed ?? defaultValue ?? null, error: null };
+        } catch (error) {
+            return { parsed: null, error: `Invalid YAML: ${error.message}` };
+        }
+    }
+
+    function createDefaultRuleConditions() {
+        return {
+            logic: 'all',
+            conditions: [],
+            groups: [],
+        };
+    }
+
+    function isPlainObject(value) {
+        return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    function cloneObject(value) {
+        if (!isPlainObject(value)) {
+            return {};
+        }
+        try {
+            return JSON.parse(JSON.stringify(value));
+        } catch (error) {
+            console.error('Failed to clone object value for rule logic.', error);
+            return { ...value };
+        }
+    }
+
+    function toYamlString(value, fallback = '') {
+        if (value === undefined || value === null) {
+            return fallback;
+        }
+        try {
+            if (!window.jsyaml?.dump) {
+                return fallback;
+            }
+            const dumped = window.jsyaml.dump(value, { lineWidth: 120 });
+            if (typeof dumped === 'string' && dumped.trim().length > 0) {
+                return dumped.endsWith('\n') ? dumped : `${dumped}\n`;
+            }
+            return fallback;
+        } catch (error) {
+            console.error('Failed to convert value to YAML string.', error);
+            return fallback;
+        }
     }
 
     function toNumber(value) {
@@ -1456,6 +1846,9 @@
             configState.portGroups = Array.isArray(storedState.portGroups)
                 ? storedState.portGroups.map((entry) => rehydratePortGroup(entry))
                 : [];
+            configState.ruleLogic = Array.isArray(storedState.ruleLogic)
+                ? storedState.ruleLogic.map((entry) => rehydrateRuleDefinition(entry))
+                : [];
         } catch (error) {
             console.error('Failed to restore cached admin state.', error);
             try {
@@ -1479,6 +1872,7 @@
                 configState.riskLevels.length > 0 ||
                 configState.cidrLimitSets.length > 0 ||
                 configState.portGroups.length > 0 ||
+                configState.ruleLogic.length > 0 ||
                 passthroughHasData;
             if (!hasData) {
                 window.localStorage.removeItem(STORAGE_KEY);
@@ -1500,6 +1894,7 @@
             riskLevels: configState.riskLevels.map((level) => serializeRiskLevel(level)),
             cidrLimitSets: configState.cidrLimitSets.map((set) => serializeCidrSet(set)),
             portGroups: configState.portGroups.map((group) => serializePortGroup(group)),
+            ruleLogic: configState.ruleLogic.map((rule) => serializeRuleDefinition(rule)),
         };
     }
 
@@ -1605,6 +2000,38 @@
             description: group?.description ? String(group.description) : '',
             protocol,
             ranges,
+        };
+    }
+
+    function serializeRuleDefinition(rule) {
+        if (!rule || typeof rule !== 'object') {
+            const base = createRuleDefinition();
+            return {
+                id: base.id,
+                key: base.key,
+                ruleId: base.ruleId,
+                label: base.label,
+                description: base.description,
+                conditionsText: base.conditionsText,
+                analyzersText: base.analyzersText,
+            };
+        }
+        const conditionsText =
+            typeof rule.conditionsText === 'string' && rule.conditionsText.trim().length > 0
+                ? rule.conditionsText
+                : DEFAULT_RULE_CONDITIONS_YAML;
+        const analyzersText =
+            typeof rule.analyzersText === 'string' && rule.analyzersText.trim().length > 0
+                ? rule.analyzersText
+                : DEFAULT_ANALYZERS_YAML;
+        return {
+            id: rule.id,
+            key: rule.key ? String(rule.key) : '',
+            ruleId: rule.ruleId ? String(rule.ruleId) : '',
+            label: rule.label ? String(rule.label) : '',
+            description: rule.description ? String(rule.description) : '',
+            conditionsText,
+            analyzersText,
         };
     }
 
@@ -1741,6 +2168,43 @@
         };
     }
 
+    function rehydrateRuleDefinition(raw) {
+        const base = createRuleDefinition();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        const conditionsText =
+            typeof raw.conditionsText === 'string' && raw.conditionsText.trim().length > 0
+                ? raw.conditionsText
+                : DEFAULT_RULE_CONDITIONS_YAML;
+        const analyzersText =
+            typeof raw.analyzersText === 'string' && raw.analyzersText.trim().length > 0
+                ? raw.analyzersText
+                : DEFAULT_ANALYZERS_YAML;
+        const conditionsResult = parseYamlForValidation(conditionsText, {
+            allowEmpty: false,
+            expectObject: true,
+            defaultValue: createDefaultRuleConditions(),
+        });
+        const analyzersResult = parseYamlForValidation(analyzersText, {
+            allowEmpty: true,
+            expectObject: true,
+            defaultValue: {},
+        });
+        return {
+            ...base,
+            id: raw.id || base.id,
+            key: raw.key ? String(raw.key) : '',
+            ruleId: raw.ruleId ? String(raw.ruleId) : '',
+            label: raw.label ? String(raw.label) : '',
+            description: raw.description ? String(raw.description) : '',
+            conditionsText,
+            analyzersText,
+            parsedConditions: conditionsResult.parsed ?? createDefaultRuleConditions(),
+            parsedAnalyzers: analyzersResult.parsed ?? {},
+        };
+    }
+
     function clonePassthroughConfig() {
         if (!passthroughConfig || typeof passthroughConfig !== 'object') {
             return {};
@@ -1751,6 +2215,74 @@
             console.error('Failed to clone passthrough configuration for persistence.', error);
             return {};
         }
+    }
+
+    function createRuleConfigApi() {
+        async function request(path, options = {}) {
+            if (typeof fetch !== 'function') {
+                throw new Error('Fetch API is not available in this environment.');
+            }
+            const { method = 'GET', token, body, signal } = options;
+            const headers = { Accept: 'application/json' };
+            if (body !== undefined) {
+                headers['Content-Type'] = 'application/json';
+            }
+            if (typeof token === 'string' && token.trim().length > 0) {
+                const trimmed = token.trim();
+                headers.Authorization = trimmed.toLowerCase().startsWith('bearer ')
+                    ? trimmed
+                    : `Bearer ${trimmed}`;
+            }
+            const response = await fetch(path, {
+                method,
+                headers,
+                body: body !== undefined ? JSON.stringify(body) : undefined,
+                signal,
+            });
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => '');
+                throw new Error(errorText || `Request to ${path} failed with status ${response.status}`);
+            }
+            if (response.status === 204) {
+                return null;
+            }
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                return response.json();
+            }
+            return null;
+        }
+
+        return {
+            fetchConfig(options = {}) {
+                return request('/api/config/rules', options);
+            },
+            fetchHistory(options = {}) {
+                const { limit = 20, token, signal } = options;
+                const params = new URLSearchParams();
+                if (limit !== undefined && limit !== null) {
+                    params.set('limit', String(limit));
+                }
+                const query = params.toString();
+                const path = `/api/config/rules/history${query ? `?${query}` : ''}`;
+                return request(path, { token, signal });
+            },
+            patchConfig(changes, options = {}) {
+                if (!changes || typeof changes !== 'object' || Object.keys(changes).length === 0) {
+                    return Promise.reject(new Error('Changes payload must be a non-empty object.'));
+                }
+                const payload = { changes: { ...changes } };
+                if (options.message && typeof options.message === 'string') {
+                    payload.message = options.message;
+                }
+                return request('/api/config/rules', {
+                    method: 'PATCH',
+                    token: options.token,
+                    signal: options.signal,
+                    body: payload,
+                });
+            },
+        };
     }
 
     function showToast(message, isError = false) {
