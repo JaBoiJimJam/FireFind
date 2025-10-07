@@ -940,13 +940,25 @@
         .form-field input,
         .form-field select,
         .form-field textarea {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(78, 204, 163, 0.2);
+            background: rgba(12, 16, 18, 0.92);
+            border: 1px solid rgba(78, 204, 163, 0.35);
             border-radius: 10px;
             padding: 0.6rem 0.75rem;
             color: var(--text-light);
             font-family: 'Roboto Mono', monospace;
             font-size: 0.95rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+        }
+
+        .form-field input::placeholder,
+        .form-field textarea::placeholder {
+            color: rgba(255, 255, 255, 0.55);
+        }
+
+        .form-field select option,
+        .form-field select optgroup {
+            background-color: var(--card-bg);
+            color: var(--text-light);
         }
 
         .form-field input:focus,
@@ -954,7 +966,8 @@
         .form-field textarea:focus {
             outline: none;
             border-color: var(--primary-green);
-            box-shadow: 0 0 0 2px rgba(78, 204, 163, 0.15);
+            box-shadow: 0 0 0 2px rgba(78, 204, 163, 0.2);
+            background: rgba(15, 22, 24, 0.98);
         }
 
         .textarea-field textarea {
