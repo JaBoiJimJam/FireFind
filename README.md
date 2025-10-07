@@ -122,5 +122,19 @@ required to execute these tests; they will be skipped when neither is available.
 
 Additional tooling such as flake8 and black can be introduced once the project grows.
 
+## Testing Strategy
+
+### Backend
+- Unit tests covering configuration schema validation and helper functions that transform rule definitions.
+- Integration tests for `GET/PUT /config/rules` that exercise both successful updates and validation error handling.
+
+### Frontend
+- Component tests (for example, with React Testing Library) validating `RuleList` and `RuleEditor` interactions.
+- Cypress or Playwright end-to-end tests for creating, updating, and deleting rule logic while verifying persistence.
+
+### Manual QA Checklist
+- Confirm existing rules can be edited, new rules can be created, and YAML import/export maintain parity.
+- Verify backward compatibility by loading legacy YAML configurations that omit rule logic.
+
 ## Vendor Support
 FireFind currently supports Fortinet firewalls. Support for additional vendors is planned.
