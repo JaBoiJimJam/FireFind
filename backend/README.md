@@ -192,6 +192,28 @@ Executive summary with:
 - See `requirements.txt` for package dependencies
 - Windows/Linux/macOS compatible
 
+### Testing
+
+Backend and frontend suites ship with unit, integration, and end-to-end
+coverage. Common commands:
+
+```bash
+# Backend validation helpers and configuration API endpoints
+pytest backend/tests/test_config_schema.py
+pytest backend/tests/test_config_api.py::test_get_rules_populates_defaults_for_empty_file
+
+# Frontend rule management components (Jest)
+npm run test:frontend
+
+# Install Playwright browsers once, then execute UI CRUD flows
+npx playwright install --with-deps
+npm run test:e2e
+```
+
+`npm run test:e2e` automatically launches `./start_dev.sh`, drives the admin
+console to create/update/delete a rule, and verifies the configuration persists
+across reloads.
+
 ## Troubleshooting
 
 ### Unicode Encoding Issues
