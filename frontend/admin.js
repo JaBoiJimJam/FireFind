@@ -20,6 +20,8 @@
         portGroups: {},
     };
     let lastValidationMessage = '';
+    const defaultValidationOptions = { suppressErrorToast: false };
+    let validationOptions = { ...defaultValidationOptions };
 
     const selectors = {
         riskList: '#riskLevelsList',
@@ -49,22 +51,22 @@
         addRiskBtn?.addEventListener('click', () => {
             configState.riskLevels.push(createRiskLevel());
             renderRiskLevels();
-            runValidation();
-            showToast('New risk level added.');
+            runValidation({ suppressErrorToast: true });
+            showToast('New risk level added. Populate the fields to finish configuring it.');
         });
 
         addCidrBtn?.addEventListener('click', () => {
             configState.cidrLimitSets.push(createCidrSet());
             renderCidrSets();
-            runValidation();
-            showToast('New CIDR limit set added.');
+            runValidation({ suppressErrorToast: true });
+            showToast('New CIDR limit set added. Provide policy details to complete setup.');
         });
 
         addPortBtn?.addEventListener('click', () => {
             configState.portGroups.push(createPortGroup());
             renderPortGroups();
-            runValidation();
-            showToast('New port group added.');
+            runValidation({ suppressErrorToast: true });
+            showToast('New port group added. Add ranges and protocol details to complete configuration.');
         });
 
         exportBtn?.addEventListener('click', () => {
@@ -670,7 +672,11 @@
         return error;
     }
 
-    function runValidation() {
+    function runValidation(options = {}) {
+        validationOptions = {
+            ...defaultValidationOptions,
+            ...(options || {}),
+        };
         validationState = {
             riskLevels: validateRiskLevels(),
             cidrLimitSets: validateCidrSets(),
@@ -678,6 +684,7 @@
         };
         applyValidationState();
         updateExportState();
+        validationOptions = { ...defaultValidationOptions };
     }
 
     function applyValidationState() {
@@ -703,10 +710,10 @@
             const firstError = allErrors[0];
             summary.textContent = firstError;
             summary.classList.add('has-errors');
-            if (lastValidationMessage !== firstError) {
+            if (!validationOptions.suppressErrorToast && lastValidationMessage !== firstError) {
                 showToast(firstError, true);
-                lastValidationMessage = firstError;
             }
+            lastValidationMessage = firstError;
         }
     }
 
