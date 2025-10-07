@@ -36,7 +36,7 @@ cd backend && python run_backend.py
 Or invoke the CLI directly:
 
 ```bash
-python -m firefind.cli --vendor fortinet --input samples \
+python -m firefind.cli --vendor generic --input samples \
   --out-csv ../out/findings.csv --out-pdf ../out/report.pdf \
   --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
 ```
@@ -213,5 +213,7 @@ Additional tooling such as flake8 and black can be introduced once the project g
 - Confirm existing rules can be edited, new rules can be created, and YAML import/export maintain parity.
 - Verify backward compatibility by loading legacy YAML configurations that omit rule logic.
 
-## Vendor Support
-FireFind currently supports Fortinet firewalls. Support for additional vendors is planned.
+## Column Mappings
+FireFind ships with a vendor-neutral column mapping labelled `generic`. Custom
+profiles can be added to `rules/vendor_mappings.yaml` when ingesting exports
+that use different field names.

@@ -8,20 +8,26 @@ openpyxl>=3.1.0
 xlrd>=2.0.0
 
 # Web API
-fastapi>=0.110.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.6
-httpx>=0.27.0
+fastapi
+uvicorn[standard]
+python-multipart
+httpx
 
 # PDF generation - Using fpdf for professional reports
 fpdf2>=2.7.0
+reportlab
+
+# Data visualization
+matplotlib
+seaborn
 
 # Network analysis
 netaddr>=0.8.0
 
 # Development dependencies
-pytest>=7.0.0
-pytest-cov>=4.0.0
+pytest
+pytest-asyncio
+pytest-cov
 black>=23.0.0
 flake8>=6.0.0
 

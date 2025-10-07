@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FireFind - Reports</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Force header size reduction -->
+    <style>
+        body header {
+            padding: 0 !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            overflow: hidden !important;
+        }
+        
+        body header nav {
+            padding: 0.25rem 2rem !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            line-height: 1 !important;
+        }
+        
+        body header nav .logo {
+            height: 50px !important;
+            width: auto !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        
+        body header nav .logo .logo-img {
+            height: 30px !important;
+            width: auto !important;
+            object-fit: scale-down !important;
+            object-position: left center !important;
+            display: block !important;
+        }
+    </style>
+
+    <style>
+        /* Remove all animations for reports.html page only */
+        * {
+            animation: none !important;
+        }
+        
+        /* Keep the grid background and gradient but remove animation */
+        .cyber-grid {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background-image: 
+                linear-gradient(rgba(78, 204, 163, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(78, 204, 163, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            /* Remove the gridMove animation */
+            animation: none !important;
+        }
+        
+        /* Keep the background gradient */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(180deg, #0a0a0a 0%, #0f1f1a 100%);
+            overflow: hidden;
+        }
+        
+        /* Remove scanning line animation */
+        .scan-line {
+            display: none !important;
+        }
+        
+        /* Remove all transform animations and transitions */
+        .drop-zone::before,
+        .metric-card::before,
+        .reports-section::before {
+            display: none !important;
+        }
+        
+        /* Remove hover transforms */
+        .drop-zone:hover {
+            transform: none !important;
+        }
+        
+        .file-card:hover {
+            transform: none !important;
+        }
+        
+        .metric-card:hover {
+            transform: none !important;
+        }
+        
+        .report-card:hover {
+            transform: none !important;
+        }
+        
+        .btn:hover {
+            transform: none !important;
+        }
+        
+        .remove-btn:hover {
+            transform: none !important;
+        }
+        
+        /* Remove button ripple effect */
+        .btn::before {
+            display: none !important;
+        }
+        
+        /* Hide any existing particles */
+        div[style*="position: fixed"][style*="width: 3px"][style*="height: 3px"] {
+            display: none !important;
+        }
+
+        /* Reports page specific styles */
+        .reports-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem;
+            min-height: calc(100vh - 200px);
+        }
+
+        .reports-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .reports-header h1 {
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            margin-bottom: 1rem;
+            color: var(--primary-green);
+            font-weight: 700;
+        }
+
+        .reports-header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .reports-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .report-item {
+            background: linear-gradient(135deg, var(--card-bg), rgba(78, 204, 163, 0.02));
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .report-item:hover {
+            border-color: var(--primary-green);
+            box-shadow: 0 10px 30px rgba(78, 204, 163, 0.2);
+        }
+
+        .report-type {
+            display: inline-block;
+            background: var(--primary-green);
+            color: var(--dark-bg);
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+        }
+
+        .report-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-bottom: 0.5rem;
+            word-break: break-word;
+        }
+
+        .report-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .report-date {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .report-size {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .report-actions {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, var(--primary-green), var(--neon-green));
+            color: var(--dark-bg);
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .download-btn:hover {
+            box-shadow: 0 5px 15px rgba(78, 204, 163, 0.4);
+        }
+
+        .view-btn {
+            background: transparent;
+            color: var(--primary-green);
+            border: 2px solid var(--primary-green);
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .view-btn:hover {
+            background: var(--primary-green);
+            color: var(--dark-bg);
+        }
+
+        .delete-btn {
+            background: transparent;
+            color: #ff4757;
+            border: 2px solid #ff4757;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .delete-btn:hover {
+            background: #ff4757;
+            color: white;
+        }
+
+        .no-reports {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .no-reports-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .refresh-btn {
+            background: transparent;
+            color: var(--primary-green);
+            border: 2px solid var(--primary-green);
+            padding: 1rem 2rem;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            margin-top: 2rem;
+        }
+
+        .refresh-btn:hover {
+            background: var(--primary-green);
+            color: var(--dark-bg);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary-green);
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <script>
+        // Override the createParticle function to do nothing
+        function createParticle() {
+            // Do nothing - no particles on reports page
+        }
+        
+        // Clear any existing particle interval
+        if (typeof particleInterval !== 'undefined') {
+            clearInterval(particleInterval);
+        }
+    </script>
+</head>
+<body>
+    <!-- Background -->
+    <div class="bg-animation">
+        <div class="cyber-grid"></div>
+    </div>
+
+    <!-- Scanning Line -->
+    <div class="scan-line"></div>
+
+    <!-- Header -->
+    <header id="header">
+        <nav>
+            <a href="#" class="logo">
+                <img src="firefind-logo.png" alt="FireFind" class="logo-img" style="height: auto !important; width: 180px !important; max-width: 200px !important; min-width: 160px !important;">
+            </a>
+            <ul class="nav-links">
+                <li><a href="index.html" onclick="handleAboutClick(event)">About</a></li>
+                <li><a href="scan.html">Scan</a></li>
+                <li><a href="reports.html">Reports</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <div class="reports-content">
+            <div class="reports-header">
+                <h1>Analysis Reports</h1>
+                <p>Download and view your previous firewall security analysis reports</p>
+                <button class="refresh-btn" onclick="loadReports()">
+                    🔄 Refresh Reports
+                </button>
+            </div>
+
+            <div id="reportsContainer">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading reports...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2025 FireFind by Triskele Labs | Open-Source Security Intelligence | Version 1.0.0</p>
+    </footer>
+    
+    <script src="app.js"></script>
+    <script>
+        // Load reports on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadReports();
+        });
+
+        async function loadReports() {
+            const container = document.getElementById('reportsContainer');
+            
+            // Show loading state
+            container.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading reports from out folder...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('http://localhost:8000/api/reports');
+                
+                if (!response.ok) {
+                    throw new Error(`Server responded with ${response.status}`);
+                }
+
+                const reports = await response.json();
+                displayReports(reports);
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                showServerError();
+            }
+        }
+
+        function displayReports(reports) {
+            const container = document.getElementById('reportsContainer');
+            
+            if (!reports || reports.length === 0) {
+                container.innerHTML = `
+                    <div class="no-reports">
+                        <div class="no-reports-icon">📊</div>
+                        <h3>No Reports Found</h3>
+                        <p>No reports found in the <strong>FireFind/out</strong> folder.</p>
+                        <p style="font-size: 0.9rem; margin-top: 1rem; color: var(--text-muted);">
+                            Generate reports by running scans, and they'll appear here automatically.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            const reportsHTML = reports.map(report => {
+                const reportType = report.type.toUpperCase();
+                
+                // Extract date/time from filename
+                const dateMatch = report.name.match(/(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})/);
+                let displayName = 'Report';
+                let dateTime = 'Unknown Date';
+                
+                if (dateMatch) {
+                    const datePart = dateMatch[1]; // 2025-10-01
+                    const timePart = dateMatch[2].replace(/-/g, ':'); // 12:51:38
+                    
+                    // Format the date nicely
+                    const date = new Date(datePart + 'T' + timePart);
+                    dateTime = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    }) + ' at ' + date.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+                
+                // Set display name based on file type and content
+                if (report.type === 'pdf') {
+                    displayName = 'Report';
+                } else if (report.type === 'csv' || report.type === 'xlsx') {
+                    displayName = 'Findings';
+                }
+                
+                return `
+                    <div class="report-item">
+                        <div class="report-type">${reportType}</div>
+                        <div class="report-name">${displayName}</div>
+                        <div class="report-meta">
+                            <div class="report-date">
+                                📅 ${dateTime}
+                            </div>
+                            <div class="report-size">
+                                💾 ${formatFileSize(report.size)}
+                            </div>
+                        </div>
+                        <div class="report-actions">
+                            <a href="http://localhost:8000/out/${encodeURIComponent(report.name)}" 
+                               class="download-btn" download>
+                                ⬇️ Download
+                            </a>
+                            ${report.type === 'pdf' ? 
+                                `<a href="http://localhost:8000/out/${encodeURIComponent(report.name)}" 
+                                   class="view-btn" target="_blank">👁️ View</a>` : 
+                                ''
+                            }
+                            <button class="delete-btn" onclick="deleteReport('${encodeURIComponent(report.name)}')" 
+                                    title="Delete this report">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="reports-grid">
+                    ${reportsHTML}
+                </div>
+            `;
+        }
+
+        function showServerError() {
+            const container = document.getElementById('reportsContainer');
+            container.innerHTML = `
+                <div class="no-reports" style="max-width: 600px; margin: 0 auto;">
+                    <div class="no-reports-icon" style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.7;">⚠️</div>
+                    <h3 style="color: var(--text-danger);">Server Error</h3>
+                    <p style="color: var(--text-muted);">
+                        There was an error communicating with the server. Please try again later.
+                    </p>
+                    <button class="refresh-btn" onclick="loadReports()" style="margin-top: 2rem;">
+                        🔄 Retry Now
+                    </button>
+                </div>
+            `;
+        }
+
+        function formatFileSize(size) {
+            const units = ['Bytes', 'KB', 'MB', 'GB'];
+            let index = 0;
+            let formattedSize = size;
+
+            while (formattedSize >= 1024 && index < units.length - 1) {
+                formattedSize /= 1024;
+                index++;
+            }
+
+            return `${formattedSize.toFixed(1)} ${units[index]}`;
+        }
+
+        function deleteReport(filename) {
+            const decodedFilename = decodeURIComponent(filename);
+            
+            if (confirm(`Are you sure you want to delete "${decodedFilename}"?\n\nThis action cannot be undone.`)) {
+                // Make API call to delete the file
+                fetch(`http://localhost:8000/api/reports/${filename}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (response.ok) {
+                        showToast('Report deleted successfully', 'success');
+                        loadReports(); // Refresh the list
+                    } else {
+                        throw new Error('Failed to delete report');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting report:', error);
+                    showToast('Failed to delete report', 'error');
+                });
+            }
+        }
+
+        function openSpreadsheet(filename, fileType) {
+            const fileUrl = `http://localhost:8000/out/${filename}`;
+            
+            if (fileType === 'csv') {
+                // CSV files can be opened in browser
+                window.open(fileUrl, '_blank');
+                showToast('CSV file opened in new tab', 'success');
+            } else if (fileType === 'xlsx') {
+                // For Excel files, try to open with system default
+                if (navigator.platform.includes('Win')) {
+                    try {
+                        window.location.href = `ms-excel:ofe|u|${fileUrl}`;
+                        showToast('Opening with Excel...', 'info');
+                    } catch (e) {
+                        window.open(fileUrl, '_blank');
+                        showToast('File downloaded. Open with Excel.', 'info');
+                    }
+                } else {
+                    window.open(fileUrl, '_blank');
+                    showToast('File opened. If Excel is installed, it should open automatically.', 'info');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

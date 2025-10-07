@@ -18,6 +18,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health", include_in_schema=False)
 async def health() -> dict[str, str]:
@@ -79,7 +87,5 @@ async def delete_report(filename: str) -> dict[str, str]:
     return {"message": f"File {filename} deleted successfully"}
 
 
-# Serve the frontend directory if it exists
-FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
-if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+# Serve static files from frontend directory (this should be last)
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
