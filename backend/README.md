@@ -4,7 +4,7 @@ A comprehensive firewall configuration analysis tool that identifies security vu
 
 ## Features
 
-- **Multi-vendor Support**: Currently supports Fortinet firewalls with extensible architecture for other vendors
+- **Multi-vendor Support**: Supports Fortinet, Sophos, Barracuda, Check Point, and WatchGuard exports with an extensible architecture for additional vendors
 - **CSV/XLSX Input**: Analyzes firewall configurations from exported CSV or Excel files
 - **Security Analysis**: Identifies common security issues like overly permissive rules, admin port exposure, and broad CIDR ranges
 - **Dual Output**: Generates both CSV reports and PDF summaries
@@ -113,7 +113,7 @@ Approved updates are persisted to the configured YAML file (defaults to `rules/r
 
 ### CLI Parameters
 
-- `--vendor`: Firewall vendor (currently supports: `fortinet`)
+- `--vendor`: Firewall vendor (`fortinet`, `sophos`, `barracuda`, `checkpoint`, `watchguard`)
 - `--input`: Directory containing CSV/XLSX firewall configuration files
 - `--out-csv`: Output path for CSV findings report
 - `--out-pdf`: Output path for PDF summary report
@@ -161,12 +161,40 @@ rules via the API.
 
 FireFind accepts CSV or XLSX files with firewall rule data. The tool automatically maps vendor-specific column names to standard fields using the vendor mappings configuration.
 
-**Example Fortinet columns**:
-- Rule ID: `Seq #`, `ID`, `Policyid`
-- Source: `Source Value`, `Source`, `Address`
-- Destination: `Destination Value`, `Destination`, `Address.1`
-- Service: `Service`, `Service.1`, `Port`
-- Action: `Action`
+- **Example Fortinet columns**:
+  - Rule ID: `Seq #`, `ID`, `Policyid`
+  - Source: `Source Value`, `Source`, `Address`
+  - Destination: `Destination Value`, `Destination`, `Address.1`
+  - Service: `Service`, `Service.1`, `Port`
+  - Action: `Action`
+
+- **Example Sophos columns**:
+  - Rule ID: `Rule ID`
+  - Source: `Source Networks`
+  - Destination: `Destination Networks`
+  - Service: `Services`
+  - Action: `Action`
+
+- **Example Barracuda columns**:
+  - Rule ID: `Rule #`
+  - Source: `Source`
+  - Destination: `Destination`
+  - Service: `Service`
+  - Action: `Action`
+
+- **Example Check Point columns**:
+  - Rule ID: `Name`
+  - Source: `Source`
+  - Destination: `Destination`
+  - Service: `Services & Applications`
+  - Action: `Action`
+
+- **Example WatchGuard columns**:
+  - Rule ID: `Policy Name`
+  - Source: `From`
+  - Destination: `To`
+  - Service: `Protocols` / `Port`
+  - Action: `Action` / `Enable`
 
 ## Output Reports
 

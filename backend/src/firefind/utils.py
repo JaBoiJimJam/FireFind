@@ -10,7 +10,8 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .model import Rule
-from .vendors.utils import pick_first_present
+from .vendors import apply_vendor_normalizer
+from .vendors.utils import pick_first_present, normalize_action
 
 
 # Mapping of common Fortinet service object names to well-known ports.  These
@@ -123,13 +124,32 @@ def pick_mapping(vendor_mappings: dict, vendor: str) -> dict:
     v = vendor.lower()
     for k, val in vendor_mappings.items():
         if k.lower() == v:
-            return val
-    return vendor_mappings.get(vendor, {})
+            result = dict(val or {})
+            result["__vendor__"] = k
+            return result
+    mapping = vendor_mappings.get(vendor, {})
+    if isinstance(mapping, dict):
+        result = dict(mapping)
+        result["__vendor__"] = vendor
+        return result
+    return {}
 
 
 def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
     """Extract protocol and port information from a raw row."""
-    svc_port = pick_first_present(row, ["Service.1", "Service Port", "Port", "DPort"])
+    svc_port = pick_first_present(
+        row,
+        [
+            "Service.1",
+            "Service Port",
+            "Service Ports",
+            "Port",
+            "Ports",
+            "Dst Port",
+            "Destination Port",
+            "DPort",
+        ],
+    )
     if svc_port.strip():
         parts = [p.strip() for p in str(svc_port).splitlines() if p.strip()]
         return ("any", ",".join(parts))
@@ -176,18 +196,24 @@ def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
     return ("any", "any")
 
 
-def to_rule(row: dict, mapping: dict) -> Rule | None:
+def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | None:
     """Map a raw row into a :class:`Rule` or return ``None`` for noise."""
-    rid = pick_first_present(row, mapping.get("rule_id", [])) or "(unknown)"
-    action = pick_first_present(row, mapping.get("action", [])) or "allow"
-    src = pick_first_present(row, mapping.get("src", [])) or "any"
-    dst = pick_first_present(row, mapping.get("dst", [])) or "any"
-    service = pick_first_present(row, mapping.get("service", ["Service"])) or ""
-    proto, port = sniff_proto_port(row, service_hint=service)
-    comment = pick_first_present(row, mapping.get("comment", [])) or ""
-    srcintf = pick_first_present(row, mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
-    dstintf = pick_first_present(row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
-    source_file = str(row.get("_source_file", ""))
+    vendor_name = vendor or mapping.get("__vendor__", "")
+    normalized_row = apply_vendor_normalizer(vendor_name, row, mapping)
+
+    rid = pick_first_present(normalized_row, mapping.get("rule_id", [])) or "(unknown)"
+    action_raw = pick_first_present(normalized_row, mapping.get("action", [])) or "allow"
+    action = normalize_action(action_raw)
+    src = pick_first_present(normalized_row, mapping.get("src", [])) or "any"
+    dst = pick_first_present(normalized_row, mapping.get("dst", [])) or "any"
+    service = pick_first_present(normalized_row, mapping.get("service", ["Service"])) or ""
+    proto, port = sniff_proto_port(normalized_row, service_hint=service)
+    if proto.strip().lower() in {"", "any"}:
+        proto = pick_first_present(normalized_row, mapping.get("proto", ["Protocol", "Proto"])) or "any"
+    comment = pick_first_present(normalized_row, mapping.get("comment", [])) or ""
+    srcintf = pick_first_present(normalized_row, mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
+    dstintf = pick_first_present(normalized_row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
+    source_file = str(normalized_row.get("_source_file", ""))
 
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None

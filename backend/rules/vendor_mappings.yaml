@@ -9,3 +9,58 @@ fortinet:
   service: ["Service", "service"]
   srcintf: ["Srcintf", "Source Interface", "srcintf", "src_interface"]
   dstintf: ["Dstintf", "Destination Interface", "dstintf", "dst_interface"]
+
+# Sophos XG / Sophos Firewall Manager exports list both network and zone
+# columns alongside a combined services column.  The mappings below cover the
+# variants seen in CSV and XLSX downloads from the control centre.
+sophos:
+  rule_id: ["Rule ID", "Rule", "ID"]
+  src: ["Source Networks", "Source Network", "Source", "Source Zones"]
+  dst: ["Destination Networks", "Destination Network", "Destination", "Destination Zones"]
+  proto: ["Protocol", "Protocols"]
+  port: ["Service Port", "Port", "Ports", "Service Ports"]
+  action: ["Action", "Rule Action"]
+  comment: ["Comments", "Comment", "Description"]
+  service: ["Services", "Service", "Service Details"]
+  srcintf: ["Source Zones", "Source Zone"]
+  dstintf: ["Destination Zones", "Destination Zone"]
+
+# Barracuda CloudGen and firewall control centre exports typically label rules
+# with a sequential "Rule #" field and surface the effective service in a
+# "Service" column with optional destination port columns.
+barracuda:
+  rule_id: ["Rule #", "Rule", "ID"]
+  src: ["Source", "Source Address", "Source Network"]
+  dst: ["Destination", "Destination Address", "Destination Network"]
+  proto: ["Protocol", "Protocols"]
+  port: ["Service Port", "Port", "Ports", "Destination Port", "DPort"]
+  action: ["Action", "Policy Action", "Firewall Action"]
+  comment: ["Notes", "Comments", "Comment", "Description"]
+  service: ["Service", "Services", "Service Name"]
+
+# Check Point SmartConsole exports use the "Services & Applications" column
+# for service objects and a free-form comments field for operator notes.
+checkpoint:
+  rule_id: ["Name", "Rule Number", "Rule Name", "No."]
+  src: ["Source", "Source Name", "Source Column"]
+  dst: ["Destination", "Destination Name", "Destination Column"]
+  proto: ["Protocol", "Protocols"]
+  port: ["Service Port", "Port", "Destination Port"]
+  action: ["Action", "Rule Action"]
+  comment: ["Comments", "Comment"]
+  service: ["Services & Applications", "Services", "Applications"]
+  srcintf: ["Source Zone", "Source Interface"]
+  dstintf: ["Destination Zone", "Destination Interface"]
+
+# WatchGuard exports expose the traffic direction as "From"/"To" columns and
+# split protocol/port details.  The action column may be labelled "Enable" in
+# some UI versions when a policy is disabled.
+watchguard:
+  rule_id: ["Policy Name", "Name", "ID"]
+  src: ["From", "Source"]
+  dst: ["To", "Destination"]
+  proto: ["Protocols", "Protocol"]
+  port: ["Port", "Ports", "Service Port", "Service Ports"]
+  action: ["Action", "Policy Action", "Enable"]
+  comment: ["Comments", "Comment", "Description"]
+  service: ["Service", "Policy Type"]

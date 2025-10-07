@@ -41,6 +41,10 @@ python -m firefind.cli --vendor fortinet --input samples \
   --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
 ```
 
+`--vendor` accepts `fortinet`, `sophos`, `barracuda`, `checkpoint`, or
+`watchguard`, each of which uses tailored column mappings and parsing helpers
+for their exported rule tables.
+
 To view the current application version:
 
 ```bash

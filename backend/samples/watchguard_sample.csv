@@ -1,0 +1,2 @@
+"Policy Name","From","To","Protocols","Port","Action","Comments"
+"WG-1","Any","External","TCP","22","Allow","SSH exposure"
