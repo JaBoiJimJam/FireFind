@@ -107,8 +107,12 @@ def parse(
     raw_rows = []
     if input_path.is_dir():
         typer.echo(f"Input is a directory → scanning for CSV/XLSX in {input_path}")
-        files = list(sorted(input_path.glob("*.csv"))) + list(sorted(input_path.glob("*.xlsx")))
-        
+        files = [
+            f
+            for f in sorted(input_path.iterdir())
+            if f.is_file() and f.suffix.lower() in {".csv", ".xlsx"}
+        ]
+
         # Filter out temporary Excel files (starting with ~$)
         files = [f for f in files if not f.name.startswith("~$")]
         

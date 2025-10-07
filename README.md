@@ -41,9 +41,9 @@ python -m firefind.cli --vendor fortinet --input samples \
   --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
 ```
 
-`--vendor` accepts `fortinet`, `sophos`, `barracuda`, `checkpoint`, or
-`watchguard`, each of which uses tailored column mappings and parsing helpers
-for their exported rule tables.
+The `--input` flag accepts individual files or directories containing CSV or XLSX
+exports. File extensions are matched case-insensitively, so variants such as
+`.CSV` or `.XLSX` are processed without additional configuration.
 
 To view the current application version:
 
