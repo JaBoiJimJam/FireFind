@@ -171,6 +171,12 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
     ],
     "low_risk_admin_ports": [25],
     "broad_cidr_prefix_max": 8,
+    "rule_overlap": {
+        "max_rules_evaluated": 500,
+        "max_rule_pairs": 5000,
+        "redundant_severity": Severity.LOW.value,
+        "shadowed_severity": Severity.MEDIUM.value,
+    },
     "risk_levels": {
         "critical": {
             "label": "Critical Risk",

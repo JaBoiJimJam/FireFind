@@ -399,6 +399,30 @@ class AnalyzerMetadata:
 
 
 @dataclass
+class RuleOverlapSettings:
+    """Tuning parameters for redundant and shadowed rule detection."""
+
+    max_rules_evaluated: int = 500
+    max_rule_pairs: int = 5000
+    redundant_severity: Severity = Severity.LOW
+    shadowed_severity: Severity = Severity.MEDIUM
+
+    def __post_init__(self) -> None:
+        if int(self.max_rules_evaluated) < 0:
+            raise ValueError("max_rules_evaluated cannot be negative")
+        if int(self.max_rule_pairs) < 0:
+            raise ValueError("max_rule_pairs cannot be negative")
+
+    def to_dict(self) -> dict:
+        return {
+            "max_rules_evaluated": int(self.max_rules_evaluated),
+            "max_rule_pairs": int(self.max_rule_pairs),
+            "redundant_severity": self.redundant_severity.value,
+            "shadowed_severity": self.shadowed_severity.value,
+        }
+
+
+@dataclass
 class RuleDefinition:
     """Description of an analyzer rule and its activation criteria."""
 
@@ -434,6 +458,7 @@ class RulesConfig:
     cidr_limits: Dict[str, CIDRLimitSet] = field(default_factory=dict)
     port_groups: PortGroupCollection = field(default_factory=PortGroupCollection)
     rule_definitions: Dict[str, RuleDefinition] = field(default_factory=dict)
+    rule_overlap: RuleOverlapSettings = field(default_factory=RuleOverlapSettings)
 
     def to_dict(self) -> dict:
         return {
@@ -447,6 +472,7 @@ class RulesConfig:
             "cidr_limits": {name: limit_set.to_dict() for name, limit_set in self.cidr_limits.items()},
             "port_groups": self.port_groups.to_dict(),
             "rules": {name: definition.to_dict() for name, definition in self.rule_definitions.items()},
+            "rule_overlap": self.rule_overlap.to_dict(),
         }
 
     def get_legacy_mapping(self) -> MutableMapping[str, object]:
@@ -575,6 +601,35 @@ class RulesConfig:
 
         port_groups = PortGroupCollection(groups=groups)
 
+        overlap_settings = RuleOverlapSettings()
+        overlap_raw = data.get("rule_overlap", {}) or {}
+        if isinstance(overlap_raw, Mapping):
+            max_rules_value = overlap_raw.get("max_rules_evaluated", overlap_settings.max_rules_evaluated)
+            max_pairs_value = overlap_raw.get("max_rule_pairs", overlap_settings.max_rule_pairs)
+            redundant_severity_value = overlap_raw.get(
+                "redundant_severity", overlap_settings.redundant_severity.value
+            )
+            shadowed_severity_value = overlap_raw.get(
+                "shadowed_severity", overlap_settings.shadowed_severity.value
+            )
+
+            try:
+                redundant_severity = Severity(str(redundant_severity_value).lower())
+            except ValueError:
+                redundant_severity = overlap_settings.redundant_severity
+
+            try:
+                shadowed_severity = Severity(str(shadowed_severity_value).lower())
+            except ValueError:
+                shadowed_severity = overlap_settings.shadowed_severity
+
+            overlap_settings = RuleOverlapSettings(
+                max_rules_evaluated=int(max_rules_value),
+                max_rule_pairs=int(max_pairs_value),
+                redundant_severity=redundant_severity,
+                shadowed_severity=shadowed_severity,
+            )
+
         rules_raw = data.get("rules", {}) or {}
         rule_definitions: Dict[str, RuleDefinition] = {}
         if isinstance(rules_raw, Mapping):
@@ -642,6 +697,7 @@ class RulesConfig:
             cidr_limits=cidr_limits,
             port_groups=port_groups,
             rule_definitions=rule_definitions,
+            rule_overlap=overlap_settings,
         )
 
 
