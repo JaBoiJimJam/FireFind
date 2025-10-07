@@ -175,7 +175,7 @@ def test_run_analysis_directory_and_dedup(tmp_path):
 
     assert len(findings) == 3
     types = {f.finding_type for f in findings}
-    assert {"allow_any", "admin_port_exposed", "broad_cidr"} <= typ
+    assert {"allow_any", "admin_port_exposed", "broad_cidr"} <= types
     assert "admin_port_exposed" in types
 
 
