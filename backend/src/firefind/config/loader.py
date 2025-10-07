@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping, MutableMapping
 
 from ..utils import load_yaml
+from .migrations import ensure_rule_logic_structure
 from .schema import RulesConfig, Severity
 
 
@@ -272,6 +273,58 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
     },
 }
 
+DEFAULT_RULES_CONFIG_DATA["rules"] = {
+    "admin_port_exposed": {
+        "id": "admin_port_exposed",
+        "label": "Administrative Port Exposure",
+        "description": "Flags allow rules that expose administrative services to untrusted networks.",
+        "conditions": {
+            "logic": "all",
+            "conditions": [
+                {"field": "action", "comparator": "equals", "value": "allow"},
+            ],
+            "groups": [
+                {
+                    "logic": "any",
+                    "conditions": [
+                        {
+                            "field": "service",
+                            "comparator": "matches_port_group",
+                            "values": [
+                                "core_admin",
+                                "directory_services",
+                                "legacy_management",
+                            ],
+                        },
+                        {"field": "port", "comparator": "matches_admin_port"},
+                    ],
+                }
+            ],
+        },
+        "analyzers": {
+            "admin_port_exposed": {
+                "enabled": True,
+                "notes": "Derives severity tiers from configured administrative port sets.",
+                "severity_overrides": {
+                    "critical": Severity.CRITICAL.value,
+                    "high": Severity.HIGH.value,
+                    "medium": Severity.MEDIUM.value,
+                    "low": Severity.LOW.value,
+                },
+                "admin_ports": {
+                    "baseline": list(DEFAULT_RULES_CONFIG_DATA["admin_ports"]),
+                    "per_risk_overrides": {
+                        "critical": list(DEFAULT_RULES_CONFIG_DATA["critical_risk_admin_ports"]),
+                        "high": list(DEFAULT_RULES_CONFIG_DATA["high_risk_admin_ports"]),
+                        "medium": list(DEFAULT_RULES_CONFIG_DATA["medium_risk_admin_ports"]),
+                        "low": list(DEFAULT_RULES_CONFIG_DATA["low_risk_admin_ports"]),
+                    },
+                },
+            }
+        },
+    }
+}
+
 
 DEFAULT_RULES_CONFIG = RulesConfig.from_dict(DEFAULT_RULES_CONFIG_DATA)
 
@@ -305,4 +358,5 @@ def load_rules_config(
 
     user_data = load_yaml(Path(path)) if path else {}
     merged_dict = _deep_merge(defaults.to_dict(), user_data or {})
+    ensure_rule_logic_structure(merged_dict, defaults=defaults, original=user_data or {})
     return RulesConfig.from_dict(merged_dict)

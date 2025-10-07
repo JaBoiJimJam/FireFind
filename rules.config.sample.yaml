@@ -6,25 +6,25 @@
 # ---------------------------------------------------------------------------
 # Administrative port tuning
 # ---------------------------------------------------------------------------
-admin_ports:
+admin_ports: &baseline_admin_ports
   # Baseline ports considered administrative across all vendors.
   - 22    # SSH
   - 443   # HTTPS management
   - 3389  # RDP
 
-critical_risk_admin_ports:
+critical_risk_admin_ports: &critical_admin_ports
   - 22
   - 443
 
-high_risk_admin_ports:
+high_risk_admin_ports: &high_admin_ports
   - 3389
   - 5900
 
-medium_risk_admin_ports:
+medium_risk_admin_ports: &medium_admin_ports
   - 389
   - 636
 
-low_risk_admin_ports:
+low_risk_admin_ports: &low_admin_ports
   - 25
 
 # ---------------------------------------------------------------------------
@@ -127,6 +127,55 @@ port_groups:
       - 1024-1026
       - 2303
       - 27000
+
+# ---------------------------------------------------------------------------
+# Rule definitions describe how analyzers evaluate traffic.  Each entry
+# enumerates the base rule metadata, structured condition groups, and the
+# analyzer-specific overrides that tune severity and administrative port tiers.
+# ---------------------------------------------------------------------------
+rules:
+  admin_port_exposed:
+    id: "admin_port_exposed"
+    label: "Administrative Port Exposure"
+    description: >-
+      Flags allow policies that expose administrative services to untrusted
+      destinations. Severity tiers inherit from the configured admin port sets
+      so that tuning a single list updates both matching and reporting logic.
+    conditions:
+      logic: all
+      conditions:
+        - field: action
+          comparator: equals
+          value: allow
+      groups:
+        - logic: any
+          conditions:
+            - field: service
+              comparator: matches_port_group
+              values:
+                - core_admin
+                - directory_services
+                - legacy_management
+            - field: port
+              comparator: matches_admin_port
+    analyzers:
+      admin_port_exposed:
+        enabled: true
+        notes: |
+          Analyzer outputs inherit severity overrides for each admin port tier
+          and leverage reusable port groups to minimise duplication.
+        severity_overrides:
+          critical: critical
+          high: high
+          medium: medium
+          low: low
+        admin_ports:
+          baseline: *baseline_admin_ports
+          per_risk_overrides:
+            critical: *critical_admin_ports
+            high: *high_admin_ports
+            medium: *medium_admin_ports
+            low: *low_admin_ports
 
 # ---------------------------------------------------------------------------
 # Backwards compatibility: existing keys like ``broad_cidr_prefix_max`` remain

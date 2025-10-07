@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import ipaddress
-from typing import Dict, Iterable, Mapping, MutableMapping, Optional
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence
 
 
 class Severity(str, Enum):
@@ -244,6 +244,182 @@ class PortGroupCollection:
         return {name: group.to_dict() for name, group in self.groups.items()}
 
 
+class ConditionComparator(str, Enum):
+    """Supported comparators for rule conditions."""
+
+    EQUALS = "equals"
+    NOT_EQUALS = "not_equals"
+    IN = "in"
+    NOT_IN = "not_in"
+    CONTAINS = "contains"
+    NOT_CONTAINS = "not_contains"
+    GREATER_THAN = "greater_than"
+    GREATER_OR_EQUAL = "greater_or_equal"
+    LESS_THAN = "less_than"
+    LESS_OR_EQUAL = "less_or_equal"
+    MATCHES_PORT_GROUP = "matches_port_group"
+    MATCHES_ADMIN_PORT = "matches_admin_port"
+    EXISTS = "exists"
+    NOT_EXISTS = "not_exists"
+
+
+@dataclass
+class RuleConditionThreshold:
+    """Numeric thresholds that constrain a rule condition."""
+
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    inclusive: bool = True
+
+    def __post_init__(self) -> None:
+        if self.min_value is not None and self.max_value is not None:
+            if float(self.min_value) > float(self.max_value):
+                raise ValueError("Threshold min_value cannot exceed max_value")
+
+    def to_dict(self) -> dict:
+        return {
+            "min_value": self.min_value,
+            "max_value": self.max_value,
+            "inclusive": self.inclusive,
+        }
+
+
+@dataclass
+class RuleCondition:
+    """Atomic comparison executed against an input rule field."""
+
+    field: str
+    comparator: ConditionComparator = ConditionComparator.EQUALS
+    value: Optional[Any] = None
+    values: Sequence[Any] = field(default_factory=tuple)
+    threshold: Optional[RuleConditionThreshold] = None
+
+    def __post_init__(self) -> None:
+        if not str(self.field or "").strip():
+            raise ValueError("Condition field must be provided")
+        if isinstance(self.comparator, str):
+            try:
+                self.comparator = ConditionComparator(self.comparator)
+            except ValueError as exc:
+                raise ValueError(f"Unsupported comparator '{self.comparator}'") from exc
+        if (
+            self.comparator
+            not in {ConditionComparator.EXISTS, ConditionComparator.NOT_EXISTS}
+            and self.value is None
+            and not self.values
+            and self.threshold is None
+        ):
+            raise ValueError("Condition must define a value, values, or threshold")
+        if self.values and not isinstance(self.values, (list, tuple)):
+            raise TypeError("Condition values must be a list or tuple")
+
+    def to_dict(self) -> dict:
+        payload: dict = {
+            "field": self.field,
+            "comparator": self.comparator.value,
+        }
+        if self.value is not None:
+            payload["value"] = self.value
+        if self.values:
+            payload["values"] = list(self.values)
+        if self.threshold is not None:
+            payload["threshold"] = self.threshold.to_dict()
+        return payload
+
+
+@dataclass
+class ConditionGroup:
+    """Recursive grouping of rule conditions using AND/OR semantics."""
+
+    logic: str = "all"
+    conditions: list[RuleCondition] = field(default_factory=list)
+    groups: list["ConditionGroup"] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        normalized_logic = (self.logic or "all").lower()
+        if normalized_logic not in {"all", "any"}:
+            raise ValueError("ConditionGroup.logic must be 'all' or 'any'")
+        self.logic = normalized_logic
+
+    def to_dict(self) -> dict:
+        return {
+            "logic": self.logic,
+            "conditions": [condition.to_dict() for condition in self.conditions],
+            "groups": [group.to_dict() for group in self.groups],
+        }
+
+
+@dataclass
+class AnalyzerPortConfiguration:
+    """Administrative port configuration for a specific analyzer."""
+
+    baseline: set[int] = field(default_factory=set)
+    per_risk_overrides: Dict[str, set[int]] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "baseline": sorted(self.baseline),
+            "per_risk_overrides": {
+                risk: sorted(values) for risk, values in self.per_risk_overrides.items()
+            },
+        }
+
+
+@dataclass
+class AnalyzerMetadata:
+    """Analyzer-specific settings that enrich a rule definition."""
+
+    name: str
+    enabled: bool = True
+    notes: str = ""
+    severity_overrides: Dict[str, Severity] = field(default_factory=dict)
+    admin_ports: AnalyzerPortConfiguration = field(default_factory=AnalyzerPortConfiguration)
+
+    def __post_init__(self) -> None:
+        normalised: Dict[str, Severity] = {}
+        for key, value in (self.severity_overrides or {}).items():
+            severity_value = value
+            if isinstance(severity_value, str):
+                try:
+                    severity_value = Severity(severity_value.lower())
+                except ValueError as exc:
+                    raise ValueError(f"Unsupported severity override '{value}'") from exc
+            normalised[key.lower()] = severity_value
+        self.severity_overrides = normalised
+
+    def to_dict(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "notes": self.notes,
+            "severity_overrides": {
+                key: value.value for key, value in self.severity_overrides.items()
+            },
+            "admin_ports": self.admin_ports.to_dict(),
+        }
+
+
+@dataclass
+class RuleDefinition:
+    """Description of an analyzer rule and its activation criteria."""
+
+    rule_id: str
+    label: str
+    description: str = ""
+    conditions: ConditionGroup = field(default_factory=ConditionGroup)
+    analyzers: Dict[str, AnalyzerMetadata] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.rule_id,
+            "label": self.label,
+            "description": self.description,
+            "conditions": self.conditions.to_dict(),
+            "analyzers": {
+                name: metadata.to_dict() for name, metadata in self.analyzers.items()
+            },
+        }
+
+
 @dataclass
 class RulesConfig:
     """Normalized rules configuration with backwards-compatibility helpers."""
@@ -257,6 +433,7 @@ class RulesConfig:
     risk_levels: Dict[str, RiskLevelDefinition] = field(default_factory=dict)
     cidr_limits: Dict[str, CIDRLimitSet] = field(default_factory=dict)
     port_groups: PortGroupCollection = field(default_factory=PortGroupCollection)
+    rule_definitions: Dict[str, RuleDefinition] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -269,6 +446,7 @@ class RulesConfig:
             "risk_levels": {name: definition.to_dict() for name, definition in self.risk_levels.items()},
             "cidr_limits": {name: limit_set.to_dict() for name, limit_set in self.cidr_limits.items()},
             "port_groups": self.port_groups.to_dict(),
+            "rules": {name: definition.to_dict() for name, definition in self.rule_definitions.items()},
         }
 
     def get_legacy_mapping(self) -> MutableMapping[str, object]:
@@ -298,6 +476,17 @@ class RulesConfig:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "RulesConfig":
+        def _normalize_port_set(value: object) -> set[int]:
+            if value is None:
+                return set()
+            if isinstance(value, (str, bytes)):
+                iterable: Iterable[object] = [value]
+            elif isinstance(value, Iterable):
+                iterable = value
+            else:
+                iterable = [value]
+            return cls._normalize_ports(iterable)
+
         admin_ports = cls._normalize_ports(data.get("admin_ports", []))
         critical_ports = cls._normalize_ports(data.get("critical_risk_admin_ports", []))
         high_ports = cls._normalize_ports(data.get("high_risk_admin_ports", []))
@@ -386,6 +575,62 @@ class RulesConfig:
 
         port_groups = PortGroupCollection(groups=groups)
 
+        rules_raw = data.get("rules", {}) or {}
+        rule_definitions: Dict[str, RuleDefinition] = {}
+        if isinstance(rules_raw, Mapping):
+            for name, item in rules_raw.items():
+                if not isinstance(item, Mapping):
+                    continue
+
+                rule_id = str(item.get("id", name))
+                label = str(item.get("label", rule_id.replace("_", " ").title()))
+                description = str(item.get("description", ""))
+                conditions = _parse_condition_group(item.get("conditions"))
+
+                analyzers_raw = item.get("analyzers", {}) or {}
+                analyzers: Dict[str, AnalyzerMetadata] = {}
+                if isinstance(analyzers_raw, Mapping):
+                    for analyzer_name, analyzer_item in analyzers_raw.items():
+                        if not isinstance(analyzer_item, Mapping):
+                            continue
+
+                        analyzer_key = str(analyzer_name)
+                        admin_ports_raw = analyzer_item.get("admin_ports", {}) or {}
+                        port_config = AnalyzerPortConfiguration()
+                        if isinstance(admin_ports_raw, Mapping):
+                            baseline_raw = admin_ports_raw.get("baseline", [])
+                            port_config.baseline = _normalize_port_set(baseline_raw)
+                            overrides_raw = admin_ports_raw.get("per_risk_overrides", {}) or {}
+                            if isinstance(overrides_raw, Mapping):
+                                for risk_name, values in overrides_raw.items():
+                                    port_config.per_risk_overrides[str(risk_name).lower()] = _normalize_port_set(
+                                        values
+                                    )
+
+                        severity_raw = analyzer_item.get("severity_overrides", {}) or {}
+                        severity_overrides: Dict[str, str] = {}
+                        if isinstance(severity_raw, Mapping):
+                            for key, value in severity_raw.items():
+                                if value is None:
+                                    continue
+                                severity_overrides[str(key)] = str(value)
+
+                        analyzers[analyzer_key] = AnalyzerMetadata(
+                            name=analyzer_key,
+                            enabled=bool(analyzer_item.get("enabled", True)),
+                            notes=str(analyzer_item.get("notes", "")),
+                            severity_overrides=severity_overrides,
+                            admin_ports=port_config,
+                        )
+
+                rule_definitions[rule_id] = RuleDefinition(
+                    rule_id=rule_id,
+                    label=label,
+                    description=description,
+                    conditions=conditions,
+                    analyzers=analyzers,
+                )
+
         return cls(
             admin_ports=admin_ports,
             critical_risk_admin_ports=critical_ports,
@@ -396,6 +641,7 @@ class RulesConfig:
             risk_levels=risk_levels,
             cidr_limits=cidr_limits,
             port_groups=port_groups,
+            rule_definitions=rule_definitions,
         )
 
 
@@ -424,3 +670,90 @@ def _parse_port_entry(raw_value: object) -> PortRange:
         return PortRange(int(start_text), int(end_text))
 
     return PortRange(int(text), int(text))
+
+
+def _parse_condition_group(raw: object) -> ConditionGroup:
+    """Convert raw mapping data into a ``ConditionGroup`` instance."""
+
+    if not isinstance(raw, Mapping):
+        return ConditionGroup()
+
+    logic = raw.get("logic")
+    entries = raw.get("conditions")
+    if "all" in raw:
+        logic = "all"
+        entries = raw.get("all")
+    elif "any" in raw:
+        logic = "any"
+        entries = raw.get("any")
+
+    parsed_conditions: list[RuleCondition] = []
+    parsed_groups: list[ConditionGroup] = []
+
+    for entry in _coerce_sequence(entries):
+        parsed = _parse_condition_entry(entry)
+        if isinstance(parsed, RuleCondition):
+            parsed_conditions.append(parsed)
+        elif isinstance(parsed, ConditionGroup):
+            parsed_groups.append(parsed)
+
+    return ConditionGroup(logic=logic or "all", conditions=parsed_conditions, groups=parsed_groups)
+
+
+def _parse_condition_entry(entry: object) -> Optional[object]:
+    if isinstance(entry, Mapping):
+        if "field" in entry:
+            return _parse_rule_condition(entry)
+        if any(key in entry for key in ("logic", "conditions", "all", "any")):
+            return _parse_condition_group(entry)
+    return None
+
+
+def _parse_rule_condition(raw: Mapping[str, Any]) -> RuleCondition:
+    field = str(raw.get("field", "")).strip()
+    comparator = raw.get("comparator") or raw.get("operator") or ConditionComparator.EQUALS.value
+    value = raw.get("value")
+    values = _coerce_sequence(raw.get("values") or raw.get("any_of"))
+    threshold_data = raw.get("threshold") or raw.get("thresholds")
+    threshold: Optional[RuleConditionThreshold] = None
+    if isinstance(threshold_data, Mapping):
+        threshold = RuleConditionThreshold(
+            min_value=_maybe_float(
+                threshold_data.get("min_value", threshold_data.get("min"))
+            ),
+            max_value=_maybe_float(
+                threshold_data.get("max_value", threshold_data.get("max"))
+            ),
+            inclusive=bool(threshold_data.get("inclusive", True)),
+        )
+
+    return RuleCondition(
+        field=field,
+        comparator=comparator,
+        value=value,
+        values=values,
+        threshold=threshold,
+    )
+
+
+def _coerce_sequence(value: object) -> tuple[Any, ...]:
+    if value is None:
+        return tuple()
+    if isinstance(value, Mapping):
+        return tuple(value.values())
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    if isinstance(value, set):
+        return tuple(sorted(value))
+    if isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
+        return tuple(value)
+    return (value,)
+
+
+def _maybe_float(value: object) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
