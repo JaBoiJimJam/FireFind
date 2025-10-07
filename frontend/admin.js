@@ -34,7 +34,11 @@
         toast: '#adminToast',
     };
 
+    const STORAGE_KEY = 'firefind:admin-state:v1';
+    const storageAvailable = checkLocalStorageAvailability();
+
     document.addEventListener('DOMContentLoaded', () => {
+        restoreStateFromCache();
         bindStaticActions();
         renderAll();
         runValidation();
@@ -684,6 +688,7 @@
         };
         applyValidationState();
         updateExportState();
+        persistState();
         validationOptions = { ...defaultValidationOptions };
     }
 
@@ -1391,6 +1396,361 @@
             return `${prefix}-${window.crypto.randomUUID()}`;
         }
         return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function checkLocalStorageAvailability() {
+        try {
+            if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+                return false;
+            }
+            const testKey = `${STORAGE_KEY}__test`;
+            window.localStorage.setItem(testKey, '1');
+            window.localStorage.removeItem(testKey);
+            return true;
+        } catch (error) {
+            console.warn('Local storage is not available for admin console persistence.', error);
+            return false;
+        }
+    }
+
+    function restoreStateFromCache() {
+        if (!storageAvailable) {
+            return;
+        }
+        try {
+            const raw = window.localStorage.getItem(STORAGE_KEY);
+            if (!raw) {
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') {
+                return;
+            }
+            const version = parsed.version ?? 1;
+            if (version !== 1) {
+                try {
+                    window.localStorage.removeItem(STORAGE_KEY);
+                } catch (removeError) {
+                    console.error('Failed to clear incompatible cached state.', removeError);
+                }
+                return;
+            }
+            const storedState = parsed.configState && typeof parsed.configState === 'object' ? parsed.configState : {};
+            const storedPassthrough = parsed.passthroughConfig;
+            let sanitizedPassthrough = {};
+            if (storedPassthrough && typeof storedPassthrough === 'object') {
+                try {
+                    sanitizedPassthrough = JSON.parse(JSON.stringify(storedPassthrough));
+                } catch (cloneError) {
+                    console.error('Failed to sanitize cached passthrough configuration.', cloneError);
+                    sanitizedPassthrough = {};
+                }
+            }
+            passthroughConfig = sanitizedPassthrough;
+            configState.riskLevels = Array.isArray(storedState.riskLevels)
+                ? storedState.riskLevels.map((entry) => rehydrateRiskLevel(entry))
+                : [];
+            configState.cidrLimitSets = Array.isArray(storedState.cidrLimitSets)
+                ? storedState.cidrLimitSets.map((entry) => rehydrateCidrSet(entry))
+                : [];
+            configState.portGroups = Array.isArray(storedState.portGroups)
+                ? storedState.portGroups.map((entry) => rehydratePortGroup(entry))
+                : [];
+        } catch (error) {
+            console.error('Failed to restore cached admin state.', error);
+            try {
+                window.localStorage.removeItem(STORAGE_KEY);
+            } catch (removeError) {
+                console.error('Failed to clear invalid cached state.', removeError);
+            }
+        }
+    }
+
+    function persistState() {
+        if (!storageAvailable) {
+            return;
+        }
+        try {
+            const passthroughHasData =
+                passthroughConfig &&
+                typeof passthroughConfig === 'object' &&
+                Object.keys(passthroughConfig).length > 0;
+            const hasData =
+                configState.riskLevels.length > 0 ||
+                configState.cidrLimitSets.length > 0 ||
+                configState.portGroups.length > 0 ||
+                passthroughHasData;
+            if (!hasData) {
+                window.localStorage.removeItem(STORAGE_KEY);
+                return;
+            }
+            const payload = {
+                version: 1,
+                configState: createSerializableConfigState(),
+                passthroughConfig: clonePassthroughConfig(),
+            };
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        } catch (error) {
+            console.error('Failed to persist admin console state.', error);
+        }
+    }
+
+    function createSerializableConfigState() {
+        return {
+            riskLevels: configState.riskLevels.map((level) => serializeRiskLevel(level)),
+            cidrLimitSets: configState.cidrLimitSets.map((set) => serializeCidrSet(set)),
+            portGroups: configState.portGroups.map((group) => serializePortGroup(group)),
+        };
+    }
+
+    function serializeRiskLevel(level) {
+        const thresholdsSource = level && typeof level === 'object' && level.thresholds && typeof level.thresholds === 'object' ? level.thresholds : {};
+        const thresholds = { ...thresholdsSource };
+        Object.keys(thresholds).forEach((key) => {
+            const value = thresholds[key];
+            thresholds[key] = value === null || value === undefined ? '' : String(value);
+        });
+        const rationaleSource = level && typeof level === 'object' && level.rationale && typeof level.rationale === 'object' ? level.rationale : {};
+        const references = Array.isArray(rationaleSource.references)
+            ? rationaleSource.references.map((item) => String(item).trim()).filter(Boolean)
+            : splitList(rationaleSource.references);
+        const severityCandidate = typeof level?.severity === 'string' ? level.severity.toLowerCase() : 'low';
+        const severity = severityOptions.some((option) => option.value === severityCandidate) ? severityCandidate : 'low';
+        return {
+            id: level?.id,
+            name: level?.name ? String(level.name) : '',
+            label: level?.label ? String(level.label) : '',
+            severity,
+            thresholds,
+            rationale: {
+                summary: rationaleSource.summary ? String(rationaleSource.summary) : '',
+                details: rationaleSource.details ? String(rationaleSource.details) : '',
+                references,
+            },
+        };
+    }
+
+    function serializeCidrSet(set) {
+        if (!set || typeof set !== 'object') {
+            const base = createCidrSet();
+            return {
+                id: base.id,
+                name: base.name,
+                defaultPolicy: serializePolicy(base.defaultPolicy),
+                overrides: base.overrides,
+            };
+        }
+        const overrides = Array.isArray(set.overrides)
+            ? set.overrides.map((override) => {
+                  const allowedScopes = ['analyzer', 'vendor', 'direction', 'vendor_direction'];
+                  const scopeCandidate = typeof override?.scope === 'string' ? override.scope.toLowerCase() : 'analyzer';
+                  const scope = allowedScopes.includes(scopeCandidate) ? scopeCandidate : 'analyzer';
+                  return {
+                      id: override?.id,
+                      scope,
+                      key: override?.key ? String(override.key) : '',
+                      vendor: override?.vendor ? String(override.vendor) : '',
+                      direction: override?.direction ? String(override.direction) : '',
+                      policy: serializePolicy(override?.policy),
+                  };
+              })
+            : [];
+        return {
+            id: set?.id,
+            name: set?.name ? String(set.name) : '',
+            defaultPolicy: serializePolicy(set.defaultPolicy),
+            overrides,
+        };
+    }
+
+    function serializePolicy(policy) {
+        if (!policy || typeof policy !== 'object') {
+            return createPolicy();
+        }
+        const blocked = Array.isArray(policy.blocked)
+            ? policy.blocked.map((entry) => String(entry).trim()).filter(Boolean)
+            : splitList(policy.blocked);
+        const exempt = Array.isArray(policy.exempt)
+            ? policy.exempt.map((entry) => String(entry).trim()).filter(Boolean)
+            : splitList(policy.exempt);
+        return {
+            max_prefix: policy.max_prefix === null || policy.max_prefix === undefined ? '' : String(policy.max_prefix),
+            min_prefix: policy.min_prefix === null || policy.min_prefix === undefined ? '' : String(policy.min_prefix),
+            blocked,
+            exempt,
+            description: policy.description ? String(policy.description) : '',
+        };
+    }
+
+    function serializePortGroup(group) {
+        if (!group || typeof group !== 'object') {
+            const base = createPortGroup();
+            return {
+                id: base.id,
+                name: base.name,
+                description: base.description,
+                protocol: base.protocol,
+                ranges: base.ranges,
+            };
+        }
+        const allowedProtocols = ['any', 'tcp', 'udp'];
+        const protocolCandidate = typeof group.protocol === 'string' ? group.protocol.toLowerCase() : 'any';
+        const protocol = allowedProtocols.includes(protocolCandidate) ? protocolCandidate : 'any';
+        const ranges = Array.isArray(group.ranges)
+            ? group.ranges.map((range) => serializeRange(range))
+            : [];
+        return {
+            id: group?.id,
+            name: group?.name ? String(group.name) : '',
+            description: group?.description ? String(group.description) : '',
+            protocol,
+            ranges,
+        };
+    }
+
+    function serializeRange(range) {
+        if (!range || typeof range !== 'object') {
+            const base = createRange();
+            return {
+                id: base.id,
+                start: base.start,
+                end: base.end,
+            };
+        }
+        return {
+            id: range.id,
+            start: range.start === null || range.start === undefined ? '' : String(range.start),
+            end: range.end === null || range.end === undefined ? '' : String(range.end),
+        };
+    }
+
+    function rehydrateRiskLevel(raw) {
+        const base = createRiskLevel();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        const thresholds = { ...base.thresholds };
+        Object.keys(thresholds).forEach((key) => {
+            const value = raw.thresholds?.[key];
+            thresholds[key] = value === null || value === undefined ? '' : String(value);
+        });
+        const severityCandidate = typeof raw.severity === 'string' ? raw.severity.toLowerCase() : 'low';
+        const severity = severityOptions.some((option) => option.value === severityCandidate) ? severityCandidate : 'low';
+        const references = Array.isArray(raw.rationale?.references)
+            ? raw.rationale.references.map((item) => String(item).trim()).filter(Boolean)
+            : splitList(raw.rationale?.references);
+        return {
+            ...base,
+            id: raw.id || base.id,
+            name: raw.name ? String(raw.name) : '',
+            label: raw.label ? String(raw.label) : '',
+            severity,
+            thresholds,
+            rationale: {
+                summary: raw.rationale?.summary ? String(raw.rationale.summary) : '',
+                details: raw.rationale?.details ? String(raw.rationale.details) : '',
+                references,
+            },
+        };
+    }
+
+    function rehydrateCidrSet(raw) {
+        const base = createCidrSet();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        return {
+            ...base,
+            id: raw.id || base.id,
+            name: raw.name ? String(raw.name) : '',
+            defaultPolicy: rehydratePolicy(raw.defaultPolicy),
+            overrides: Array.isArray(raw.overrides)
+                ? raw.overrides.map((entry) => rehydrateCidrOverride(entry))
+                : [],
+        };
+    }
+
+    function rehydratePolicy(raw) {
+        const base = createPolicy();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        return {
+            ...base,
+            max_prefix: raw.max_prefix === null || raw.max_prefix === undefined ? '' : String(raw.max_prefix),
+            min_prefix: raw.min_prefix === null || raw.min_prefix === undefined ? '' : String(raw.min_prefix),
+            blocked: Array.isArray(raw.blocked)
+                ? raw.blocked.map((entry) => String(entry).trim()).filter(Boolean)
+                : splitList(raw.blocked),
+            exempt: Array.isArray(raw.exempt)
+                ? raw.exempt.map((entry) => String(entry).trim()).filter(Boolean)
+                : splitList(raw.exempt),
+            description: raw.description ? String(raw.description) : '',
+        };
+    }
+
+    function rehydrateCidrOverride(raw) {
+        const base = createCidrOverride();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        const allowedScopes = ['analyzer', 'vendor', 'direction', 'vendor_direction'];
+        const scopeCandidate = typeof raw.scope === 'string' ? raw.scope.toLowerCase() : base.scope;
+        const scope = allowedScopes.includes(scopeCandidate) ? scopeCandidate : base.scope;
+        return {
+            ...base,
+            id: raw.id || base.id,
+            scope,
+            key: raw.key ? String(raw.key) : '',
+            vendor: raw.vendor ? String(raw.vendor) : '',
+            direction: raw.direction ? String(raw.direction) : '',
+            policy: rehydratePolicy(raw.policy),
+        };
+    }
+
+    function rehydratePortGroup(raw) {
+        const base = createPortGroup();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        const allowedProtocols = ['any', 'tcp', 'udp'];
+        const protocolCandidate = typeof raw.protocol === 'string' ? raw.protocol.toLowerCase() : base.protocol;
+        const protocol = allowedProtocols.includes(protocolCandidate) ? protocolCandidate : base.protocol;
+        return {
+            ...base,
+            id: raw.id || base.id,
+            name: raw.name ? String(raw.name) : '',
+            description: raw.description ? String(raw.description) : '',
+            protocol,
+            ranges: Array.isArray(raw.ranges)
+                ? raw.ranges.map((entry) => rehydrateRange(entry))
+                : [],
+        };
+    }
+
+    function rehydrateRange(raw) {
+        const base = createRange();
+        if (!raw || typeof raw !== 'object') {
+            return base;
+        }
+        return {
+            ...base,
+            id: raw.id || base.id,
+            start: raw.start === null || raw.start === undefined ? '' : String(raw.start),
+            end: raw.end === null || raw.end === undefined ? '' : String(raw.end),
+        };
+    }
+
+    function clonePassthroughConfig() {
+        if (!passthroughConfig || typeof passthroughConfig !== 'object') {
+            return {};
+        }
+        try {
+            return JSON.parse(JSON.stringify(passthroughConfig));
+        } catch (error) {
+            console.error('Failed to clone passthrough configuration for persistence.', error);
+            return {};
+        }
     }
 
     function showToast(message, isError = false) {
