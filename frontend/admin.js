@@ -736,7 +736,12 @@
         if (!exportBtn) {
             return;
         }
-        const hasErrors = Object.values(validationState).some((section) => Object.keys(section).length > 0);
+        const hasErrors = Object.values(validationState).some((section) =>
+            Object.values(section).some((entry) =>
+                entry &&
+                Object.values(entry).some((message) => typeof message === 'string' ? message.trim() !== '' : Boolean(message))
+            )
+        );
         const hasData =
             configState.riskLevels.length > 0 ||
             configState.cidrLimitSets.length > 0 ||
