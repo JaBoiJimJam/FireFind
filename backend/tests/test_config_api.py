@@ -31,7 +31,7 @@ def config_client(tmp_path, monkeypatch):
         client.close()
 
 
-def auth_headers(token: str = "secret-token", actor: str | None = "qa" ) -> dict[str, str]:
+def auth_headers(token: str = "secret-token", actor: str | None = "qa") -> dict[str, str]:
     headers = {"Authorization": f"Bearer {token}"}
     if actor is not None:
         headers["X-Firefind-Actor"] = actor
@@ -51,6 +51,10 @@ def test_get_rules_returns_active_configuration(config_client):
     assert resp.status_code == 200
     payload = resp.json()
     assert "config" in payload
+    assert "rules" in payload
+    assert isinstance(payload["rules"], list)
+    assert "thresholds" in payload
+    assert "critical" in payload["thresholds"]
     assert payload["metadata"]["version"] == 0
     admin_ports = payload["config"].get("admin_ports", [])
     assert 22 in admin_ports
@@ -91,6 +95,105 @@ def test_patch_rules_updates_file_and_history(config_client):
     # Follow-up GET should surface new metadata
     follow_up = client.get("/api/config/rules", headers=auth_headers())
     assert follow_up.json()["metadata"]["version"] == 1
+
+
+def _sample_rule(rule_id: str = "rule-1", port: int = 22) -> dict[str, object]:
+    return {
+        "id": rule_id,
+        "name": "Flag sensitive port",
+        "conditions": {
+            "type": "all",
+            "conditions": [
+                {
+                    "type": "comparison",
+                    "field": "destination_port",
+                    "operator": "equals",
+                    "value": port,
+                }
+            ],
+        },
+    }
+
+
+def test_put_rules_config_round_trip(config_client):
+    client, config_path, history_path = config_client
+    payload = {
+        "rules": [_sample_rule()],
+        "thresholds": {"critical": {"min_score": 95}},
+        "message": "Tune thresholds",
+    }
+
+    resp = client.put(
+        "/api/config/rules",
+        headers=auth_headers(),
+        json=payload,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["metadata"]["version"] == 1
+    assert body["rules"][0]["id"] == "rule-1"
+    assert body["thresholds"]["critical"]["min_score"] == 95
+
+    stored = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert stored["rules"][0]["id"] == "rule-1"
+    assert stored["risk_levels"]["critical"]["thresholds"]["min_score"] == 95
+
+    history = history_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(history) == 1
+
+
+def test_put_rules_rejects_duplicate_ids(config_client):
+    client, _, _ = config_client
+    payload = {
+        "rules": [_sample_rule("dup"), _sample_rule("dup", port=443)],
+    }
+
+    resp = client.put(
+        "/api/config/rules",
+        headers=auth_headers(),
+        json=payload,
+    )
+
+    assert resp.status_code == 422
+    assert "Duplicate rule id" in resp.json()["detail"]
+
+
+def test_put_rules_rejects_invalid_ports(config_client):
+    client, _, _ = config_client
+    payload = {
+        "rules": [_sample_rule(port=70000)],
+    }
+
+    resp = client.put(
+        "/api/config/rules",
+        headers=auth_headers(),
+        json=payload,
+    )
+
+    assert resp.status_code == 422
+    assert "invalid port" in resp.json()["detail"]
+
+
+def test_put_rules_rejects_malformed_condition_tree(config_client):
+    client, _, _ = config_client
+    payload = {
+        "rules": [
+            {
+                "id": "rule-1",
+                "name": "Broken",
+                "conditions": {"type": "all", "conditions": []},
+            }
+        ]
+    }
+
+    resp = client.put(
+        "/api/config/rules",
+        headers=auth_headers(),
+        json=payload,
+    )
+
+    assert resp.status_code == 422
 
 
 def test_patch_rules_rejects_noop_changes(config_client):

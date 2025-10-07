@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Iterable, Mapping, Tuple
 import yaml
 
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
 from .model import Rule
 from .vendors.utils import pick_first_present
 
@@ -56,11 +59,61 @@ def load_yaml(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def dump_yaml(path: Path, data: Mapping[str, object]) -> None:
-    """Persist ``data`` to ``path`` using a stable YAML representation."""
+_ROUND_TRIP_YAML = YAML()
+_ROUND_TRIP_YAML.preserve_quotes = True
+_ROUND_TRIP_YAML.explicit_start = False
+_ROUND_TRIP_YAML.width = 120
+_ROUND_TRIP_YAML.indent(mapping=2, sequence=4, offset=2)
 
-    with Path(path).open("w", encoding="utf-8") as f:
-        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+
+def _to_commented(value):
+    if isinstance(value, Mapping):
+        commented = CommentedMap()
+        for key, item in value.items():
+            commented[key] = _to_commented(item)
+        return commented
+    if isinstance(value, list):
+        seq = CommentedSeq()
+        for item in value:
+            seq.append(_to_commented(item))
+        return seq
+    return value
+
+
+def _sync_commented(target: CommentedMap, update: Mapping[str, object]) -> CommentedMap:
+    for key in list(target.keys()):
+        if key not in update:
+            del target[key]
+
+    for key, value in update.items():
+        if isinstance(value, Mapping):
+            existing = target.get(key)
+            if not isinstance(existing, CommentedMap):
+                existing = CommentedMap()
+            target[key] = _sync_commented(existing, value)
+        elif isinstance(value, list):
+            target[key] = _to_commented(value)
+        else:
+            target[key] = value
+    return target
+
+
+def dump_yaml(path: Path, data: Mapping[str, object]) -> None:
+    """Persist ``data`` to ``path`` while preserving comments when possible."""
+
+    path = Path(path)
+    base = CommentedMap()
+    if path.exists():
+        try:
+            loaded = _ROUND_TRIP_YAML.load(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, CommentedMap):
+                base = loaded
+        except Exception:  # pragma: no cover - defensive fallback
+            base = CommentedMap()
+
+    updated = _sync_commented(base, data)
+    with path.open("w", encoding="utf-8") as handle:
+        _ROUND_TRIP_YAML.dump(updated, handle)
 
 
 def pick_mapping(vendor_mappings: dict, vendor: str) -> dict:

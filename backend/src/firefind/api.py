@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 from collections import Counter
 from dataclasses import asdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal, Mapping, Optional, Set
 from uuid import uuid4
 
 from fastapi import (
@@ -21,12 +21,24 @@ from fastapi import (
 )
 from fastapi import status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from .service import run_analysis
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
-from .config import RulesConfigStore
+from .config import (
+    RulesConfigStore,
+    build_rules_update_patch,
+    extract_rule_logic,
+    extract_thresholds,
+)
 
 app = FastAPI()
 
@@ -83,10 +95,155 @@ def get_rules_config_store() -> RulesConfigStore:
 
 
 class RulesConfigPatch(BaseModel):
-    """Incoming payload for partial rules configuration updates."""
+    """Incoming payload for legacy partial rules configuration updates."""
 
     changes: Dict[str, Any] = Field(default_factory=dict)
-    message: str | None = Field(default=None, max_length=500)
+    message: Optional[str] = Field(default=None, max_length=500)
+
+
+class ConditionNodeModel(BaseModel):
+    """Recursive representation of a rule condition tree."""
+
+    type: Literal["all", "any", "comparison"]
+    conditions: List["ConditionNodeModel"] = Field(default_factory=list)
+    field: Optional[str] = None
+    operator: Optional[str] = None
+    value: Any = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("conditions")
+    def validate_children(
+        cls, value: List["ConditionNodeModel"], info: ValidationInfo
+    ) -> List["ConditionNodeModel"]:
+        node_type = info.data.get("type") if info.data else None
+        if node_type in {"all", "any"}:
+            if not value:
+                raise ValueError("'conditions' must contain at least one child for group nodes")
+        else:
+            if value:
+                raise ValueError("Comparison nodes cannot define nested conditions")
+        return value
+
+    @model_validator(mode="after")
+    def validate_node(cls, values: "ConditionNodeModel") -> "ConditionNodeModel":
+        node_type = values.type
+        if node_type == "comparison":
+            field = (values.field or "").strip()
+            operator = (values.operator or "").strip()
+            if not field:
+                raise ValueError("Comparison nodes require a 'field'")
+            if not operator:
+                raise ValueError("Comparison nodes require an 'operator'")
+        else:
+            if values.field is not None:
+                raise ValueError("Group nodes cannot define 'field'")
+            if values.operator is not None:
+                raise ValueError("Group nodes cannot define 'operator'")
+            if values.value not in (None, "", [], {}):
+                raise ValueError("Group nodes cannot define 'value'")
+        return values
+
+class RuleDefinitionModel(BaseModel):
+    """API payload describing a configurable rule."""
+
+    id: str = Field(..., min_length=1)
+    name: Optional[str] = None
+    description: Optional[str] = None
+    severity: Optional[str] = None
+    tags: Optional[List[str]] = None
+    conditions: ConditionNodeModel
+    metadata: Optional[Dict[str, Any]] = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @field_validator("id")
+    def validate_id(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Rule id cannot be blank")
+        return trimmed
+
+class ThresholdUpdateModel(BaseModel):
+    """Threshold deltas for an individual risk level."""
+
+    min_score: Optional[int] = Field(default=None, ge=0, le=100)
+    max_score: Optional[int] = Field(default=None, ge=0, le=100)
+    min_findings: Optional[int] = Field(default=None, ge=0)
+    max_findings: Optional[int] = Field(default=None, ge=0)
+    model_config = ConfigDict()
+
+    @model_validator(mode="after")
+    def validate_ranges(cls, values: "ThresholdUpdateModel") -> "ThresholdUpdateModel":
+        if (
+            values.min_score is not None
+            and values.max_score is not None
+            and values.min_score > values.max_score
+        ):
+            raise ValueError("min_score cannot exceed max_score")
+        if (
+            values.min_findings is not None
+            and values.max_findings is not None
+            and values.min_findings > values.max_findings
+        ):
+            raise ValueError("min_findings cannot exceed max_findings")
+        return values
+
+
+class RulesConfigUpdatePayload(BaseModel):
+    """Incoming payload for replacing rules configuration content."""
+
+    rules: Optional[List[RuleDefinitionModel]] = None
+    thresholds: Optional[Dict[str, ThresholdUpdateModel]] = None
+    message: Optional[str] = Field(default=None, max_length=500)
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_payload(cls, values: "RulesConfigUpdatePayload") -> "RulesConfigUpdatePayload":
+        if values.rules is None and values.thresholds is None:
+            raise ValueError("At least one of 'rules' or 'thresholds' must be provided")
+        return values
+
+ConditionNodeModel.model_rebuild()
+RuleDefinitionModel.model_rebuild()
+
+
+def _iter_condition_nodes(node: ConditionNodeModel):
+    yield node
+    for child in node.conditions:
+        yield from _iter_condition_nodes(child)
+
+
+def _validate_rule_ports(rule: RuleDefinitionModel) -> None:
+    for node in _iter_condition_nodes(rule.conditions):
+        if node.type != "comparison":
+            continue
+        field = (node.field or "").lower()
+        if "port" not in field:
+            continue
+        raw_value = node.value
+        if raw_value is None:
+            raise ValueError(f"Rule '{rule.id}' comparison against port requires a value")
+
+        if isinstance(raw_value, (list, tuple, set)):
+            values = list(raw_value)
+        elif isinstance(raw_value, str):
+            values = [part.strip() for part in raw_value.split(",") if part.strip()]
+        else:
+            values = [raw_value]
+
+        if not values:
+            raise ValueError(f"Rule '{rule.id}' comparison against port requires a value")
+
+        for entry in values:
+            try:
+                port = int(entry)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Rule '{rule.id}' contains non-numeric port value '{entry}'"
+                ) from exc
+            if not (1 <= port <= 65535):
+                raise ValueError(
+                    f"Rule '{rule.id}' contains invalid port '{port}' (must be 1-65535)"
+                )
 
 
 @app.get("/api/config/rules")
@@ -94,7 +251,9 @@ def get_rules_config(
     _: None = Depends(require_api_token),
     store: RulesConfigStore = Depends(get_rules_config_store),
 ):
-    config = store.load_active().to_dict()
+    active_config = store.load_active()
+    config = active_config.to_dict()
+    raw_config = store.load_raw()
     revision = store.latest_revision()
     metadata = {
         "version": revision.version if revision else 0,
@@ -102,7 +261,90 @@ def get_rules_config(
         "updated_by": revision.actor if revision else None,
         "summary": revision.summary if revision else None,
     }
-    return {"config": config, "metadata": metadata}
+    rule_logic = extract_rule_logic(raw_config)
+    thresholds = extract_thresholds(active_config)
+    return {
+        "config": config,
+        "rules": rule_logic,
+        "thresholds": thresholds,
+        "metadata": metadata,
+    }
+
+
+@app.put("/api/config/rules")
+def put_rules_config(
+    payload: RulesConfigUpdatePayload = Body(...),
+    _: None = Depends(require_api_token),
+    store: RulesConfigStore = Depends(get_rules_config_store),
+    actor: str = Depends(get_actor),
+):
+    rules = payload.rules or []
+    seen_ids: Set[str] = set()
+    for rule in rules:
+        if rule.id in seen_ids:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"Duplicate rule id '{rule.id}' detected",
+            )
+        seen_ids.add(rule.id)
+        try:
+            _validate_rule_ports(rule)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
+
+    current_raw = store.load_raw()
+    current_config = store.load_active()
+    thresholds_payload: Mapping[str, Mapping[str, Any]] | None = None
+    if payload.thresholds is not None:
+        thresholds_payload = {
+            name: update.model_dump(exclude_none=True)
+            for name, update in payload.thresholds.items()
+        }
+
+    patch = build_rules_update_patch(
+        current_raw=current_raw,
+        current_config=current_config,
+        rules=[rule.model_dump(exclude_none=True) for rule in payload.rules]
+        if payload.rules is not None
+        else None,
+        thresholds=thresholds_payload,
+    )
+
+    if not patch:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No configuration changes supplied",
+        )
+
+    try:
+        config, revision = store.update(
+            patch,
+            actor=actor,
+            summary=payload.message,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    metadata = {
+        "version": revision.version,
+        "updated_at": revision.timestamp,
+        "updated_by": revision.actor,
+        "summary": revision.summary,
+    }
+
+    raw_config = store.load_raw()
+    return {
+        "config": config.to_dict(),
+        "rules": extract_rule_logic(raw_config),
+        "thresholds": extract_thresholds(config),
+        "metadata": metadata,
+    }
 
 
 @app.get("/api/config/rules/history")
@@ -136,7 +378,7 @@ def patch_rules_config(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
