@@ -25,14 +25,18 @@ app.add_middleware(
 # while still allowing us to serve static frontend assets below.
 app.include_router(firefind_api_app.router)
 
-# Serve generated report artifacts when present.  The backend returns URLs
-# under ``/downloads`` so we expose that path here and keep the previous
-# ``/out`` alias for backwards compatibility.
+# Serve generated report artifacts so the frontend can download CSV/PDF
+# exports produced by ``/api/scan``.  The development server previously only
+# mounted the static route if the ``out`` directory already existed.  When the
+# application is freshly started the directory is created lazily during the
+# first scan request, which meant the mount never occurred and the frontend saw
+# 404 errors for the download URLs.  Ensuring the directory exists up front lets
+# FastAPI mount the static files handler every time.
 out_path = Path("out")
-if out_path.exists():
-    downloads_mount = StaticFiles(directory=out_path)
-    app.mount("/downloads", downloads_mount, name="downloads")
-    app.mount("/out", downloads_mount, name="out")
+out_path.mkdir(parents=True, exist_ok=True)
+downloads_mount = StaticFiles(directory=out_path)
+app.mount("/downloads", downloads_mount, name="downloads")
+app.mount("/out", downloads_mount, name="out")
 
 # API endpoint to get list of files in out folder
 @app.get("/api/reports")
