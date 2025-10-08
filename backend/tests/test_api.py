@@ -52,10 +52,11 @@ def make_sample_file(fmt: str):
 
 
 @pytest.mark.parametrize("fmt", ["csv", "xlsx"])
-def test_scan_basic(tmp_path, monkeypatch, fmt):
+@pytest.mark.parametrize("route", ["/scan", "/api/scan"])
+def test_scan_basic(tmp_path, monkeypatch, fmt, route):
     monkeypatch.chdir(tmp_path)
     filename, content, mime = make_sample_file(fmt)
-    resp = client.post("/scan", files=[("files", (filename, content, mime))])
+    resp = client.post(route, files=[("files", (filename, content, mime))])
     assert resp.status_code == 200
     data = resp.json()
 
@@ -93,7 +94,7 @@ def test_scan_save_csv(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     filename, content, mime = make_sample_file("csv")
     resp = client.post(
-        "/scan?save_csv=true",
+        "/api/scan?save_csv=true",
         files=[("files", (filename, content, mime))],
     )
     assert resp.status_code == 200
@@ -110,7 +111,7 @@ def test_scan_save_pdf(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     filename, content, mime = make_sample_file("csv")
     resp = client.post(
-        "/scan?save_pdf=true",
+        "/api/scan?save_pdf=true",
         files=[("files", (filename, content, mime))],
     )
     assert resp.status_code == 200
