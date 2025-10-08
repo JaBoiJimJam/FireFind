@@ -1,10 +1,12 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-import os
-import json
+"""Development convenience server for FireFind."""
+
 from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from firefind.api import app as firefind_api_app
 
 app = FastAPI()
 
@@ -17,10 +19,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve files from out directory if it exists
+# Mount the real API routes so the frontend can call them during development.
+# ``include_router`` keeps the paths exactly as defined in ``firefind.api``
+# (for example ``/api/config/rules``) without introducing double prefixes,
+# while still allowing us to serve static frontend assets below.
+app.include_router(firefind_api_app.router)
+
+# Serve generated report artifacts when present.  The backend returns URLs
+# under ``/downloads`` so we expose that path here and keep the previous
+# ``/out`` alias for backwards compatibility.
 out_path = Path("out")
 if out_path.exists():
-    app.mount("/out", StaticFiles(directory="out"), name="out")
+    downloads_mount = StaticFiles(directory=out_path)
+    app.mount("/downloads", downloads_mount, name="downloads")
+    app.mount("/out", downloads_mount, name="out")
 
 # API endpoint to get list of files in out folder
 @app.get("/api/reports")
