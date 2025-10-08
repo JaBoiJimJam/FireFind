@@ -468,3 +468,14 @@ async def scan(
         response["pdf"] = f"/downloads/{pdf_path.name}"
 
     return response
+
+
+# Maintain backward compatibility with front-end clients expecting the API
+# under an "/api" prefix. This registers a second path that reuses the same
+# handler logic without duplicating implementation details.
+app.add_api_route(
+    "/api/scan",
+    scan,
+    methods=["POST"],
+    name="scan_with_prefix",
+)
