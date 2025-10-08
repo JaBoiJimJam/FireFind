@@ -125,23 +125,23 @@ class ConditionNodeModel(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_node(cls, values: "ConditionNodeModel") -> "ConditionNodeModel":
-        node_type = values.type
+    def validate_node(self) -> "ConditionNodeModel":
+        node_type = self.type
         if node_type == "comparison":
-            field = (values.field or "").strip()
-            operator = (values.operator or "").strip()
+            field = (self.field or "").strip()
+            operator = (self.operator or "").strip()
             if not field:
                 raise ValueError("Comparison nodes require a 'field'")
             if not operator:
                 raise ValueError("Comparison nodes require an 'operator'")
         else:
-            if values.field is not None:
+            if self.field is not None:
                 raise ValueError("Group nodes cannot define 'field'")
-            if values.operator is not None:
+            if self.operator is not None:
                 raise ValueError("Group nodes cannot define 'operator'")
-            if values.value not in (None, "", [], {}):
+            if self.value not in (None, "", [], {}):
                 raise ValueError("Group nodes cannot define 'value'")
-        return values
+        return self
 
 class RuleDefinitionModel(BaseModel):
     """API payload describing a configurable rule."""
@@ -172,20 +172,20 @@ class ThresholdUpdateModel(BaseModel):
     model_config = ConfigDict()
 
     @model_validator(mode="after")
-    def validate_ranges(cls, values: "ThresholdUpdateModel") -> "ThresholdUpdateModel":
+    def validate_ranges(self) -> "ThresholdUpdateModel":
         if (
-            values.min_score is not None
-            and values.max_score is not None
-            and values.min_score > values.max_score
+            self.min_score is not None
+            and self.max_score is not None
+            and self.min_score > self.max_score
         ):
             raise ValueError("min_score cannot exceed max_score")
         if (
-            values.min_findings is not None
-            and values.max_findings is not None
-            and values.min_findings > values.max_findings
+            self.min_findings is not None
+            and self.max_findings is not None
+            and self.min_findings > self.max_findings
         ):
             raise ValueError("min_findings cannot exceed max_findings")
-        return values
+        return self
 
 
 class RulesConfigUpdatePayload(BaseModel):
@@ -197,10 +197,10 @@ class RulesConfigUpdatePayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     @model_validator(mode="after")
-    def validate_payload(cls, values: "RulesConfigUpdatePayload") -> "RulesConfigUpdatePayload":
-        if values.rules is None and values.thresholds is None:
+    def validate_payload(self) -> "RulesConfigUpdatePayload":
+        if self.rules is None and self.thresholds is None:
             raise ValueError("At least one of 'rules' or 'thresholds' must be provided")
-        return values
+        return self
 
 ConditionNodeModel.model_rebuild()
 RuleDefinitionModel.model_rebuild()
@@ -409,6 +409,7 @@ def _calculate_score(metrics: Dict[str, int]) -> int:
 
 
 @app.post("/scan")
+@app.post("/api/scan")
 async def scan(
     files: List[UploadFile] = File(...),
     vendor: str = "fortinet",
@@ -468,3 +469,14 @@ async def scan(
         response["pdf"] = f"/downloads/{pdf_path.name}"
 
     return response
+
+
+# Maintain backward compatibility with front-end clients expecting the API
+# under an "/api" prefix. This registers a second path that reuses the same
+# handler logic without duplicating implementation details.
+app.add_api_route(
+    "/api/scan",
+    scan,
+    methods=["POST"],
+    name="scan_with_prefix",
+)

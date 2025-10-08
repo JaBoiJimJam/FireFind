@@ -4,7 +4,7 @@ A comprehensive firewall configuration analysis tool that identifies security vu
 
 ## Features
 
-- **Multi-vendor Support**: Supports Fortinet, Sophos, Barracuda, Check Point, and WatchGuard exports with an extensible architecture for additional vendors
+ **Flexible Column Mapping**: Ingests firewall exports through configurable mapping profiles
 - **CSV/XLSX Input**: Analyzes firewall configurations from exported CSV or Excel files
 - **Security Analysis**: Identifies common security issues like overly permissive rules, admin port exposure, and broad CIDR ranges
 - **Dual Output**: Generates both CSV reports and PDF summaries
@@ -75,7 +75,7 @@ $env:PYTHONPATH = "$PWD\backend\src"
 
 # Run the CLI
 python -m firefind.cli `
-  --vendor fortinet `
+  --vendor generic `
   --input ".\samples" `
   --out-csv ..\out\findings_all.csv `
   --out-pdf ..\out\report_all.pdf `
@@ -113,7 +113,7 @@ Approved updates are persisted to the configured YAML file (defaults to `rules/r
 
 ### CLI Parameters
 
-- `--vendor`: Firewall vendor (`fortinet`, `sophos`, `barracuda`, `checkpoint`, `watchguard`)
+- `--vendor`: Column mapping profile name (defaults to `generic`)
 - `--input`: Directory containing CSV/XLSX firewall configuration files
 - `--out-csv`: Output path for CSV findings report
 - `--out-pdf`: Output path for PDF summary report
@@ -159,42 +159,12 @@ rules via the API.
 
 ## Input File Format
 
-FireFind accepts CSV or XLSX files with firewall rule data. The tool automatically maps vendor-specific column names to standard fields using the vendor mappings configuration.
-
-- **Example Fortinet columns**:
-  - Rule ID: `Seq #`, `ID`, `Policyid`
-  - Source: `Source Value`, `Source`, `Address`
-  - Destination: `Destination Value`, `Destination`, `Address.1`
-  - Service: `Service`, `Service.1`, `Port`
-  - Action: `Action`
-
-- **Example Sophos columns**:
-  - Rule ID: `Rule ID`
-  - Source: `Source Networks`
-  - Destination: `Destination Networks`
-  - Service: `Services`
-  - Action: `Action`
-
-- **Example Barracuda columns**:
-  - Rule ID: `Rule #`
-  - Source: `Source`
-  - Destination: `Destination`
-  - Service: `Service`
-  - Action: `Action`
-
-- **Example Check Point columns**:
-  - Rule ID: `Name`
-  - Source: `Source`
-  - Destination: `Destination`
-  - Service: `Services & Applications`
-  - Action: `Action`
-
-- **Example WatchGuard columns**:
-  - Rule ID: `Policy Name`
-  - Source: `From`
-  - Destination: `To`
-  - Service: `Protocols` / `Port`
-  - Action: `Action` / `Enable`
+FireFind accepts CSV or XLSX files with firewall rule data. The tool
+automatically maps column names to normalized fields using the mapping profile
+selected at runtime. The default `generic` profile recognises common headers
+including `Rule ID`, `Source`, `Destination`, `Service`, `Port`, `Protocol`, and
+`Action`. Additional profiles can be introduced by extending
+`rules/vendor_mappings.yaml` with the column names present in your exports.
 
 ## Output Reports
 
