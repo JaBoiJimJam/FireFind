@@ -9,6 +9,7 @@ from collections import Counter
 from dataclasses import asdict
 from typing import Any, Dict, List, Literal, Mapping, Optional, Set
 from uuid import uuid4
+from datetime import datetime
 
 from fastapi import (
     Body,
@@ -449,12 +450,12 @@ async def scan(
         if save_csv or save_pdf:
             reports_dir = Path.cwd() / "out"
             reports_dir.mkdir(parents=True, exist_ok=True)
-            token = uuid4().hex
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             if save_csv:
-                csv_path = reports_dir / f"firefind_findings_{token}.csv"
+                csv_path = reports_dir / f"findings_{timestamp}.csv"
                 write_findings_csv(csv_path, findings)
             if save_pdf:
-                pdf_path = reports_dir / f"firefind_report_{token}.pdf"
+                pdf_path = reports_dir / f"report_{timestamp}.pdf"
                 generate_pdf(
                     pdf_path, findings, client_name="FireFind Analysis"
                 )

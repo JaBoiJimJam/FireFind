@@ -19,13 +19,13 @@
     <header id="header">
         <nav>
             <a href="#" class="logo">
-                <img src="firefind-logo.png" alt="FireFind" class="logo-img">
+                <img src="firefind-logo.png" alt="FireFind" class="logo-img" style="height: auto !important; width: 180px !important; max-width: 200px !important; min-width: 160px !important;">
             </a>
             <ul class="nav-links">
-                <li><a href="index.html">About</a></li>
+                <li><a href="index.html" onclick="handleAboutClick(event)">About</a></li>
                 <li><a href="scan.html">Scan</a></li>
                 <li><a href="reports.html">Reports</a></li>
-                <li><a href="admin.html" class="active">Admin</a></li>
+                <li><a href="admin.html">Admin</a></li>
             </ul>
         </nav>
     </header>
@@ -45,49 +45,49 @@
         </section>
 
         <section class="admin-section" id="riskLevelsSection">
-            <header class="admin-section-header">
+            <div class="admin-section-header">
                 <div>
                     <h2>Risk Levels</h2>
                     <p>Define severity labels and numeric thresholds used by the risk engine.</p>
                 </div>
                 <button class="btn" id="addRiskLevelBtn"><i class="fa-solid fa-plus"></i> Add Risk Level</button>
-            </header>
+            </div>
             <div class="admin-help">Severity options mirror backend enumeration (<code>critical</code>, <code>high</code>, <code>medium</code>, <code>low</code>, <code>informational</code>). Threshold minimums must not exceed maximums and negative finding counts are rejected.</div>
             <div id="riskLevelsList" class="config-grid"></div>
         </section>
 
         <section class="admin-section" id="cidrSection">
-            <header class="admin-section-header">
+            <div class="admin-section-header">
                 <div>
                     <h2>CIDR Limit Sets</h2>
                     <p>Specify default and override policies controlling allowed network breadth.</p>
                 </div>
                 <button class="btn" id="addCidrSetBtn"><i class="fa-solid fa-plus"></i> Add CIDR Limit Set</button>
-            </header>
+            </div>
             <div class="admin-help">Prefixes must be between /0 and /128. Provide CIDR values such as <code>10.0.0.0/8</code> or <code>2001:db8::/32</code>. Blocked and exempt entries accept newline or comma separated CIDRs and are validated using the backend parser rules.</div>
             <div id="cidrSetsList" class="config-grid"></div>
         </section>
 
         <section class="admin-section" id="portGroupsSection">
-            <header class="admin-section-header">
+            <div class="admin-section-header">
                 <div>
                     <h2>Port Groups</h2>
                     <p>Define reusable port groupings for analyzers.</p>
                 </div>
                 <button class="btn" id="addPortGroupBtn"><i class="fa-solid fa-plus"></i> Add Port Group</button>
-            </header>
+            </div>
             <div class="admin-help">Ports must be between 1 and 65535. Ranges cannot overlap or invert. Protocols follow backend expectations (<code>tcp</code>, <code>udp</code>, or <code>any</code>).</div>
             <div id="portGroupsList" class="config-grid"></div>
         </section>
 
         <section class="admin-section" id="ruleLogicSection">
-            <header class="admin-section-header">
+            <div class="admin-section-header">
                 <div>
                     <h2>Rule Logic</h2>
                     <p>Author analyzer rule definitions, including condition logic and analyzer overrides.</p>
                 </div>
                 <button class="btn" id="addRuleLogicBtn"><i class="fa-solid fa-plus"></i> Add Rule Definition</button>
-            </header>
+            </div>
             <div class="admin-help">Conditions and analyzers accept YAML that maps directly to the backend schema. Provide a logic tree describing rule criteria and analyzer-specific metadata, including severity overrides and administrative port tiers.</div>
             <div id="ruleLogicList" class="config-grid"></div>
         </section>

@@ -1,3 +1,6 @@
+/* Add Font Awesome import at the top */
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css');
+
 * {
             margin: 0;
             padding: 0;
@@ -82,7 +85,8 @@
                 linear-gradient(rgba(78, 204, 163, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(78, 204, 163, 0.03) 1px, transparent 1px);
             background-size: 50px 50px;
-            animation: gridMove 20s linear infinite;
+            /* Remove the gridMove animation */
+            animation: none !important;
         }
 
         @keyframes gridMove {
@@ -108,6 +112,12 @@
             display: block;
         }
 
+        body.show-scan-line header {
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid rgba(78, 204, 163, 0.15);
+        }
+
         @keyframes scanDown {
             0% { transform: translateY(0); opacity: 0; }
             10% { opacity: 1; }
@@ -117,44 +127,51 @@
 
         /* Header */
         header {
-            position: fixed;
+            position: sticky;
             top: 0;
             width: 100%;
             background: rgba(23, 27, 31, 0.9);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px solid rgba(78, 204, 163, 0.15);
             z-index: 1000;
             transition: all 0.3s ease;
-            padding: 0.5rem 0 !important; /* Reduced from default padding */
+            padding: 0 !important;
+            height: 60px !important;
+            max-height: 60px !important;
         }
 
-        header.scrolled {
-            background: rgba(5, 5, 5, 0.98);
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+        .admin-body .nav-links a.active {
+            color: var(--primary-green);
         }
 
         nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.5rem 2rem !important; /* Reduced padding */
-            height: auto !important; /* Remove fixed height */
+            padding: 0.25rem 2rem !important; /* Reduced padding */
+            height: 60px !important; /* Remove fixed height */
             min-height: 50px; /* Set minimum height instead */
+            max-height: 60px !important;
+            line-height: 1 !important;
         }
 
         header nav .logo {
             display: flex !important;
             align-items: center !important;
             text-decoration: none !important;
+            height: 50px !important;
+            width: auto !important;
+            overflow: hidden !important;
         }
 
         header nav .logo .logo-img {
-            height: auto !important;
-            width: 180px !important; /* Slightly smaller width */
+            height: 30px !important;
+            width: auto !important; /* Slightly smaller width */
             max-width: 200px !important;
             min-width: 160px !important;
-            object-fit: contain !important;
+            object-fit: scale-down !important;
             transition: opacity 0.3s ease !important;
+            display: block !important;
         }
 
         header nav .logo .logo-img:hover {
@@ -492,9 +509,7 @@
         }
 
         .file-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px rgba(78, 204, 163, 0.2);
-            border-color: var(--primary-green);
+            transform: none !important;
         }
 
         .file-header {
@@ -527,9 +542,7 @@
         }
 
         .remove-btn:hover {
-            background: var(--danger);
-            color: white;
-            transform: scale(1.05);
+            transform: none !important;
         }
 
         /* Results Section */
@@ -593,9 +606,7 @@
         }
 
         .metric-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px rgba(78, 204, 163, 0.2);
-            border-color: var(--primary-green);
+            transform: none !important;
         }
 
         .metric-value {
@@ -663,9 +674,7 @@
         }
 
         .report-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--primary-green);
-            box-shadow: 0 20px 40px rgba(78, 204, 163, 0.3);
+            transform: none !important;
         }
 
         .report-icon {
@@ -847,7 +856,7 @@
         .validation-summary.has-errors {
             border-color: rgba(255, 68, 68, 0.45);
             background: rgba(255, 68, 68, 0.15);
-            color: #ffb4b4;
+            color: #ff9f9f;
             box-shadow: 0 20px 44px rgba(255, 68, 68, 0.2);
         }
 
@@ -1574,4 +1583,498 @@
             .range-row {
                 flex-direction: column;
             }
+        }
+
+        body header {
+            padding: 0 !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            overflow: hidden !important;
+        }
+        
+        body header nav {
+            padding: 0.25rem 2rem !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            line-height: 1 !important;
+        }
+        
+        body header nav .logo {
+            height: 50px !important;
+            width: auto !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        
+        body header nav .logo .logo-img {
+            height: 30px !important;
+            width: auto !important;
+            object-fit: scale-down !important;
+            object-position: left center !important;
+            display: block !important;
+        }
+
+        /* Reports page specific styles */
+        body.reports-page header {
+            padding: 0 !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            overflow: hidden !important;
+        }
+        
+        body.reports-page header nav {
+            padding: 0.25rem 2rem !important;
+            height: 60px !important;
+            max-height: 60px !important;
+            line-height: 1 !important;
+        }
+        
+        body.reports-page header nav .logo {
+            height: 50px !important;
+            width: auto !important;
+            overflow: hidden !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        
+        body.reports-page header nav .logo .logo-img {
+            height: 30px !important;
+            width: auto !important;
+            object-fit: scale-down !important;
+            object-position: left center !important;
+            display: block !important;
+        }
+
+        /* Remove all animations for reports.html page only */
+        body.reports-page * {
+            animation: none !important;
+        }
+        
+        /* Keep the grid background and gradient but remove animation for reports page */
+        body.reports-page .cyber-grid {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background-image: 
+                linear-gradient(rgba(78, 204, 163, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(78, 204, 163, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            /* Remove the gridMove animation */
+            animation: none !important;
+        }
+        
+        /* Keep the background gradient for reports page */
+        body.reports-page .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: linear-gradient(180deg, #0a0a0a 0%, #0f1f1a 100%);
+            overflow: hidden;
+        }
+        
+        /* Remove scanning line animation for reports page */
+        body.reports-page .scan-line {
+            display: none !important;
+        }
+        
+        /* Remove all transform animations and transitions for reports page */
+        body.reports-page .drop-zone::before,
+        body.reports-page .metric-card::before,
+        body.reports-page .reports-section::before {
+            display: none !important;
+        }
+        
+        /* Remove hover transforms for reports page */
+        body.reports-page .drop-zone:hover {
+            transform: none !important;
+        }
+        
+        body.reports-page .file-card:hover {
+            transform: none !important;
+        }
+        
+        body.reports-page .metric-card:hover {
+            transform: none !important;
+        }
+        
+        body.reports-page .report-card:hover {
+            transform: none !important;
+        }
+        
+        body.reports-page .btn:hover {
+            transform: none !important;
+        }
+        
+        body.reports-page .remove-btn:hover {
+            transform: none !important;
+        }
+        
+        /* Remove button ripple effect for reports page */
+        body.reports-page .btn::before {
+            display: none !important;
+        }
+        
+        /* Hide any existing particles for reports page */
+        body.reports-page div[style*="position: fixed"][style*="width: 3px"][style*="height: 3px"] {
+            display: none !important;
+        }
+
+        /* Reports page specific layout styles */
+        .reports-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem;
+            min-height: calc(100vh - 200px);
+        }
+
+        .reports-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .reports-header h1 {
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            margin-bottom: 1rem;
+            color: var(--primary-green);
+            font-weight: 700;
+        }
+
+        .reports-header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .reports-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .report-item {
+            background: linear-gradient(135deg, var(--card-bg), rgba(78, 204, 163, 0.02));
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .report-item:hover {
+            border-color: var(--primary-green);
+            box-shadow: 0 10px 30px rgba(78, 204, 163, 0.2);
+        }
+
+        .report-type {
+            display: inline-block;
+            background: var(--primary-green);
+            color: var(--dark-bg);
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+        }
+
+        .report-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-light);
+            margin-bottom: 0.5rem;
+            word-break: break-word;
+        }
+
+        .report-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .report-date {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .report-size {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .report-actions {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, var(--primary-green), var(--neon-green));
+            color: var(--dark-bg);
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .download-btn:hover {
+            box-shadow: 0 5px 15px rgba(78, 204, 163, 0.4);
+        }
+
+        .view-btn {
+            background: transparent;
+            color: var(--primary-green);
+            border: 2px solid var(--primary-green);
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .view-btn:hover {
+            background: var(--primary-green);
+            color: var(--dark-bg);
+        }
+
+        .delete-btn {
+            background: transparent;
+            color: #ff4757;
+            border: 2px solid #ff4757;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .delete-btn:hover {
+            background: #ff4757;
+            color: white;
+        }
+
+        .no-reports {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .no-reports-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .refresh-btn {
+            background: transparent;
+            color: var(--primary-green);
+            border: 2px solid var(--primary-green);
+            padding: 1rem 2rem;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Roboto Mono', monospace;
+            margin-top: 2rem;
+        }
+
+        .refresh-btn:hover {
+            background: var(--primary-green);
+            color: var(--dark-bg);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary-green);
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Icon styles */
+        .icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1em;
+            height: 1em;
+        }
+
+        .upload-icon .icon {
+            font-size: 3rem;
+        }
+
+        .report-icon .icon {
+            font-size: 3rem;
+        }
+
+        .no-reports-icon .icon {
+            font-size: 4rem;
+        }
+
+        /* Button icon spacing */
+        .btn .icon {
+            margin-right: 0.5rem;
+        }
+
+        .report-actions .icon {
+            margin-right: 0.5rem;
+        }
+
+        .refresh-btn .icon {
+            margin-right: 0.5rem;
+        }
+
+        .delete-btn .icon {
+            margin-right: 0.5rem;
+        }
+
+        .download-btn .icon {
+            margin-right: 0.5rem;
+        }
+
+        .view-btn .icon {
+            margin-right: 0.5rem;
+        }
+
+        .report-date .icon {
+            margin-right: 0.5rem;
+        }
+
+        .report-size .icon {
+            margin-right: 0.5rem;
+        }
+
+        /* Remove all animations for scan.html page only */
+        * {
+            animation: none !important;
+        }
+        
+        /* Hide any existing particles */
+        div[style*="position: fixed"][style*="width: 3px"][style*="height: 3px"] {
+            display: none !important;
+        }
+
+        /* Change green text to red inside error state cards */
+        .config-card.has-error .field-label,
+        .config-card.has-error .fieldset-legend span:first-child,
+        .config-card.has-error h3 {
+            color: #ff4757 !important;
+        }
+
+        /* Change green text to red in validation summary when it has errors */
+        .validation-summary.has-errors {
+            border-color: rgba(255, 68, 68, 0.45);
+            background: rgba(255, 68, 68, 0.15);
+            color: #ff9f9f;
+            box-shadow: 0 20px 44px rgba(255, 68, 68, 0.2);
+        }
+
+        /* Change green highlights to red in error fieldsets */
+        .config-card.has-error .fieldset {
+            border-color: rgba(255, 68, 68, 0.35);
+        }
+
+        /* Change green code highlights to red in error cards */
+        .config-card.has-error .admin-help code {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff9f9f;
+        }
+
+        /* Change input focus colors to red in error cards */
+        .config-card.has-error input:focus,
+        .config-card.has-error select:focus,
+        .config-card.has-error textarea:focus {
+            border-color: #ff4757 !important;
+            box-shadow: 0 0 0 2px rgba(255, 68, 68, 0.2) !important;
+        }
+
+        /* Change input borders to red in error cards */
+        .config-card.has-error input,
+        .config-card.has-error select,
+        .config-card.has-error textarea {
+            border-color: rgba(255, 68, 68, 0.5) !important;
+        }
+
+        /* Change condition input borders to red in error cards */
+        .config-card.has-error .condition-field-input,
+        .config-card.has-error .condition-comparator-select,
+        .config-card.has-error .condition-value-wrapper input,
+        .config-card.has-error .condition-multi-wrapper textarea,
+        .config-card.has-error .condition-logic-select {
+            border-color: rgba(255, 68, 68, 0.5) !important;
+        }
+
+        /* Change condition input focus colors to red in error cards */
+        .config-card.has-error .condition-field-input:focus,
+        .config-card.has-error .condition-comparator-select:focus,
+        .config-card.has-error .condition-value-wrapper input:focus,
+        .config-card.has-error .condition-multi-wrapper textarea:focus,
+        .config-card.has-error .condition-logic-select:focus {
+            border-color: #ff4757 !important;
+            box-shadow: 0 0 0 2px rgba(255, 68, 68, 0.2) !important;
+        }
+
+        /* Change analyzer panel borders and inputs to red in error cards */
+        .config-card.has-error .analyzer-panel {
+            border-color: rgba(255, 68, 68, 0.35) !important;
+        }
+
+        /* Change per-risk entry borders to red in error cards */
+        .config-card.has-error .per-risk-entry {
+            border-color: rgba(255, 68, 68, 0.35) !important;
+        }
+
+        /* Change condition group borders to red in error cards */
+        .config-card.has-error .condition-group {
+            border-color: rgba(255, 68, 68, 0.35) !important;
+        }
+
+        /* Change condition row borders to red in error cards */
+        .config-card.has-error .condition-row {
+            border-color: rgba(255, 68, 68, 0.25) !important;
         }

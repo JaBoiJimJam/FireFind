@@ -8,48 +8,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     
-    <!-- Force header size reduction -->
     <style>
-        body header {
-            padding: 0 !important;
-            height: 60px !important;
-            max-height: 60px !important;
-            overflow: hidden !important;
-        }
-        
-        body header nav {
-            padding: 0.25rem 2rem !important;
-            height: 60px !important;
-            max-height: 60px !important;
-            line-height: 1 !important;
-        }
-        
-        body header nav .logo {
-            height: 50px !important;
-            width: auto !important;
-            overflow: hidden !important;
-            display: flex !important;
-            align-items: center !important;
-        }
-        
-        body header nav .logo .logo-img {
-            height: 30px !important;
-            width: auto !important;
-            object-fit: scale-down !important;
-            object-position: left center !important;
-            display: block !important;
-        }
-    </style>
-
-    <style>
-        /* Existing header styles... */
-        
         /* Remove all animations for scan.html page only */
         * {
             animation: none !important;
         }
         
-        /* Keep the grid background and gradient but remove animation */
+        /* Allow grid animation for scan page - override the animation: none rule */
         .cyber-grid {
             position: absolute;
             width: 200%;
@@ -60,96 +25,8 @@
                 linear-gradient(rgba(78, 204, 163, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(78, 204, 163, 0.03) 1px, transparent 1px);
             background-size: 50px 50px;
-            /* Remove the gridMove animation */
-            animation: none !important;
-        }
-        
-        /* Keep the background gradient */
-        .bg-animation {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            background: linear-gradient(180deg, #0a0a0a 0%, #0f1f1a 100%);
-            overflow: hidden;
-        }
-        
-        /* Remove scanning line animation */
-        .scan-line {
-            display: none !important;
-        }
-        
-        /* Remove all transform animations and transitions */
-        .drop-zone::before,
-        .metric-card::before,
-        .reports-section::before {
-            display: none !important;
-        }
-        
-        /* Remove hover transforms */
-        .drop-zone:hover {
-            transform: none !important;
-        }
-        
-        .file-card:hover {
-            transform: none !important;
-        }
-        
-        .metric-card:hover {
-            transform: none !important;
-        }
-        
-        .report-card:hover {
-            transform: none !important;
-        }
-        
-        .btn:hover {
-            transform: none !important;
-        }
-        
-        .remove-btn:hover {
-            transform: none !important;
-        }
-        
-        /* Remove button ripple effect */
-        .btn::before {
-            display: none !important;
-        }
-        
-        /* Remove floating animation from upload icon */
-        .upload-icon {
-            animation: none !important;
-        }
-        
-        /* Remove glow animation from hero title (if present) */
-        .hero h1 {
-            animation: none !important;
-        }
-        
-        /* Remove all keyframe-based animations */
-        @keyframes gridMove { }
-        @keyframes scanDown { }
-        @keyframes shimmer { }
-        @keyframes pulse { }
-        @keyframes float { }
-        @keyframes glow { }
-        @keyframes fadeInUp { }
-        @keyframes countUp { }
-        @keyframes fadeIn { }
-        @keyframes slideIn { }
-        @keyframes sweep { }
-        @keyframes borderRotate { }
-        @keyframes slideInRight { }
-    </style>
-
-    <style>
-        /* Existing styles... */
-        
-        /* Remove all animations for scan.html page only */
-        * {
-            animation: none !important;
+            /* Re-enable the grid animation */
+            animation: gridMove 20s linear infinite !important;
         }
         
         /* Hide any existing particles */
@@ -200,7 +77,7 @@
         <section class="upload-section" id="upload">
             <form id="uploadForm" method="post" enctype="multipart/form-data" onsubmit="event.preventDefault()">
             <div class="drop-zone" id="dropZone">
-                <div class="upload-icon">📁</div>
+                <div class="upload-icon"><i class="fas fa-folder-open icon"></i></div>
                 <h2>Upload Firewall Configuration</h2>
                 <p>Drag and drop your CSV or XLSX files here</p>
                 <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
@@ -254,12 +131,12 @@
                 <h3 style="text-align: center; color: var(--primary-green); margin-bottom: 2rem; font-size: 2rem;">Download Reports</h3>
                 <div class="reports-grid">
                     <a class="report-card" id="pdfLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                        <div class="report-icon">📊</div>
+                        <div class="report-icon"><i class="fas fa-chart-line icon"></i></div>
                         <h4>PDF Report</h4>
                         <p style="color: var(--text-muted);">High-level overview PDF</p>
                     </a>
                     <a class="report-card" id="csvLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                        <div class="report-icon">🔧</div>
+                        <div class="report-icon"><i class="fas fa-wrench icon"></i></div>
                         <h4>CSV Report</h4>
                         <p style="color: var(--text-muted);">Detailed CSV export</p>
                     </a>
