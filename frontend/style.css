@@ -688,6 +688,27 @@
             font-weight: 600;
         }
 
+        /* Report card icons styling */
+        .report-card .report-icon .icon {
+            color: var(--primary-green) !important;
+            font-size: 3rem;
+            transition: all 0.3s ease;
+        }
+
+        .report-card:hover .report-icon .icon {
+            color: var(--neon-green) !important;
+            transform: scale(1.1);
+        }
+
+        /* Specific styling for PDF and CSV icons */
+        .fa-file-pdf {
+            color: var(--primary-green) !important;
+        }
+
+        .fa-file-csv {
+            color: var(--primary-green) !important;
+        }
+
         /* Footer */
         footer {
             background: var(--darker-bg);
