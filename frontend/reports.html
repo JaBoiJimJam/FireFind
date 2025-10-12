@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FireFind - Reports</title>
-    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <title>FireFind</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 
@@ -66,13 +65,17 @@
 
     <!-- Footer -->
     <footer>
-        <p>&copy; 2025 FireFind by Triskele Labs | Open-Source Security Intelligence | Version 1.0.0</p>
+        <p>&copy; 2025 FireFind by Team Five Guys | Triskele Labs</p>
     </footer>
     
     <script src="app.js"></script>
     <script>
-        // Load reports on page load
+        // Page-specific initialization
         document.addEventListener('DOMContentLoaded', function() {
+            // Clean URL on page load
+            if (window.location.pathname.includes('reports.html')) {
+                history.replaceState({ file: 'reports.html' }, 'Reports - FireFind', '/reports');
+            }
             loadReports();
         });
 

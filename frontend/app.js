@@ -500,3 +500,108 @@ function handleAboutClick(event) {
     }
     // If not on index page, let the default link behavior work (go to index.html)
 }
+
+// URL Management - Add this to your app.js file
+function initializeRouting() {
+    // Define route mappings
+    const routes = {
+        '/': 'index.html',
+        '/about': 'index.html',
+        '/scan': 'scan.html',
+        '/reports': 'reports.html',
+        '/admin': 'admin.html'
+    };
+
+    // Handle navigation
+    function navigateTo(path, actualFile) {
+        // Update URL without page reload
+        history.pushState({ file: actualFile }, '', path);
+        
+        // Load the actual file
+        if (actualFile && actualFile !== window.location.pathname.split('/').pop()) {
+            window.location.href = actualFile;
+        }
+    }
+
+    // Update all navigation links
+    function updateNavLinks() {
+        const navLinks = document.querySelectorAll('.nav-links a');
+        navLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            let cleanPath = '';
+            
+            // Map file names to clean paths
+            switch(href) {
+                case 'index.html':
+                    cleanPath = '/about';
+                    break;
+                case 'scan.html':
+                    cleanPath = '/scan';
+                    break;
+                case 'reports.html':
+                    cleanPath = '/reports';
+                    break;
+                case 'admin.html':
+                    cleanPath = '/admin';
+                    break;
+                default:
+                    cleanPath = href;
+            }
+            
+            // Remove existing click handlers and add new ones
+            link.removeAttribute('onclick');
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                if (href === 'index.html') {
+                    // Special handling for about page
+                    history.pushState({ file: 'index.html' }, 'About - FireFind', '/about');
+                } else {
+                    navigateTo(cleanPath, href);
+                }
+            });
+        });
+    }
+
+    // Clean current URL on page load
+    function cleanCurrentUrl() {
+        const currentFile = window.location.pathname.split('/').pop();
+        let cleanPath = window.location.pathname;
+        
+        switch(currentFile) {
+            case 'index.html':
+                cleanPath = '/about';
+                break;
+            case 'scan.html':
+                cleanPath = '/scan';
+                break;
+            case 'reports.html':
+                cleanPath = '/reports';
+                break;
+            case 'admin.html':
+                cleanPath = '/admin';
+                break;
+        }
+        
+        // Update URL without reload if it needs cleaning
+        if (cleanPath !== window.location.pathname) {
+            history.replaceState({ file: currentFile }, document.title, cleanPath);
+        }
+    }
+
+    // Handle browser back/forward buttons
+    window.addEventListener('popstate', function(e) {
+        if (e.state && e.state.file) {
+            window.location.href = e.state.file;
+        }
+    });
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        cleanCurrentUrl();
+        updateNavLinks();
+    });
+}
+
+// Initialize routing
+initializeRouting();
