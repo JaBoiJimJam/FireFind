@@ -806,6 +806,18 @@
                 <div class="metric-label">High Priority</div>
             </div>
             <div class="metric-card">
+                <div class="metric-value" id="mediumCount">18</div>
+                <div class="metric-label">Medium Priority</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="cautionaryCount">12</div>
+                <div class="metric-label">Cautionary</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="lowCount">9</div>
+                <div class="metric-label">Low Priority</div>
+            </div>
+            <div class="metric-card">
                 <div class="metric-value" id="totalCount">156</div>
                 <div class="metric-label">Total Issues</div>
             </div>
@@ -969,6 +981,9 @@
                 const metrics = generateRandomMetrics();
                 document.getElementById('criticalCount').textContent = metrics.critical;
                 document.getElementById('highCount').textContent = metrics.high;
+                document.getElementById('mediumCount').textContent = metrics.medium;
+                document.getElementById('cautionaryCount').textContent = metrics.cautionary;
+                document.getElementById('lowCount').textContent = metrics.low;
                 document.getElementById('totalCount').textContent = metrics.total;
                 document.getElementById('securityScore').textContent = metrics.score + '%';
                 
@@ -984,9 +999,12 @@
         function generateRandomMetrics() {
             const critical = Math.floor(Math.random() * 30) + 15;
             const high = Math.floor(Math.random() * 50) + 30;
-            const total = critical + high + Math.floor(Math.random() * 100) + 50;
+            const medium = Math.floor(Math.random() * 25) + 10;
+            const cautionary = Math.floor(Math.random() * 20) + 5;
+            const low = Math.floor(Math.random() * 10) + 1;
+            const total = critical + high + medium + cautionary + low;
             const score = Math.floor(Math.random() * 20) + 75;
-            return { critical, high, total, score };
+            return { critical, high, medium, cautionary, low, total, score };
         }
 
         function downloadReport(type) {

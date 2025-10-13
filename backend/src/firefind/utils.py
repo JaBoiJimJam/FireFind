@@ -42,6 +42,17 @@ SERVICE_NAME_PORTS = {
 }
 
 
+_RISK_RATING_NORMALISATIONS = {
+    "critical": "Critical",
+    "critil": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "cautionary": "Cautionary",
+    "utionary": "Cautionary",
+}
+
+
 def _tokenise_service_values(text: str) -> Iterable[str]:
     if not text:
         return []
@@ -52,6 +63,23 @@ def _tokenise_service_values(text: str) -> Iterable[str]:
         .replace("/ ", "/")
     )
     return [part for part in cleaned.split() if part]
+
+
+def normalize_risk_rating(value: str) -> str:
+    """Return a canonical severity label for source-supplied risk ratings."""
+
+    text = (value or "").strip()
+    if not text:
+        return ""
+
+    key = text.lower()
+    mapped = _RISK_RATING_NORMALISATIONS.get(key)
+    if mapped:
+        return mapped
+
+    # Title-case unknown values to preserve readability without breaking the
+    # severity counters.
+    return text[:1].upper() + text[1:]
 
 
 def load_yaml(path: Path) -> dict:
@@ -215,6 +243,21 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
     dstintf = pick_first_present(normalized_row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
     source_file = str(normalized_row.get("_source_file", ""))
 
+    risk_rating_raw = pick_first_present(
+        normalized_row,
+        [
+            "Risk Rating",
+            "Risk",
+            "Risk Level",
+            "RiskRating",
+        ],
+    )
+    risk_rating = normalize_risk_rating(risk_rating_raw)
+    risk_comment = pick_first_present(
+        normalized_row,
+        mapping.get("risk_comment", []),
+    ) or ""
+
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None
 
@@ -230,4 +273,6 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
         dst_interface=dstintf,
         service=service,
         source_file=source_file,
+        risk_rating=risk_rating,
+        risk_comment=risk_comment,
     )
