@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+import re
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from typing import (
 
 from .config import DEFAULT_RULES_CONFIG, RulesConfig, CIDRLimitPolicy
 from .model import Rule, Finding
+from .utils import SERVICE_NAME_PORTS
 
 
 logger = logging.getLogger(__name__)
@@ -233,25 +235,48 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
 
 
 def parse_ports(port_str: str) -> List[int]:
-    s = (port_str or "").lower().replace("tcp/", "").replace("udp/", "").strip()
-    # treat "any" as "unspecified" (empty list), not all ports
-    if s in ("", "any", "*"):
+    text = (port_str or "").lower()
+    text = text.replace("\n", ",").replace(";", ",")
+    text = re.sub(r"group member\s*\(\d+\)\s*:", " ", text)
+    text = text.strip()
+
+    # treat "any"/"all" as unspecified so other logic can decide on severity
+    if text in ("", "any", "*", "all", "all_services", "all_tcp", "all_udp"):
         return []
-    parts = [p.strip() for p in s.split(",") if p.strip()]
+
+    parts = [p.strip() for p in text.split(",") if p.strip()]
     out: List[int] = []
-    for p in parts:
-        if "-" in p:
-            a, b = p.split("-", 1)
-            try:
-                a_i, b_i = int(a), int(b)
-                out.extend(range(a_i, b_i + 1))
-            except ValueError:
-                continue
-        else:
-            try:
-                out.append(int(p))
-            except ValueError:
-                continue
+
+    for raw_part in parts:
+        part = raw_part.strip()
+        if not part:
+            continue
+
+        # remove leading protocol hints like tcp/22 or udp-53
+        part = re.sub(r"^(tcp|udp)[/_-]+", "", part)
+        part = part.strip(" _-")
+        if not part:
+            continue
+
+        normalized = part.upper().replace(" ", "")
+        mapped = SERVICE_NAME_PORTS.get(normalized)
+        if mapped is not None:
+            out.extend(mapped)
+            continue
+
+        token = part.replace("_", "-")
+        range_match = re.match(r"^(\d+)\s*-\s*(\d+)$", token)
+        if range_match:
+            start, end = int(range_match.group(1)), int(range_match.group(2))
+            if start > end:
+                start, end = end, start
+            out.extend(range(start, end + 1))
+            continue
+
+        numbers = re.findall(r"\d+", part)
+        if numbers:
+            out.extend(int(n) for n in numbers)
+
     return sorted({x for x in out if 1 <= x <= 65535})
 
 
