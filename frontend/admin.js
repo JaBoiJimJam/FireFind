@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify';
+
 (function () {
     const severityOptions = [
         { value: 'critical', label: 'Critical' },
@@ -2321,10 +2323,10 @@
     function createPolicyFields(title, policy, onChange, errorPrefix, compact = false) {
         const wrapper = document.createElement('div');
         wrapper.className = `fieldset${compact ? ' compact' : ''}`;
-
+        
         const legend = document.createElement('div');
         legend.className = 'fieldset-legend';
-        legend.innerHTML = `<span>${title}</span><span class="fieldset-hint">Set prefix limits and CIDR allow/deny lists.</span>`;
+        legend.innerHTML = `<span>${DOMPurify.sanitize(title)}</span><span class="fieldset-hint">Set prefix limits and CIDRs</span>`;
         wrapper.appendChild(legend);
 
         const grid = document.createElement('div');

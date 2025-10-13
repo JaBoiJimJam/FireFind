@@ -239,7 +239,7 @@ function formatFileSize(bytes) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
-
+    
 function displayFiles() {
     const filesSection = document.getElementById('filesSection');
     const filesGrid = document.getElementById('filesGrid');
@@ -250,10 +250,10 @@ function displayFiles() {
             <div class="file-card">
                 <div class="file-header">
                     <div>
-                        <div class="file-name">${file.name}</div>
-                        <div class="file-size">${file.size}</div>
+                        <div class="file-name">${DOMPurify.sanitize(file.name)}</div>
+                        <div class="file-size">${DOMPurify.sanitize(file.size)}</div>
                     </div>
-                    <button class="remove-btn" onclick="removeFile('${file.id}')">Remove</button>
+                    <button class="remove-btn" onclick="removeFile('${DOMPurify.sanitize(file.id)}')">Remove</button>
                 </div>
             </div>
         `).join('');
