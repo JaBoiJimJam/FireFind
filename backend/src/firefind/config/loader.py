@@ -174,8 +174,8 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
     "rule_overlap": {
         "max_rules_evaluated": 500,
         "max_rule_pairs": 5000,
-        "redundant_severity": Severity.LOW.value,
-        "shadowed_severity": Severity.MEDIUM.value,
+        "redundant_severity": Severity.CAUTIONARY.value,
+        "shadowed_severity": Severity.HIGH.value,
     },
     "risk_levels": {
         "critical": {
@@ -208,6 +208,14 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
             "rationale": {
                 "summary": "Exposure that should be remediated but does not pose an immediate threat.",
                 "references": ["NIST CSF PR.AC"],
+            },
+        },
+        "cautionary": {
+            "label": "Cautionary Risk",
+            "severity": Severity.CAUTIONARY.value,
+            "thresholds": {"min_score": 20},
+            "rationale": {
+                "summary": "Notable condition that warrants monitoring or follow-up investigations.",
             },
         },
         "low": {
@@ -315,6 +323,7 @@ DEFAULT_RULES_CONFIG_DATA["rules"] = {
                     "critical": Severity.CRITICAL.value,
                     "high": Severity.HIGH.value,
                     "medium": Severity.MEDIUM.value,
+                    "cautionary": Severity.CAUTIONARY.value,
                     "low": Severity.LOW.value,
                 },
                 "admin_ports": {
@@ -323,6 +332,7 @@ DEFAULT_RULES_CONFIG_DATA["rules"] = {
                         "critical": list(DEFAULT_RULES_CONFIG_DATA["critical_risk_admin_ports"]),
                         "high": list(DEFAULT_RULES_CONFIG_DATA["high_risk_admin_ports"]),
                         "medium": list(DEFAULT_RULES_CONFIG_DATA["medium_risk_admin_ports"]),
+                        "cautionary": list(DEFAULT_RULES_CONFIG_DATA["low_risk_admin_ports"]),
                         "low": list(DEFAULT_RULES_CONFIG_DATA["low_risk_admin_ports"]),
                     },
                 },

@@ -27,18 +27,43 @@ SERVICE_NAME_PORTS = {
     "FTP": [21],
     "FTPS": [990, 989, 21],
     "DNS": [53],
+    "DOMAIN": [53],
+    "DOMAIN-TCP": [53],
+    "DOMAIN-UDP": [53],
     "SMTP": [25],
     "SMTPS": [465],
     "POP3": [110],
     "IMAP": [143],
     "RDP": [3389],
+    "NTP": [123],
+    "NTP-TCP": [123],
+    "NTP-UDP": [123],
     "SQL": [1433],
     "MYSQL": [3306],
     "POSTGRES": [5432],
     "HTTP_PROXY": [8080],
     "VNC": [5900],
+    "MICROSOFT-DS": [445],
+    "MICROSOFT_DS": [445],
+    "KERBEROS_V5_TCP": [88],
+    "KERBEROS_V5_UDP": [88],
+    "KERBEROS-TCP-V4": [88],
+    "KERBEROS-UDP-V4": [88],
+    "NBT": [137, 138, 139],
+    "ADPORTS": [88, 135, 137, 138, 139, 389, 445, 464, 3268, 3269],
     "PING": [],
     "ICMP": [],
+}
+
+
+_RISK_RATING_NORMALISATIONS = {
+    "critical": "Critical",
+    "critil": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "cautionary": "Cautionary",
+    "utionary": "Cautionary",
 }
 
 
@@ -52,6 +77,23 @@ def _tokenise_service_values(text: str) -> Iterable[str]:
         .replace("/ ", "/")
     )
     return [part for part in cleaned.split() if part]
+
+
+def normalize_risk_rating(value: str) -> str:
+    """Return a canonical severity label for source-supplied risk ratings."""
+
+    text = (value or "").strip()
+    if not text:
+        return ""
+
+    key = text.lower()
+    mapped = _RISK_RATING_NORMALISATIONS.get(key)
+    if mapped:
+        return mapped
+
+    # Title-case unknown values to preserve readability without breaking the
+    # severity counters.
+    return text[:1].upper() + text[1:]
 
 
 def load_yaml(path: Path) -> dict:
@@ -215,6 +257,21 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
     dstintf = pick_first_present(normalized_row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
     source_file = str(normalized_row.get("_source_file", ""))
 
+    risk_rating_raw = pick_first_present(
+        normalized_row,
+        [
+            "Risk Rating",
+            "Risk",
+            "Risk Level",
+            "RiskRating",
+        ],
+    )
+    risk_rating = normalize_risk_rating(risk_rating_raw)
+    risk_comment = pick_first_present(
+        normalized_row,
+        mapping.get("risk_comment", []),
+    ) or ""
+
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None
 
@@ -230,4 +287,6 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
         dst_interface=dstintf,
         service=service,
         source_file=source_file,
+        risk_rating=risk_rating,
+        risk_comment=risk_comment,
     )

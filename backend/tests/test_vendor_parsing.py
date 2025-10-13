@@ -4,6 +4,8 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
+import pytest
+
 from firefind.loaders.csv_xlsx_loader import load_table
 from firefind.rules_engine import run_checks
 from firefind.utils import load_yaml, pick_mapping, to_rule
@@ -16,6 +18,9 @@ def _load_rule(vendor: str, sample_name: str):
     mapping = pick_mapping(vendor_mappings, vendor)
 
     sample_path = BACKEND_DIR / "samples" / sample_name
+    if not sample_path.exists():
+        pytest.skip(f"Sample file {sample_name} is not available")
+
     rows = list(load_table(sample_path))
     assert rows, f"Expected rows in {sample_name}"
     row = rows[0]

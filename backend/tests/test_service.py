@@ -49,3 +49,21 @@ def test_risk_codes_are_resequenced() -> None:
     deduped = deduplicate_findings([first, second])
 
     assert [f.risk_code for f in deduped] == ["FR-HIGEN-001", "FR-HIGEN-002"]
+
+
+def test_rule_level_aggregation_merges_rationales() -> None:
+    admin = _make_finding("High", risk_code="FR-HIGEN-010")
+    redundant = _make_finding("Medium")
+    redundant.finding_type = "redundant_rule"
+    redundant.rationale = "Rule is redundant because earlier rule applies"
+    redundant.risk_code = ""
+
+    deduped = deduplicate_findings([redundant, admin])
+
+    assert len(deduped) == 1
+    consolidated = deduped[0]
+    assert consolidated.severity == "High"
+    assert consolidated.finding_type == "admin_port_exposed"
+    assert "Additional issues" in consolidated.rationale
+    assert "redundant rule" in consolidated.rationale.lower()
+    assert "FR-HIGEN-001" == consolidated.risk_code

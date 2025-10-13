@@ -21,6 +21,25 @@ def test_parse_ports_malformed():
     assert parse_ports("abc") == []
 
 
+def test_parse_ports_protocol_with_underscore():
+    assert parse_ports("TCP_135") == [135]
+
+
+def test_parse_ports_range_with_underscore():
+    ports = parse_ports("TCP-49152_65535")
+    assert ports[0] == 49152
+    assert ports[-1] == 65535
+    assert len(ports) == 65535 - 49152 + 1
+
+
+def test_parse_ports_strips_group_member_prefix():
+    assert parse_ports("Group Member (2): TCP/22, TCP/23") == [22, 23]
+
+
+def test_parse_ports_named_service_mapping():
+    assert parse_ports("NTP-UDP") == [123]
+
+
 def test_run_checks_allow_any():
     rule = Rule("1", "any", "any", "any", "any", "allow")
     findings = run_checks("v", [rule], {})
@@ -234,10 +253,13 @@ def test_run_analysis_directory_and_dedup(tmp_path):
         mappings_path=mappings_path,
     )
 
-    assert len(findings) == 3
-    types = {f.finding_type for f in findings}
-    assert {"allow_any", "admin_port_exposed", "broad_cidr"} <= types
-    assert "admin_port_exposed" in types
+    assert len(findings) == 1
+    [finding] = findings
+    assert finding.finding_type == "admin_port_exposed"
+    # Additional analyzers should be merged into the consolidated rationale so
+    # the context is not lost during de-duplication.
+    assert "allow any" in finding.rationale
+    assert "broad cidr" in finding.rationale.lower()
 
 
 def test_run_analysis_custom_config_loading(tmp_path):

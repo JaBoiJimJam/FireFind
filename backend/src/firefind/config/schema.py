@@ -13,6 +13,7 @@ class Severity(str, Enum):
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
+    CAUTIONARY = "cautionary"
     LOW = "low"
     INFORMATIONAL = "informational"
 
@@ -404,8 +405,8 @@ class RuleOverlapSettings:
 
     max_rules_evaluated: int = 500
     max_rule_pairs: int = 5000
-    redundant_severity: Severity = Severity.LOW
-    shadowed_severity: Severity = Severity.MEDIUM
+    redundant_severity: Severity = Severity.CAUTIONARY
+    shadowed_severity: Severity = Severity.HIGH
 
     def __post_init__(self) -> None:
         if int(self.max_rules_evaluated) < 0:
