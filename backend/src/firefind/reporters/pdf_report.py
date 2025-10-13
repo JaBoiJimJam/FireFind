@@ -209,8 +209,9 @@ class PDFReport(FPDF):
         boxes_bottom = y_start + ((len(severities) - 1) * 25) + box_height
 
         # Position the bar chart below the summary boxes to avoid overlapping text
-        chart_height = 70
-        chart_spacing = 18
+        # Reduce the chart height and spacing so the graph sits higher on the page
+        chart_height = 60
+        chart_spacing = 10
         chart_origin_y = boxes_bottom + chart_height + chart_spacing
         chart_origin_x = max(45, self.l_margin + 5)
         chart_width = self.w - chart_origin_x - self.r_margin
