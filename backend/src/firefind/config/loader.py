@@ -174,8 +174,8 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
     "rule_overlap": {
         "max_rules_evaluated": 500,
         "max_rule_pairs": 5000,
-        "redundant_severity": Severity.LOW.value,
-        "shadowed_severity": Severity.MEDIUM.value,
+        "redundant_severity": Severity.CAUTIONARY.value,
+        "shadowed_severity": Severity.HIGH.value,
     },
     "risk_levels": {
         "critical": {
