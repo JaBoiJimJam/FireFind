@@ -60,17 +60,31 @@ def _resequence_risk_codes(findings: List[Finding]) -> None:
 
 
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
-    """De-duplicate findings keeping the highest severity entry for each key."""
+    """Collapse duplicate findings and aggregate rule level issues.
 
-    # We intentionally omit the severity from the key so that we can compare and
-    # retain the highest severity when the same underlying issue is reported
-    # more than once.
-    key_fields: Tuple[str, ...]
-    index_map: Dict[Tuple[str, ...], int] = {}
-    findings_unique: List[Finding] = []
+    The previous de-duplication logic compared the entire ``Finding`` payload
+    (rule identifiers, addressing, protocol details, etc.) and retained the
+    highest severity match.  That approach still surfaced multiple entries for
+    the same rule when different analyzers flagged related issues (e.g. an
+    administrative port exposure *and* an all-ports service warning).  Users
+    reported inflated risk counts as a result.
+
+    This implementation first removes exact duplicates and then groups findings
+    by vendor/source file/rule identifier.  For each rule we:
+
+    * retain the highest severity finding as the "primary" record; and
+    * merge rationales from all contributing analyzers into a single narrative
+      so that additional context is not lost.
+
+    Returning a single consolidated finding per rule produces counts that match
+    expectations while still communicating every detected issue.
+    """
+
+    # Step 1 – coalesce identical findings keeping the highest severity entry.
+    detailed_index: Dict[Tuple[str, ...], Finding] = {}
 
     for finding in findings:
-        key_fields = (
+        detail_key = (
             finding.vendor,
             finding.rule_id,
             finding.src,
@@ -83,15 +97,85 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             finding.source_file,
         )
 
-        existing_index = index_map.get(key_fields)
-        if existing_index is None:
-            index_map[key_fields] = len(findings_unique)
-            findings_unique.append(finding)
+        existing = detailed_index.get(detail_key)
+        if existing is None or _severity_rank(finding.severity) > _severity_rank(
+            existing.severity
+        ):
+            detailed_index[detail_key] = finding
+
+    # Step 2 – group by rule identifier and aggregate related rationales.
+    grouped: Dict[Tuple[str, str, str], Dict[str, object]] = {}
+
+    for finding in detailed_index.values():
+        rule_key = (finding.vendor, finding.source_file, finding.rule_id)
+        entry = grouped.setdefault(
+            rule_key,
+            {
+                "primary": None,
+                "details": [],
+            },
+        )
+
+        entry["details"].append(finding)
+
+        primary = entry["primary"]
+        if primary is None or _severity_rank(finding.severity) > _severity_rank(
+            primary.severity
+        ):
+            entry["primary"] = finding
             continue
 
-        existing = findings_unique[existing_index]
-        if _severity_rank(finding.severity) > _severity_rank(existing.severity):
-            findings_unique[existing_index] = finding
+        # Prefer admin_port_exposed as the representative issue when severities
+        # match so that risk codes remain visible for the most critical cases.
+        if (
+            _severity_rank(finding.severity) == _severity_rank(primary.severity)
+            and primary.finding_type != "admin_port_exposed"
+            and finding.finding_type == "admin_port_exposed"
+        ):
+            entry["primary"] = finding
+
+    findings_unique: List[Finding] = []
+
+    for entry in grouped.values():
+        primary = entry["primary"]
+        assert isinstance(primary, Finding)  # for type-checkers
+
+        # Build a combined rationale that preserves all contributing messages.
+        rationale_parts: List[str] = []
+        seen_pairs = set()
+        for detail in entry["details"]:
+            pair = (detail.finding_type, detail.rationale)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            if detail is primary:
+                continue
+            label = detail.finding_type.replace("_", " ")
+            rationale_parts.append(f"{label}: {detail.rationale}")
+
+        combined_rationale = primary.rationale
+        if rationale_parts:
+            combined_rationale = (
+                f"{combined_rationale} | Additional issues: "
+                + " | ".join(rationale_parts)
+            )
+
+        findings_unique.append(
+            Finding(
+                vendor=primary.vendor,
+                rule_id=primary.rule_id,
+                src=primary.src,
+                dst=primary.dst,
+                proto=primary.proto,
+                port=primary.port,
+                action=primary.action,
+                finding_type=primary.finding_type,
+                severity=primary.severity,
+                rationale=combined_rationale,
+                risk_code=primary.risk_code,
+                source_file=primary.source_file,
+            )
+        )
 
     _resequence_risk_codes(findings_unique)
 
