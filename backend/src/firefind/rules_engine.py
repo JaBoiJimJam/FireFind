@@ -517,6 +517,7 @@ def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
         'Critical': 'CRGEN',
         'High': 'HIGEN',
         'Medium': 'MEDGEN',
+        'Cautionary': 'CAUGEN',
         'Low': 'LOWGEN'
     }.get(severity, 'GEN')
 
@@ -691,7 +692,36 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     findings: List[Finding] = []
     risk_code_counter = 1
 
+    rated_rules = [r for r in rules_list if r.risk_rating]
+    if rated_rules:
+        for r in rated_rules:
+            severity = r.risk_rating
+            details: List[str] = [f"Source-assessed risk rating: {severity}."]
+            if r.port and r.port.strip():
+                details.append(f"Ports identified: {r.port}")
+            elif r.service and r.service.strip():
+                details.append(f"Service identified: {r.service}")
+            if r.risk_comment:
+                details.append(r.risk_comment)
+            findings.append(
+                Finding(
+                    vendor,
+                    r.rule_id,
+                    r.src,
+                    r.dst,
+                    r.proto,
+                    r.port,
+                    r.action,
+                    finding_type="source_risk_rating",
+                    severity=severity,
+                    rationale=" ".join(details),
+                    source_file=r.source_file,
+                )
+            )
+        return findings
+
     for r in rules_list:
+
         # Allow-any
         if (
             action_allows_traffic(r.action)

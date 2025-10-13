@@ -25,9 +25,10 @@ from .utils import load_yaml, pick_mapping, to_rule
 # Severity ranking used to compare and retain the most critical finding when
 # duplicates are encountered. Higher numbers represent higher risk.
 _SEVERITY_PRIORITY: Dict[str, int] = {
-    "Critical": 4,
-    "High": 3,
-    "Medium": 2,
+    "Critical": 5,
+    "High": 4,
+    "Medium": 3,
+    "Cautionary": 2,
     "Low": 1,
     "Info": 0,
 }

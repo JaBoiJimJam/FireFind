@@ -75,14 +75,35 @@ def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
     try:
         ws = wb.active
 
-        # find the header row
+        # find the header row while tracking the immediately preceding
+        # non-empty row so we can borrow missing column names (e.g. "Risk
+        # Rating" which often appears above the main header line).
         header_row_idx = None
+        headers: list[str] = []
+        previous_non_empty: list[str] = []
         for i, row in enumerate(ws.iter_rows(values_only=True), start=1):
             cells = [str(c).strip() if c is not None else "" for c in row]
             if {"Seq #", "Action", "Service"} <= set(cells):
                 header_row_idx = i
-                headers = cells
+                # Merge with the previous non-empty row so that supporting
+                # columns such as "Risk Rating" are retained.
+                merged: list[str] = []
+                max_len = max(len(cells), len(previous_non_empty))
+                for idx in range(max_len):
+                    current = cells[idx] if idx < len(cells) else ""
+                    if current:
+                        merged.append(current)
+                        continue
+                    previous = (
+                        previous_non_empty[idx]
+                        if idx < len(previous_non_empty)
+                        else ""
+                    )
+                    merged.append(previous or "")
+                headers = merged
                 break
+            if any(cells):
+                previous_non_empty = cells
 
         if header_row_idx is None:
             # fallback: take the first non-empty row as headers
@@ -101,6 +122,8 @@ def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
         # iterate rows after header
         for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
             values = [("" if v is None else str(v).strip()) for v in row]
+            if len(values) > len(headers):
+                headers = headers + [""] * (len(values) - len(headers))
             # pad to headers length
             if len(values) < len(headers):
                 values += [""] * (len(headers) - len(values))
