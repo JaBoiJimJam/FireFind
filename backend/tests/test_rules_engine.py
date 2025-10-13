@@ -21,6 +21,25 @@ def test_parse_ports_malformed():
     assert parse_ports("abc") == []
 
 
+def test_parse_ports_protocol_with_underscore():
+    assert parse_ports("TCP_135") == [135]
+
+
+def test_parse_ports_range_with_underscore():
+    ports = parse_ports("TCP-49152_65535")
+    assert ports[0] == 49152
+    assert ports[-1] == 65535
+    assert len(ports) == 65535 - 49152 + 1
+
+
+def test_parse_ports_strips_group_member_prefix():
+    assert parse_ports("Group Member (2): TCP/22, TCP/23") == [22, 23]
+
+
+def test_parse_ports_named_service_mapping():
+    assert parse_ports("NTP-UDP") == [123]
+
+
 def test_run_checks_allow_any():
     rule = Rule("1", "any", "any", "any", "any", "allow")
     findings = run_checks("v", [rule], {})
