@@ -5,7 +5,7 @@
   "scripts": {
     "test": "jest",
     "test:frontend": "jest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
     "start": "node backend/file_server.js",
     "dev": "node backend/file_server.js"
   },
