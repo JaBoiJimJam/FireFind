@@ -507,9 +507,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
             if covering_action != candidate_action:
                 continue
 
-            severity = _resolve_overlap_severity(
-                settings.redundant_severity, "Cautionary"
-            )
+            severity = _resolve_overlap_severity(settings.redundant_severity, "Low")
             rationale_bits = [
                 f"Rule {candidate.rule_id} is redundant because earlier rule {covering.rule_id} already applies."
             ]
@@ -633,7 +631,6 @@ def classify_admin_port_severity(
     critical_risk_ports: Set[int],
     high_risk_ports: Set[int],
     medium_risk_ports: Set[int],
-    low_risk_ports: Set[int],
 ) -> str:
     """Return a qualitative severity based on the exposed admin ports."""
 
@@ -649,21 +646,16 @@ def classify_admin_port_severity(
     if exposed_ports & medium_risk_ports:
         return "Medium"
 
-    if exposed_ports & low_risk_ports:
-        return "Low"
-
     if len(exposed_ports) >= 8:
-        return "High"
+        return "Critical"
 
     if len(exposed_ports) >= 4:
+        return "High"
+
+    if len(exposed_ports) >= 2:
         return "Medium"
 
-    # Any remaining administrative surface should be treated as a cautionary
-    # risk instead of defaulting to "Low".  This allows frequently exposed
-    # management protocols (for example HTTPS dashboards on port 443) to be
-    # surfaced without inflating the Critical counts that drive executive
-    # attention.
-    return "Cautionary"
+    return "Low"
 
 
 def action_allows_traffic(action: str) -> bool:
@@ -761,7 +753,6 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 critical_risk_admin_ports,
                 high_risk_admin_ports,
                 medium_risk_admin_ports,
-                low_risk_admin_ports,
             )
             risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
@@ -808,7 +799,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 cidr_severity_rank = max(cidr_severity_rank, 1)
 
         if cidr_messages:
-            cidr_severity = "High" if cidr_severity_rank == 2 else "Cautionary"
+            cidr_severity = "High" if cidr_severity_rank == 2 else "Medium"
             findings.append(
                 Finding(
                     vendor,

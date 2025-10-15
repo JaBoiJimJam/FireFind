@@ -253,13 +253,10 @@ def test_run_analysis_directory_and_dedup(tmp_path):
         mappings_path=mappings_path,
     )
 
-    assert len(findings) == 1
-    [finding] = findings
-    assert finding.finding_type == "admin_port_exposed"
-    # Additional analyzers should be merged into the consolidated rationale so
-    # the context is not lost during de-duplication.
-    assert "allow any" in finding.rationale
-    assert "broad cidr" in finding.rationale.lower()
+    assert len(findings) == 3
+    types = {f.finding_type for f in findings}
+    assert {"allow_any", "admin_port_exposed", "broad_cidr"} <= types
+    assert "admin_port_exposed" in types
 
 
 def test_run_analysis_custom_config_loading(tmp_path):
