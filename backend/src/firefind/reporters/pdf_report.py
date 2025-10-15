@@ -82,9 +82,8 @@ class PDFReport(FPDF):
         """Return RGB color based on severity level"""
         colors = {
             'Critical': (220, 50, 50),    # Red
-            'High': (255, 165, 0),        # Orange
+            'High': (255, 165, 0),        # Orange  
             'Medium': (255, 215, 0),      # Yellow
-            'Cautionary': (255, 215, 180),  # Peach
             'Low': (144, 238, 144),       # Light Green
             'Info': (173, 216, 230)       # Light Blue
         }
@@ -100,7 +99,7 @@ class PDFReport(FPDF):
     ) -> float:
         """Draw a simple bar chart summarising risk distribution."""
 
-        severities = ['Critical', 'High', 'Medium', 'Cautionary', 'Low', 'Info']
+        severities = ['Critical', 'High', 'Medium', 'Low', 'Info']
         max_count = max([severity_counts.get(severity, 0) for severity in severities] + [0])
         if max_count == 0:
             max_count = 1  # Avoid divide-by-zero when there are no findings
@@ -177,7 +176,7 @@ class PDFReport(FPDF):
         box_width = 40
         box_height = 20
         
-        severities = ['Critical', 'High', 'Medium', 'Cautionary', 'Low', 'Info']
+        severities = ['Critical', 'High', 'Medium', 'Low', 'Info']
         
         for i, severity in enumerate(severities):
             count = severity_counts.get(severity, 0)
@@ -209,9 +208,8 @@ class PDFReport(FPDF):
         boxes_bottom = y_start + ((len(severities) - 1) * 25) + box_height
 
         # Position the bar chart below the summary boxes to avoid overlapping text
-        # Reduce the chart height and spacing so the graph sits higher on the page
-        chart_height = 60
-        chart_spacing = 10
+        chart_height = 70
+        chart_spacing = 18
         chart_origin_y = boxes_bottom + chart_height + chart_spacing
         chart_origin_x = max(45, self.l_margin + 5)
         chart_width = self.w - chart_origin_x - self.r_margin
@@ -254,9 +252,8 @@ class PDFReport(FPDF):
         """Generate a unique risk ID for tracking"""
         severity_prefix = {
             'Critical': 'CR',
-            'High': 'HI',
+            'High': 'HI', 
             'Medium': 'ME',
-            'Cautionary': 'CA',
             'Low': 'LO',
             'Info': 'IN'
         }
@@ -434,7 +431,7 @@ class PDFReport(FPDF):
             severity_groups[severity].append(finding)
         
         # Display recommendations by priority
-        priority_order = ['Critical', 'High', 'Medium', 'Cautionary', 'Low', 'Info']
+        priority_order = ['Critical', 'High', 'Medium', 'Low', 'Info']
         
         for severity in priority_order:
             if severity in severity_groups and severity_groups[severity]:
@@ -448,8 +445,6 @@ class PDFReport(FPDF):
                     section_title = f'{severity} Priority - Immediate Action Required'
                 elif severity == 'Medium':
                     section_title = f'{severity} Priority - Plan for Remediation'
-                elif severity == 'Cautionary':
-                    section_title = f'{severity} Priority - Monitor and Review'
                 else:
                     section_title = f'{severity} Priority - Long-term Improvement'
                     

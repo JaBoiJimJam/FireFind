@@ -14,8 +14,6 @@ class Rule:
     dst_interface: str = ""
     service: str = ""
     source_file: str = ""
-    risk_rating: str = ""
-    risk_comment: str = ""
 
 @dataclass
 class Finding:

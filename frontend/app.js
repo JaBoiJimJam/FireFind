@@ -338,9 +338,6 @@ async function startScan(e) {
         const metrics = data.metrics || {};
         document.getElementById('criticalCount').textContent = metrics.critical ?? 0;
         document.getElementById('highCount').textContent = metrics.high ?? 0;
-        document.getElementById('mediumCount').textContent = metrics.medium ?? 0;
-        document.getElementById('cautionaryCount').textContent = metrics.cautionary ?? 0;
-        document.getElementById('lowCount').textContent = metrics.low ?? 0;
         document.getElementById('totalCount').textContent = metrics.total ?? data.findings?.length ?? 0;
         document.getElementById('score').textContent = metrics.score != null ? metrics.score + '%' : '0%';
 
