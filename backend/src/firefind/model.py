@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Tuple
 
 @dataclass
 class Rule:
@@ -14,8 +14,6 @@ class Rule:
     dst_interface: str = ""
     service: str = ""
     source_file: str = ""
-    risk_rating: str = ""
-    risk_comment: str = ""
 
 @dataclass
 class Finding:
@@ -31,3 +29,4 @@ class Finding:
     rationale: str
     risk_code: str = ""  # Add this field
     source_file: str = ""
+    contributing_severities: Tuple[str, ...] = field(default_factory=tuple)

@@ -392,7 +392,7 @@ def patch_rules_config(
     return {"config": config.to_dict(), "metadata": metadata}
 
 
-_SEVERITY_KEYS = ("critical", "high", "medium", "cautionary", "low", "info")
+_SEVERITY_KEYS = ("critical", "high", "medium", "low", "info")
 
 
 def _calculate_score(metrics: Dict[str, int]) -> int:
@@ -402,7 +402,6 @@ def _calculate_score(metrics: Dict[str, int]) -> int:
         "critical": 30,
         "high": 15,
         "medium": 5,
-        "cautionary": 3,
         "low": 2,
     }
     penalty = sum(metrics.get(level, 0) * weight for level, weight in weights.items())
@@ -437,7 +436,17 @@ async def scan(
             mappings_path=rules_dir / "vendor_mappings.yaml",
         )
         # Build metrics by severity
-        severity_counts = Counter(f.severity.lower() for f in findings)
+        severity_counts: Counter[str] = Counter()
+        for finding in findings:
+            severities = (
+                finding.contributing_severities
+                if getattr(finding, "contributing_severities", None)
+                else (finding.severity,)
+            )
+            for severity in severities:
+                if not severity:
+                    continue
+                severity_counts[severity.lower()] += 1
         metrics: Dict[str, Any] = {
             key: int(severity_counts.get(key, 0)) for key in _SEVERITY_KEYS
         }

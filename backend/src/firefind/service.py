@@ -9,7 +9,7 @@ APIs) that need programmatic access to the analysis results.
 """
 
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, TypedDict
 
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
@@ -25,10 +25,9 @@ from .utils import load_yaml, pick_mapping, to_rule
 # Severity ranking used to compare and retain the most critical finding when
 # duplicates are encountered. Higher numbers represent higher risk.
 _SEVERITY_PRIORITY: Dict[str, int] = {
-    "Critical": 5,
-    "High": 4,
-    "Medium": 3,
-    "Cautionary": 2,
+    "Critical": 4,
+    "High": 3,
+    "Medium": 2,
     "Low": 1,
     "Info": 0,
 }
@@ -59,32 +58,23 @@ def _resequence_risk_codes(findings: List[Finding]) -> None:
         )
 
 
+class _GroupedEntry(TypedDict):
+    primary: Finding
+    details: List[Finding]
+
+
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
-    """Collapse duplicate findings and aggregate rule level issues.
+    """De-duplicate findings keeping the highest severity entry for each key."""
 
-    The previous de-duplication logic compared the entire ``Finding`` payload
-    (rule identifiers, addressing, protocol details, etc.) and retained the
-    highest severity match.  That approach still surfaced multiple entries for
-    the same rule when different analyzers flagged related issues (e.g. an
-    administrative port exposure *and* an all-ports service warning).  Users
-    reported inflated risk counts as a result.
-
-    This implementation first removes exact duplicates and then groups findings
-    by vendor/source file/rule identifier.  For each rule we:
-
-    * retain the highest severity finding as the "primary" record; and
-    * merge rationales from all contributing analyzers into a single narrative
-      so that additional context is not lost.
-
-    Returning a single consolidated finding per rule produces counts that match
-    expectations while still communicating every detected issue.
-    """
-
-    # Step 1 – coalesce identical findings keeping the highest severity entry.
-    detailed_index: Dict[Tuple[str, ...], Finding] = {}
+    # We intentionally omit the severity from the key so that we can compare and
+    # retain the highest severity when the same underlying issue is reported
+    # more than once.
+    key_fields: Tuple[str, ...]
+    grouped: Dict[Tuple[str, ...], _GroupedEntry] = {}
+    ordered_keys: List[Tuple[str, ...]] = []
 
     for finding in findings:
-        detail_key = (
+        key_fields = (
             finding.vendor,
             finding.rule_id,
             finding.src,
@@ -97,38 +87,31 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             finding.source_file,
         )
 
-        existing = detailed_index.get(detail_key)
-        if existing is None or _severity_rank(finding.severity) > _severity_rank(
-            existing.severity
-        ):
-            detailed_index[detail_key] = finding
+        entry = grouped.get(key_fields)
+        if entry is None:
+            grouped[key_fields] = {
+                "primary": finding,
+                "details": [finding],
+            }
+            ordered_keys.append(key_fields)
+            continue
 
-    # Step 2 – group by rule identifier and aggregate related rationales.
-    grouped: Dict[Tuple[str, str, str], Dict[str, object]] = {}
-
-    for finding in detailed_index.values():
-        rule_key = (finding.vendor, finding.source_file, finding.rule_id)
-        entry = grouped.setdefault(
-            rule_key,
-            {
-                "primary": None,
-                "details": [],
-            },
-        )
-
-        entry["details"].append(finding)
+        entry_details = entry["details"]
+        entry_details.append(finding)
 
         primary = entry["primary"]
-        if primary is None or _severity_rank(finding.severity) > _severity_rank(
-            primary.severity
-        ):
+
+        primary_rank = _severity_rank(primary.severity)
+        finding_rank = _severity_rank(finding.severity)
+
+        if finding_rank > primary_rank:
             entry["primary"] = finding
             continue
 
         # Prefer admin_port_exposed as the representative issue when severities
         # match so that risk codes remain visible for the most critical cases.
         if (
-            _severity_rank(finding.severity) == _severity_rank(primary.severity)
+            finding_rank == primary_rank
             and primary.finding_type != "admin_port_exposed"
             and finding.finding_type == "admin_port_exposed"
         ):
@@ -136,15 +119,19 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
 
     findings_unique: List[Finding] = []
 
-    for entry in grouped.values():
+    for key in ordered_keys:
+        entry = grouped[key]
         primary = entry["primary"]
-        assert isinstance(primary, Finding)  # for type-checkers
 
         # Build a combined rationale that preserves all contributing messages.
         rationale_parts: List[str] = []
         seen_pairs = set()
-        for detail in entry["details"]:
+        contributing_severities: List[str] = []
+        details = entry["details"]
+        for detail in details:
+            assert isinstance(detail, Finding)
             pair = (detail.finding_type, detail.rationale)
+            contributing_severities.append(detail.severity)
             if pair in seen_pairs:
                 continue
             seen_pairs.add(pair)
@@ -174,6 +161,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 rationale=combined_rationale,
                 risk_code=primary.risk_code,
                 source_file=primary.source_file,
+                contributing_severities=tuple(contributing_severities),
             )
         )
 

@@ -31,9 +31,6 @@ function loadApp() {
     <div id="results">
       <span id="criticalCount"></span>
       <span id="highCount"></span>
-      <span id="mediumCount"></span>
-      <span id="cautionaryCount"></span>
-      <span id="lowCount"></span>
       <span id="totalCount"></span>
       <span id="score"></span>
       <a id="pdfLink" style="pointer-events:none;opacity:0.5"></a>
@@ -110,15 +107,7 @@ test('startScan posts files and updates metrics and links', async () => {
   expect(window.eval('uploadedFiles.length')).toBe(1);
 
   const mockResponse = {
-    metrics: {
-      critical: 1,
-      high: 2,
-      medium: 3,
-      cautionary: 4,
-      low: 5,
-      total: 6,
-      score: 75,
-    },
+    metrics: { critical: 1, high: 2, total: 3, score: 75 },
     pdf: '/report.pdf',
     csv: '/report.csv',
   };
@@ -136,10 +125,7 @@ test('startScan posts files and updates metrics and links', async () => {
   );
   expect(document.getElementById('criticalCount').textContent).toBe('1');
   expect(document.getElementById('highCount').textContent).toBe('2');
-  expect(document.getElementById('mediumCount').textContent).toBe('3');
-  expect(document.getElementById('cautionaryCount').textContent).toBe('4');
-  expect(document.getElementById('lowCount').textContent).toBe('5');
-  expect(document.getElementById('totalCount').textContent).toBe('6');
+  expect(document.getElementById('totalCount').textContent).toBe('3');
   expect(document.getElementById('score').textContent).toBe('75%');
 
   const pdfLink = document.getElementById('pdfLink');

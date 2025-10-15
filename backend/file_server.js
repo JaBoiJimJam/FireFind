@@ -2,12 +2,13 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
-
+const helmet = require('helmet');
 const app = express();
 const PORT = 3001;
 
 // Enable CORS for frontend
 app.use(cors());
+app.use(helmet());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Serve files from the out directory

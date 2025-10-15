@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify';
+
 (function () {
     const severityOptions = [
         { value: 'critical', label: 'Critical' },
@@ -2219,7 +2221,8 @@
     function createTextField(labelText, value, onInput, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
-        wrapper.innerHTML = `<span class="field-label">${labelText}</span>`;
+            rHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
+
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -2244,7 +2247,7 @@
     function createSelectField(labelText, choices, selected, onChange, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
-        wrapper.innerHTML = `<span class="field-label">${labelText}</span>`;
+        wrapper.innerHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
 
         const select = document.createElement('select');
         choices.forEach((choice) => {
@@ -2265,7 +2268,7 @@
     function createNumberField(labelText, value, onChange, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
-        wrapper.innerHTML = `<span class="field-label">${labelText}</span>`;
+        wrapper.innerHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
 
         const input = document.createElement('input');
         input.type = 'number';
@@ -2290,7 +2293,7 @@
     function createTextareaField(labelText, value, onInput, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = 'form-field textarea-field';
-        wrapper.innerHTML = `<span class="field-label">${labelText}</span>`;
+        wrapper.innerHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
 
         const textarea = document.createElement('textarea');
         textarea.value = value ?? '';
@@ -2321,10 +2324,10 @@
     function createPolicyFields(title, policy, onChange, errorPrefix, compact = false) {
         const wrapper = document.createElement('div');
         wrapper.className = `fieldset${compact ? ' compact' : ''}`;
-
+        
         const legend = document.createElement('div');
         legend.className = 'fieldset-legend';
-        legend.innerHTML = `<span>${title}</span><span class="fieldset-hint">Set prefix limits and CIDR allow/deny lists.</span>`;
+        legend.innerHTML = `<span>${DOMPurify.sanitize(title)}</span><span class="fieldset-hint">Set prefix limits and CIDRs</span>`;
         wrapper.appendChild(legend);
 
         const grid = document.createElement('div');
