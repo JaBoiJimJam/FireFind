@@ -143,8 +143,10 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         # Build a combined rationale that preserves all contributing messages.
         rationale_parts: List[str] = []
         seen_pairs = set()
+        contributing_severities: List[str] = []
         for detail in entry["details"]:
             pair = (detail.finding_type, detail.rationale)
+            contributing_severities.append(detail.severity)
             if pair in seen_pairs:
                 continue
             seen_pairs.add(pair)
@@ -174,6 +176,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 rationale=combined_rationale,
                 risk_code=primary.risk_code,
                 source_file=primary.source_file,
+                contributing_severities=tuple(contributing_severities),
             )
         )
 

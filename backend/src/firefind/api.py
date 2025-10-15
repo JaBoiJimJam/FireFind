@@ -437,7 +437,17 @@ async def scan(
             mappings_path=rules_dir / "vendor_mappings.yaml",
         )
         # Build metrics by severity
-        severity_counts = Counter(f.severity.lower() for f in findings)
+        severity_counts: Counter[str] = Counter()
+        for finding in findings:
+            severities = (
+                finding.contributing_severities
+                if getattr(finding, "contributing_severities", None)
+                else (finding.severity,)
+            )
+            for severity in severities:
+                if not severity:
+                    continue
+                severity_counts[severity.lower()] += 1
         metrics: Dict[str, Any] = {
             key: int(severity_counts.get(key, 0)) for key in _SEVERITY_KEYS
         }

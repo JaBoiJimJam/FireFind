@@ -808,7 +808,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 cidr_severity_rank = max(cidr_severity_rank, 1)
 
         if cidr_messages:
-            cidr_severity = "High" if cidr_severity_rank == 2 else "Cautionary"
+            cidr_severity = "High" if cidr_severity_rank == 2 else "Medium"
             findings.append(
                 Finding(
                     vendor,
