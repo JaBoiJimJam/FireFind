@@ -88,9 +88,60 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             findings_unique.append(finding)
             continue
 
-        existing = findings_unique[existing_index]
-        if _severity_rank(finding.severity) > _severity_rank(existing.severity):
-            findings_unique[existing_index] = finding
+        # Prefer admin_port_exposed as the representative issue when severities
+        # match so that risk codes remain visible for the most critical cases.
+        if (
+            _severity_rank(finding.severity) == _severity_rank(primary.severity)
+            and primary.finding_type != "admin_port_exposed"
+            and finding.finding_type == "admin_port_exposed"
+        ):
+            entry["primary"] = finding
+
+    findings_unique: List[Finding] = []
+
+    for entry in grouped.values():
+        primary = entry["primary"]
+        assert isinstance(primary, Finding)  # for type-checkers
+
+        # Build a combined rationale that preserves all contributing messages.
+        rationale_parts: List[str] = []
+        seen_pairs = set()
+        contributing_severities: List[str] = []
+        for detail in entry["details"]:
+            pair = (detail.finding_type, detail.rationale)
+            contributing_severities.append(detail.severity)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            if detail is primary:
+                continue
+            label = detail.finding_type.replace("_", " ")
+            rationale_parts.append(f"{label}: {detail.rationale}")
+
+        combined_rationale = primary.rationale
+        if rationale_parts:
+            combined_rationale = (
+                f"{combined_rationale} | Additional issues: "
+                + " | ".join(rationale_parts)
+            )
+
+        findings_unique.append(
+            Finding(
+                vendor=primary.vendor,
+                rule_id=primary.rule_id,
+                src=primary.src,
+                dst=primary.dst,
+                proto=primary.proto,
+                port=primary.port,
+                action=primary.action,
+                finding_type=primary.finding_type,
+                severity=primary.severity,
+                rationale=combined_rationale,
+                risk_code=primary.risk_code,
+                source_file=primary.source_file,
+                contributing_severities=tuple(contributing_severities),
+            )
+        )
 
     _resequence_risk_codes(findings_unique)
 
