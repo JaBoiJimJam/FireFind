@@ -9,7 +9,7 @@ APIs) that need programmatic access to the analysis results.
 """
 
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, TypedDict
 
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
@@ -58,6 +58,11 @@ def _resequence_risk_codes(findings: List[Finding]) -> None:
         )
 
 
+class _GroupedEntry(TypedDict):
+    primary: Finding
+    details: List[Finding]
+
+
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     """De-duplicate findings keeping the highest severity entry for each key."""
 
@@ -65,8 +70,8 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     # retain the highest severity when the same underlying issue is reported
     # more than once.
     key_fields: Tuple[str, ...]
-    index_map: Dict[Tuple[str, ...], int] = {}
-    findings_unique: List[Finding] = []
+    grouped: Dict[Tuple[str, ...], _GroupedEntry] = {}
+    ordered_keys: List[Tuple[str, ...]] = []
 
     for finding in findings:
         key_fields = (
@@ -82,16 +87,31 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             finding.source_file,
         )
 
-        existing_index = index_map.get(key_fields)
-        if existing_index is None:
-            index_map[key_fields] = len(findings_unique)
-            findings_unique.append(finding)
+        entry = grouped.get(key_fields)
+        if entry is None:
+            grouped[key_fields] = {
+                "primary": finding,
+                "details": [finding],
+            }
+            ordered_keys.append(key_fields)
+            continue
+
+        entry_details = entry["details"]
+        entry_details.append(finding)
+
+        primary = entry["primary"]
+
+        primary_rank = _severity_rank(primary.severity)
+        finding_rank = _severity_rank(finding.severity)
+
+        if finding_rank > primary_rank:
+            entry["primary"] = finding
             continue
 
         # Prefer admin_port_exposed as the representative issue when severities
         # match so that risk codes remain visible for the most critical cases.
         if (
-            _severity_rank(finding.severity) == _severity_rank(primary.severity)
+            finding_rank == primary_rank
             and primary.finding_type != "admin_port_exposed"
             and finding.finding_type == "admin_port_exposed"
         ):
@@ -99,15 +119,17 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
 
     findings_unique: List[Finding] = []
 
-    for entry in grouped.values():
+    for key in ordered_keys:
+        entry = grouped[key]
         primary = entry["primary"]
-        assert isinstance(primary, Finding)  # for type-checkers
 
         # Build a combined rationale that preserves all contributing messages.
         rationale_parts: List[str] = []
         seen_pairs = set()
         contributing_severities: List[str] = []
-        for detail in entry["details"]:
+        details = entry["details"]
+        for detail in details:
+            assert isinstance(detail, Finding)
             pair = (detail.finding_type, detail.rationale)
             contributing_severities.append(detail.severity)
             if pair in seen_pairs:
