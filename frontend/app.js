@@ -297,51 +297,6 @@ function removeFile(fileId) {
     showToast('File removed successfully', 'success');
 }
 
-async function startDemo() {
-    try {
-        showToast('Loading demo files...', 'info');
-        
-        // Load real sample files from backend
-        const sampleFiles = [
-            'barracuda_sample.csv',
-            'checkpoint_sample.csv',
-            'sophos_sample.csv'
-        ];
-        
-        uploadedFiles = [];
-        
-        for (const fileName of sampleFiles) {
-            try {
-                const response = await fetch(`/samples/${fileName}`);
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const file = new File([blob], fileName, { type: fileName.endsWith('.csv') ? 'text/csv' : 'application/octet-stream' });
-                    uploadedFiles.push({
-                        id: `demo-${Date.now()}-${Math.random()}`,
-                        name: fileName,
-                        size: formatFileSize(file.size),
-                        file: file
-                    });
-                }
-            } catch (error) {
-                console.warn(`Could not load sample file ${fileName}:`, error);
-            }
-        }
-        
-        if (uploadedFiles.length > 0) {
-            displayFiles();
-            saveFilesToStorage(); // Save demo files to localStorage
-            showToast(`${uploadedFiles.length} demo files loaded! Click "START SECURITY SCAN" to analyze.`, 'success');
-        } else {
-            showToast('Could not load demo files. Please upload your own files.', 'error');
-        }
-        
-    } catch (error) {
-        console.error('Error loading demo files:', error);
-        showToast('Error loading demo files. Please upload your own files.', 'error');
-    }
-}
-
 // Add this helper function to generate date-formatted filename
 function generateDateFilename(baseFilename, extension) {
     const now = new Date();
