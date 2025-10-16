@@ -18,7 +18,7 @@
             animation: none !important;
         }
         
-        /* Allow grid animation for scan page - override the animation: none rule */
+        /* Static grid background for scan page */
         .cyber-grid {
             position: absolute;
             width: 200%;
@@ -29,13 +29,43 @@
                 linear-gradient(rgba(78, 204, 163, 0.03) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(78, 204, 163, 0.03) 1px, transparent 1px);
             background-size: 50px 50px;
-            /* Re-enable the grid animation */
-            animation: gridMove 20s linear infinite !important;
+            /* No animation - static background */
+            animation: none !important;
         }
         
         /* Hide any existing particles */
         div[style*="position: fixed"][style*="width: 3px"][style*="height: 3px"] {
             display: none !important;
+        }
+        
+        /* Remove highlight effects from upload section on scan page */
+        .drop-zone::before {
+            display: none !important; /* Remove shimmer effect */
+        }
+        
+        .drop-zone:hover {
+            border-color: var(--border) !important; /* Keep original border color */
+            background: linear-gradient(135deg, var(--card-bg), rgba(78, 204, 163, 0.02)) !important; /* Keep original background */
+            transform: none !important; /* Remove scale effect */
+            box-shadow: none !important; /* Remove glow effect */
+        }
+        
+        .drop-zone.drag-over {
+            border-color: var(--border) !important; /* Keep original border color */
+            background: linear-gradient(135deg, var(--card-bg), rgba(78, 204, 163, 0.02)) !important; /* Keep original background */
+            animation: none !important; /* Remove pulse animation */
+            transform: none !important; /* Remove scale effect */
+        }
+        
+        /* Remove highlight effects from metric cards in analysis section */
+        .metric-card::before {
+            display: none !important; /* Remove sweep animation effect */
+        }
+        
+        .metric-card:hover {
+            transform: none !important; /* Remove any hover transformations */
+            box-shadow: none !important; /* Remove any hover glow effects */
+            border-color: var(--border) !important; /* Keep original border color */
         }
     </style>
 
