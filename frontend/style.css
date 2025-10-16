@@ -727,17 +727,25 @@
         /* Toast */
         .toast {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--accent-color);
-            color: var(--bg-primary);
+            bottom: 24px;
+            right: 24px;
+            background: var(--primary-green);
+            color: var(--dark-bg);
             padding: 1rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 500;
+            border-radius: 12px;
+            font-weight: 600;
             z-index: 1000;
-            animation: slideInRight 0.3s ease;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
             max-width: 400px;
             word-wrap: break-word;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .toast-error {
@@ -747,7 +755,12 @@
 
         .toast-success {
             background: var(--primary-green) !important;
-            color: var(--bg-primary) !important;
+            color: var(--dark-bg) !important;
+        }
+
+        .toast-info {
+            background: var(--primary-green) !important;
+            color: var(--dark-bg) !important;
         }
 
         @keyframes slideInRight {
@@ -1565,30 +1578,7 @@
             font-size: 0.85rem;
         }
 
-        .admin-toast {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            padding: 0.9rem 1.2rem;
-            border-radius: 12px;
-            background: rgba(78, 204, 163, 0.9);
-            color: var(--dark-bg);
-            font-weight: 600;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: all 0.3s ease;
-            pointer-events: none;
-        }
 
-        .admin-toast.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .admin-toast.error {
-            background: rgba(255, 68, 68, 0.9);
-            color: #fff;
-        }
 
         @media (max-width: 768px) {
             .admin-main {

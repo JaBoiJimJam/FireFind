@@ -268,6 +268,45 @@
                 }
             }
         }
+
+        // Unified notification system
+        function sanitize(str) {
+            if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
+                return DOMPurify.sanitize(str);
+            }
+            // Basic HTML escaping as fallback
+            return String(str).replace(/[&<>"']/g, (s) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[s]);
+        }
+
+        function showToast(message, type = 'info') {
+            // Remove any existing toasts
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+            
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = sanitize(message);
+            
+            document.body.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            // Auto-remove after appropriate duration (longer for errors)
+            const duration = type === 'error' ? 5000 : 3000;
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, 300);
+            }, duration);
+        }
     </script>
 </body>
 </html>

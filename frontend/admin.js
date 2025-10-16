@@ -4143,15 +4143,30 @@
     }
 
     function showToast(message, isError = false) {
-        const toast = document.querySelector(selectors.toast);
-        if (!toast) {
-            return;
-        }
-        toast.textContent = message;
-        toast.classList.toggle('error', isError);
-        toast.classList.add('visible');
+        // Use the unified toast system instead of admin-specific toast
+        const existing = document.querySelector('.toast');
+        if (existing) existing.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = isError ? 'toast toast-error' : 'toast toast-success';
+        toast.innerHTML = sanitize(message);
+        
+        document.body.appendChild(toast);
+        
+        // Trigger animation
         setTimeout(() => {
-            toast.classList.remove('visible');
-        }, 4000);
+            toast.classList.add('show');
+        }, 10);
+        
+        // Auto-remove after appropriate duration (longer for errors)
+        const duration = isError ? 5000 : 3000;
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.remove();
+                }
+            }, 300);
+        }, duration);
     }
 })();

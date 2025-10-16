@@ -1,3 +1,14 @@
+// Global sanitize function
+function sanitize(str) {
+    if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
+        return DOMPurify.sanitize(str);
+    }
+    // Basic HTML escaping as fallback
+    return String(str).replace(/[&<>"']/g, (s) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[s]);
+}
+
 // Smooth scroll function
 function smoothScroll(event, targetId) {
     if (event && typeof event.preventDefault === 'function') {
@@ -246,16 +257,6 @@ function displayFiles() {
     
     if (uploadedFiles.length > 0) {
         filesSection.classList.add('active');
-        // Use DOMPurify if available, otherwise use basic escaping
-        const sanitize = (str) => {
-            if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
-                return DOMPurify.sanitize(str);
-            }
-            // Basic HTML escaping as fallback
-            return String(str).replace(/[&<>"']/g, (s) => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            })[s]);
-        };
 
         filesGrid.innerHTML = uploadedFiles.map(file => `
             <div class="file-card">
@@ -293,12 +294,12 @@ function removeFile(fileId) {
     uploadedFiles = uploadedFiles.filter(f => String(f.id) !== normalizedId);
     displayFiles();
     saveFilesToStorage(); // Update localStorage after removing file
-    showToast('File removed');
+    showToast('File removed successfully', 'success');
 }
 
 async function startDemo() {
     try {
-        showToast('Loading demo files...');
+        showToast('Loading demo files...', 'info');
         
         // Load real sample files from backend
         const sampleFiles = [
@@ -330,14 +331,14 @@ async function startDemo() {
         if (uploadedFiles.length > 0) {
             displayFiles();
             saveFilesToStorage(); // Save demo files to localStorage
-            showToast(`${uploadedFiles.length} demo files loaded! Click "START SECURITY SCAN" to analyze.`);
+            showToast(`${uploadedFiles.length} demo files loaded! Click "START SECURITY SCAN" to analyze.`, 'success');
         } else {
-            showToast('Could not load demo files. Please upload your own files.');
+            showToast('Could not load demo files. Please upload your own files.', 'error');
         }
         
     } catch (error) {
         console.error('Error loading demo files:', error);
-        showToast('Error loading demo files. Please upload your own files.');
+        showToast('Error loading demo files. Please upload your own files.', 'error');
     }
 }
 
@@ -356,7 +357,7 @@ function generateDateFilename(baseFilename, extension) {
 
 async function startScan(e) {
     if (uploadedFiles.length === 0) {
-        showToast('Please upload files first');
+        showToast('Please upload files first', 'error');
         return;
     }
 
@@ -364,9 +365,7 @@ async function startScan(e) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = 'SCANNING...';
-    showToast('Scanning firewall configurations...');
-
-    const formData = new FormData();
+        showToast('Scanning firewall configurations...', 'info');    const formData = new FormData();
     uploadedFiles.forEach(f => {
         if (f.file) formData.append('files', f.file);
     });
@@ -421,9 +420,9 @@ async function startScan(e) {
         resultsSection.classList.add('active');
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         animateMetrics();
-        showToast('Scan complete!');
+        showToast('Scan completed successfully!', 'success');
     } catch (err) {
-        showToast('Scan failed: ' + err.message);
+        showToast('Scan failed: ' + err.message, 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -453,29 +452,30 @@ function animateMetrics() {
 }
 
 function showToast(message, type = 'info') {
+    // Remove any existing toasts
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
     
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    
-    // Add different styles for different toast types
-    if (type === 'error') {
-        toast.style.backgroundColor = '#ff4757';
-        toast.style.color = 'white';
-    } else if (type === 'success') {
-        toast.style.backgroundColor = 'var(--primary-green)';
-        toast.style.color = 'var(--bg-primary)';
-    }
+    toast.innerHTML = sanitize(message);
     
     document.body.appendChild(toast);
     
-    // Auto-remove after longer time for errors
+    // Trigger animation
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    
+    // Auto-remove after appropriate duration (longer for errors)
     const duration = type === 'error' ? 5000 : 3000;
     setTimeout(() => {
-        toast.style.animation = 'slideInRight 0.3s ease reverse';
-        setTimeout(() => toast.remove(), 300);
+        toast.classList.remove('show');
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 300);
     }, duration);
 }
 
