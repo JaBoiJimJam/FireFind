@@ -33,9 +33,9 @@
     <!-- Header -->
     <header id="header">
         <nav>
-            <a href="#" class="logo">
+            <div class="logo">
                 <img src="firefind-logo.png" alt="FireFind" class="logo-img" style="height: auto !important; width: 180px !important; max-width: 200px !important; min-width: 160px !important;">
-            </a>
+            </div>
             <ul class="nav-links">
                 <li><a href="index.html" onclick="handleAboutClick(event)">About</a></li>
                 <li><a href="scan.html">Scan</a></li>
@@ -78,6 +78,17 @@
             if (window.location.pathname.includes('reports.html')) {
                 history.replaceState({ file: 'reports.html' }, 'Reports - FireFind', '/reports');
             }
+            
+            // Set active navigation state for reports page
+            setTimeout(function() {
+                const navLinks = document.querySelectorAll('.nav-links a');
+                navLinks.forEach(link => link.classList.remove('active'));
+                const reportsLink = document.querySelector('.nav-links a[href="reports.html"]');
+                if (reportsLink) {
+                    reportsLink.classList.add('active');
+                }
+            }, 100);
+            
             loadReports();
         });
 

@@ -174,9 +174,7 @@
             display: block !important;
         }
 
-        header nav .logo .logo-img:hover {
-            opacity: 0.8 !important;
-        }
+        /* Logo hover effect removed - logo is no longer interactive */
 
         /* Mobile responsive */
         @media (max-width: 768px) {
@@ -225,6 +223,16 @@
         }
 
         .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        /* Active navigation state */
+        .nav-links a.active {
+            color: var(--primary-green);
+            text-shadow: 0 0 10px rgba(78, 204, 163, 0.5);
+        }
+
+        .nav-links a.active::after {
             width: 100%;
         }
 

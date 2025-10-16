@@ -497,8 +497,13 @@ function handleAboutClick(event) {
             top: 0,
             behavior: 'smooth'
         });
+        // Update active navigation state
+        if (typeof setActiveNavigation === 'function') {
+            setActiveNavigation();
+        }
     }
     // If not on index page, let the default link behavior work (go to index.html)
+    // The active state will be set automatically when the new page loads
 }
 
 // URL Management - Add this to your app.js file
@@ -517,11 +522,50 @@ function initializeRouting() {
         // Update URL without page reload
         history.pushState({ file: actualFile }, '', path);
         
+        // Update active navigation state
+        setActiveNavigation();
+        
         // Load the actual file if it's different from current
         const currentFile = window.location.pathname.split('/').pop();
         if (actualFile && actualFile !== currentFile && !window.location.pathname.includes(actualFile)) {
             window.location.href = actualFile;
         }
+    }
+
+    // Set active navigation state
+    function setActiveNavigation() {
+        const navLinks = document.querySelectorAll('.nav-links a');
+        const currentPath = window.location.pathname;
+        const currentFile = currentPath.split('/').pop() || 'index.html';
+        
+        // Remove active class from all links
+        navLinks.forEach(link => link.classList.remove('active'));
+        
+        // Add active class to current page link
+        navLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            let isActive = false;
+            
+            // Check if this link corresponds to the current page
+            switch(href) {
+                case 'index.html':
+                    isActive = currentFile === 'index.html' || currentFile === '' || currentPath === '/about' || currentPath === '/';
+                    break;
+                case 'scan.html':
+                    isActive = currentFile === 'scan.html' || currentPath === '/scan';
+                    break;
+                case 'reports.html':
+                    isActive = currentFile === 'reports.html' || currentPath === '/reports';
+                    break;
+                case 'admin.html':
+                    isActive = currentFile === 'admin.html' || currentPath === '/admin';
+                    break;
+            }
+            
+            if (isActive) {
+                link.classList.add('active');
+            }
+        });
     }
 
     // Update all navigation links
@@ -560,6 +604,9 @@ function initializeRouting() {
             }
             // For index.html (About), keep the existing onclick="handleAboutClick(event)" behavior
         });
+        
+        // Set active navigation state after updating links
+        setActiveNavigation();
     }
 
     // Clean current URL on page load
@@ -599,6 +646,7 @@ function initializeRouting() {
     document.addEventListener('DOMContentLoaded', function() {
         cleanCurrentUrl();
         updateNavLinks();
+        setActiveNavigation();
     });
 }
 
