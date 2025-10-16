@@ -93,5 +93,29 @@ async def delete_report(filename: str):
         print(f"Error deleting file: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete file")
 
+# Add route handlers for clean URLs before the catch-all static files mount
+from fastapi.responses import FileResponse
+
+@app.get("/about")
+@app.get("/")
+async def serve_index():
+    """Serve index.html for root and /about routes"""
+    return FileResponse("frontend/index.html")
+
+@app.get("/scan")
+async def serve_scan():
+    """Serve scan.html for /scan route"""
+    return FileResponse("frontend/scan.html")
+
+@app.get("/reports")
+async def serve_reports():
+    """Serve reports.html for /reports route"""
+    return FileResponse("frontend/reports.html")
+
+@app.get("/admin")
+async def serve_admin():
+    """Serve admin.html for /admin route"""
+    return FileResponse("frontend/admin.html")
+
 # Serve static files from frontend directory (this should be last)
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

@@ -246,14 +246,25 @@ function displayFiles() {
     
     if (uploadedFiles.length > 0) {
         filesSection.classList.add('active');
+        // Use DOMPurify if available, otherwise use basic escaping
+        const sanitize = (str) => {
+            if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
+                return DOMPurify.sanitize(str);
+            }
+            // Basic HTML escaping as fallback
+            return String(str).replace(/[&<>"']/g, (s) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[s]);
+        };
+
         filesGrid.innerHTML = uploadedFiles.map(file => `
             <div class="file-card">
                 <div class="file-header">
                     <div>
-                        <div class="file-name">${DOMPurify.sanitize(file.name)}</div>
-                        <div class="file-size">${DOMPurify.sanitize(file.size)}</div>
+                        <div class="file-name">${sanitize(file.name)}</div>
+                        <div class="file-size">${sanitize(file.size)}</div>
                     </div>
-                    <button class="remove-btn" onclick="removeFile('${DOMPurify.sanitize(file.id)}')">Remove</button>
+                    <button class="remove-btn" onclick="removeFile('${sanitize(file.id)}')">Remove</button>
                 </div>
             </div>
         `).join('');
@@ -285,15 +296,49 @@ function removeFile(fileId) {
     showToast('File removed');
 }
 
-function startDemo() {
-    uploadedFiles = [
-        { id: 'demo1', name: 'fortinet_config_2025.csv', size: '245 KB', file: new File(['demo'], 'fortinet_config_2025.csv', { type: 'text/csv' }) },
-        { id: 'demo2', name: 'sophos_rules_export.xlsx', size: '1.2 MB', file: new File(['demo'], 'sophos_rules_export.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) },
-        { id: 'demo3', name: 'checkpoint_firewall.csv', size: '567 KB', file: new File(['demo'], 'checkpoint_firewall.csv', { type: 'text/csv' }) }
-    ];
-    displayFiles();
-    saveFilesToStorage(); // Save demo files to localStorage
-    showToast('Demo files loaded successfully!');
+async function startDemo() {
+    try {
+        showToast('Loading demo files...');
+        
+        // Load real sample files from backend
+        const sampleFiles = [
+            'barracuda_sample.csv',
+            'checkpoint_sample.csv',
+            'sophos_sample.csv'
+        ];
+        
+        uploadedFiles = [];
+        
+        for (const fileName of sampleFiles) {
+            try {
+                const response = await fetch(`/samples/${fileName}`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const file = new File([blob], fileName, { type: fileName.endsWith('.csv') ? 'text/csv' : 'application/octet-stream' });
+                    uploadedFiles.push({
+                        id: `demo-${Date.now()}-${Math.random()}`,
+                        name: fileName,
+                        size: formatFileSize(file.size),
+                        file: file
+                    });
+                }
+            } catch (error) {
+                console.warn(`Could not load sample file ${fileName}:`, error);
+            }
+        }
+        
+        if (uploadedFiles.length > 0) {
+            displayFiles();
+            saveFilesToStorage(); // Save demo files to localStorage
+            showToast(`${uploadedFiles.length} demo files loaded! Click "START SECURITY SCAN" to analyze.`);
+        } else {
+            showToast('Could not load demo files. Please upload your own files.');
+        }
+        
+    } catch (error) {
+        console.error('Error loading demo files:', error);
+        showToast('Error loading demo files. Please upload your own files.');
+    }
 }
 
 // Add this helper function to generate date-formatted filename
@@ -517,8 +562,9 @@ function initializeRouting() {
         // Update URL without page reload
         history.pushState({ file: actualFile }, '', path);
         
-        // Load the actual file
-        if (actualFile && actualFile !== window.location.pathname.split('/').pop()) {
+        // Load the actual file if it's different from current
+        const currentFile = window.location.pathname.split('/').pop();
+        if (actualFile && actualFile !== currentFile && !window.location.pathname.includes(actualFile)) {
             window.location.href = actualFile;
         }
     }
@@ -548,18 +594,16 @@ function initializeRouting() {
                     cleanPath = href;
             }
             
-            // Remove existing click handlers and add new ones
-            link.removeAttribute('onclick');
-            link.addEventListener('click', function(e) {
-                e.preventDefault();
-                
-                if (href === 'index.html') {
-                    // Special handling for about page
-                    history.pushState({ file: 'index.html' }, 'About - FireFind', '/about');
-                } else {
+            // Only modify non-About links, let handleAboutClick handle the About link
+            if (href !== 'index.html') {
+                // Remove existing click handlers and add new ones for non-About links
+                link.removeAttribute('onclick');
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
                     navigateTo(cleanPath, href);
-                }
-            });
+                });
+            }
+            // For index.html (About), keep the existing onclick="handleAboutClick(event)" behavior
         });
     }
 

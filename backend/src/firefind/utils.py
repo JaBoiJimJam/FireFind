@@ -55,9 +55,14 @@ def _tokenise_service_values(text: str) -> Iterable[str]:
 
 
 def load_yaml(path: Path) -> dict:
-    """Load a YAML file and return an empty dict if the file is empty."""
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    """Load a YAML file and return an empty dict if the file is empty or doesn't exist."""
+    try:
+        if not Path(path).exists():
+            return {}
+        with Path(path).open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {}
 
 
 _ROUND_TRIP_YAML = YAML()

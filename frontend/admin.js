@@ -1,6 +1,15 @@
-import DOMPurify from 'dompurify';
-
 (function () {
+    // Safe sanitization helper
+    const sanitize = (str) => {
+        if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
+            return DOMPurify.sanitize(str);
+        }
+        // Basic HTML escaping as fallback
+        return String(str).replace(/[&<>"']/g, (s) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[s]);
+    };
+
     const severityOptions = [
         { value: 'critical', label: 'Critical' },
         { value: 'high', label: 'High' },
@@ -684,7 +693,7 @@ import DOMPurify from 'dompurify';
             return;
         }
         try {
-            const response = await ruleConfigApi.fetchConfig();
+            const response = await ruleConfigApi.fetchConfig({ token: 'dev-admin-token' });
             if (response && typeof response === 'object' && response.config && typeof response.config === 'object') {
                 applyImportedConfig(response.config);
                 showToast('Loaded configuration from backend.', false);
@@ -2221,7 +2230,7 @@ import DOMPurify from 'dompurify';
     function createTextField(labelText, value, onInput, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
-            rHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
+            rHTML = `<span class="field-label">${sanitize(labelText)}</span>`;
 
 
         const input = document.createElement('input');
@@ -2247,7 +2256,7 @@ import DOMPurify from 'dompurify';
     function createSelectField(labelText, choices, selected, onChange, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
-        wrapper.innerHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
+        wrapper.innerHTML = `<span class="field-label">${sanitize(labelText)}</span>`;
 
         const select = document.createElement('select');
         choices.forEach((choice) => {
@@ -2268,7 +2277,7 @@ import DOMPurify from 'dompurify';
     function createNumberField(labelText, value, onChange, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
-        wrapper.innerHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
+        wrapper.innerHTML = `<span class="field-label">${sanitize(labelText)}</span>`;
 
         const input = document.createElement('input');
         input.type = 'number';
@@ -2293,7 +2302,7 @@ import DOMPurify from 'dompurify';
     function createTextareaField(labelText, value, onInput, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = 'form-field textarea-field';
-        wrapper.innerHTML = `<span class="field-label">${DOMPurify.sanitize(labelText)}</span>`;
+        wrapper.innerHTML = `<span class="field-label">${sanitize(labelText)}</span>`;
 
         const textarea = document.createElement('textarea');
         textarea.value = value ?? '';
@@ -2327,7 +2336,7 @@ import DOMPurify from 'dompurify';
         
         const legend = document.createElement('div');
         legend.className = 'fieldset-legend';
-        legend.innerHTML = `<span>${DOMPurify.sanitize(title)}</span><span class="fieldset-hint">Set prefix limits and CIDRs</span>`;
+        legend.innerHTML = `<span>${sanitize(title)}</span><span class="fieldset-hint">Set prefix limits and CIDRs</span>`;
         wrapper.appendChild(legend);
 
         const grid = document.createElement('div');
