@@ -73,21 +73,21 @@ def test_cidr_limits_vendor_override():
             "broad_networks": {
                 "default": {"max_prefix": 8},
                 "vendors": {
-                    "fortinet": {
+                    "example_vendor": {
                         "max_prefix": 12,
-                        "description": "Fortinet exports treat /12 as broad.",
+                        "description": "Example vendor exports treat /12 as broad.",
                     }
                 },
             }
         }
     }
 
-    findings = run_checks("fortinet", [rule], cfg)
+    findings = run_checks("example_vendor", [rule], cfg)
     matching = [f for f in findings if f.finding_type == "broad_cidr"]
     assert matching, "Expected vendor override to trigger broad CIDR finding"
     assert "/12" in matching[0].rationale
 
-    other_vendor = run_checks("checkpoint", [rule], cfg)
+    other_vendor = run_checks("other_vendor", [rule], cfg)
     assert not any(f.finding_type == "broad_cidr" for f in other_vendor)
 
 
@@ -96,7 +96,7 @@ def test_cidr_limits_blocked_and_exempt():
         "cidr_limits": {
             "broad_networks": {
                 "default": {"max_prefix": 0, "blocked": []},
-                "vendors": {"fortinet": {"max_prefix": 0, "blocked": []}},
+                "vendors": {"example_vendor": {"max_prefix": 0, "blocked": []}},
             },
             "internet": {
                 "default": {
@@ -110,13 +110,13 @@ def test_cidr_limits_blocked_and_exempt():
     }
 
     blocked_rule = Rule("20", "0.0.0.0/0", "2.2.2.2", "any", "any", "allow")
-    blocked_findings = run_checks("fortinet", [blocked_rule], cfg)
+    blocked_findings = run_checks("example_vendor", [blocked_rule], cfg)
     blocked = [f for f in blocked_findings if f.finding_type == "broad_cidr"]
     assert blocked and blocked[0].severity == "High"
     assert "blocked CIDR" in blocked[0].rationale
 
     exempt_rule = Rule("21", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow")
-    exempt_findings = run_checks("fortinet", [exempt_rule], cfg)
+    exempt_findings = run_checks("example_vendor", [exempt_rule], cfg)
     assert not any(f.finding_type == "broad_cidr" for f in exempt_findings)
 
 
@@ -229,7 +229,7 @@ def test_run_analysis_directory_and_dedup(tmp_path):
 
     findings = run_analysis(
         input_path=data_dir,
-        vendor="fortinet",
+        vendor="generic",
         rules_path=rules_path,
         mappings_path=mappings_path,
     )
@@ -310,12 +310,12 @@ def test_run_checks_logs_thresholds(caplog):
     rule = Rule("1", "any", "any", "any", "any", "allow")
 
     caplog.set_level("INFO")
-    run_checks("fortinet", [rule], {})
+    run_checks("generic", [rule], {})
 
     records = [r for r in caplog.records if r.message == "Analyzer thresholds resolved"]
     assert records, "Expected structured logging output"
 
     record = records[0]
     assert "admin_port_exposed" in record.analyzers
-    assert record.vendor == "fortinet"
+    assert record.vendor == "generic"
     assert record.inventory == ANALYZER_INVENTORY

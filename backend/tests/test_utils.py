@@ -15,10 +15,10 @@ def test_load_yaml_empty(tmp_path):
 
 
 def test_pick_mapping_case_insensitive():
-    mappings = {"Fortinet": {"rule_id": ["Seq #"]}, "cisco": {"rule_id": ["Id"]}}
-    fortinet = pick_mapping(mappings, "FORTINET")
-    assert fortinet["__vendor__"] == "Fortinet"
-    assert fortinet["rule_id"] == ["Seq #"]
+    mappings = {"Generic": {"rule_id": ["Seq #"]}, "cisco": {"rule_id": ["Id"]}}
+    generic = pick_mapping(mappings, "GENERIC")
+    assert generic["__vendor__"] == "Generic"
+    assert generic["rule_id"] == ["Seq #"]
 
     cisco = pick_mapping(mappings, "Cisco")
     assert cisco["__vendor__"] == "cisco"
@@ -63,7 +63,7 @@ def test_to_rule_and_noise():
         "Dstintf": "virtual-wan-link",
         "Comment": "test",
     }
-    rule = to_rule(row, mapping, vendor="fortinet")
+    rule = to_rule(row, mapping, vendor="generic")
     assert isinstance(rule, Rule)
     assert rule.port == "80"
     assert rule.service == "HTTP"
@@ -71,4 +71,4 @@ def test_to_rule_and_noise():
     assert rule.dst_interface == "virtual-wan-link"
 
     noise_row = {"Seq #": "", "Source": "", "Dest": "", "Service": ""}
-    assert to_rule(noise_row, mapping, vendor="fortinet") is None
+    assert to_rule(noise_row, mapping, vendor="generic") is None

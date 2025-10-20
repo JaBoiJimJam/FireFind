@@ -232,21 +232,10 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
                     "description": "Admin port analyzer is slightly more permissive to avoid noise.",
                 }
             },
-            "vendors": {
-                "fortinet": {"max_prefix": 10},
-            },
             "directions": {
                 "outbound": {
                     "max_prefix": 12,
                     "description": "Outbound rules can be slightly broader without immediate escalation.",
-                }
-            },
-            "vendor_direction_overrides": {
-                "fortinet": {
-                    "inbound": {
-                        "max_prefix": 9,
-                        "description": "Inbound Fortinet policies are held to stricter network boundaries.",
-                    }
                 }
             },
         }

@@ -977,7 +977,7 @@
             row.appendChild(createTextField('Vendor', override.vendor, (value) => {
                 override.vendor = value;
                 runValidation();
-            }, { compact: true, placeholder: 'fortinet', errorKey: `${override.id}_vendor` }));
+            }, { compact: true, placeholder: 'vendor-name', errorKey: `${override.id}_vendor` }));
             row.appendChild(createTextField('Direction', override.direction, (value) => {
                 override.direction = value;
                 runValidation();

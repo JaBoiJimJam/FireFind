@@ -413,7 +413,7 @@ def _calculate_score(metrics: Dict[str, int]) -> int:
 @app.post("/api/scan")
 async def scan(
     files: List[UploadFile] = File(...),
-    vendor: str = "fortinet",
+    vendor: str = "generic",
     save_csv: bool = False,
     save_pdf: bool = False,
 ):
