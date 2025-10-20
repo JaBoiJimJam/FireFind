@@ -86,18 +86,10 @@ cidr_limits:
       admin_port_exposed:
         max_prefix: 12
         description: "Allow slightly broader ranges when focusing on admin ports."
-    vendors:
-      fortinet:
-        max_prefix: 10
     directions:
       outbound:
         max_prefix: 12
         description: "Outbound policies can be marginally broader."
-    vendor_direction_overrides:
-      fortinet:
-        inbound:
-          max_prefix: 9
-          description: "Inbound Fortinet rules should remain tightly scoped."
 
 # ---------------------------------------------------------------------------
 # Reusable port groups eliminate duplication across analyzers.  Entries accept

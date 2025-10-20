@@ -1,2 +1,0 @@
-"Rule #","Source","Destination","Service","Action","Notes"
-"100","0.0.0.0/0","198.51.100.5","TCP/3389","Allow","RDP access"

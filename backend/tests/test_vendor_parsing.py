@@ -31,29 +31,8 @@ def _assert_admin_port_finding(vendor: str, rule):
     assert any(f.finding_type == "admin_port_exposed" for f in findings)
 
 
-def test_sophos_sample_produces_finding():
-    rule = _load_rule("sophos", "sophos_sample.csv")
+def test_generic_sample_produces_finding():
+    rule = _load_rule("generic", "generic_sample.csv")
     assert rule.action == "allow"
     assert rule.port in {"22", "TCP/22"}
-    _assert_admin_port_finding("sophos", rule)
-
-
-def test_barracuda_sample_produces_finding():
-    rule = _load_rule("barracuda", "barracuda_sample.csv")
-    assert rule.action == "allow"
-    assert "3389" in rule.port
-    _assert_admin_port_finding("barracuda", rule)
-
-
-def test_checkpoint_sample_produces_finding():
-    rule = _load_rule("checkpoint", "checkpoint_sample.csv")
-    assert rule.action == "allow"
-    assert rule.port in {"22", "TCP/22"}
-    _assert_admin_port_finding("checkpoint", rule)
-
-
-def test_watchguard_sample_produces_finding():
-    rule = _load_rule("watchguard", "watchguard_sample.csv")
-    assert rule.action == "allow"
-    assert "22" in rule.port
-    _assert_admin_port_finding("watchguard", rule)
+    _assert_admin_port_finding("generic", rule)

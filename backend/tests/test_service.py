@@ -4,7 +4,7 @@ from firefind.service import deduplicate_findings
 
 def _make_finding(severity: str, risk_code: str = "") -> Finding:
     return Finding(
-        vendor="fortinet",
+        vendor="generic",
         rule_id="1",
         src="any",
         dst="internal",

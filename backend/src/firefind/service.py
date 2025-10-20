@@ -172,7 +172,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
 
 def run_analysis(
     input_path: Path,
-    vendor: str = "fortinet",
+    vendor: str = "generic",
     rules_path: Path = Path("rules/rules.yaml"),
     mappings_path: Path = Path("rules/vendor_mappings.yaml"),
 ) -> List[Finding]:

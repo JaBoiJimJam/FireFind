@@ -10,7 +10,9 @@ if not defined FIRE_FIND_API_TOKEN (
     echo [run_firefind.bat] FIRE_FIND_API_TOKEN not set; using development default 'dev-admin-token'.
 )
 
-REM Launch FastAPI dev server and open default browser
+echo [run_firefind.bat] Scheduling browser launch after server startup...
+start "" cmd /c "timeout /t 5 /nobreak > nul && start \"\" http://localhost:8000/"
+
+echo [run_firefind.bat] Launching FastAPI dev server...
+cd /d "%~dp0"
 python -m uvicorn backend.dev_server:app --reload --host localhost --port 8000
-timeout /t 3 > nul
-start "" http://localhost:8000/

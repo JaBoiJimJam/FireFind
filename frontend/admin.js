@@ -977,7 +977,7 @@
             row.appendChild(createTextField('Vendor', override.vendor, (value) => {
                 override.vendor = value;
                 runValidation();
-            }, { compact: true, placeholder: 'fortinet', errorKey: `${override.id}_vendor` }));
+            }, { compact: true, placeholder: 'vendor-name', errorKey: `${override.id}_vendor` }));
             row.appendChild(createTextField('Direction', override.direction, (value) => {
                 override.direction = value;
                 runValidation();
@@ -2230,7 +2230,7 @@
     function createTextField(labelText, value, onInput, options = {}) {
         const wrapper = document.createElement('label');
         wrapper.className = `form-field${options.compact ? ' compact' : ''}`;
-            rHTML = `<span class="field-label">${sanitize(labelText)}</span>`;
+        wrapper.innerHTML = `<span class="field-label">${sanitize(labelText)}</span>`;
 
 
         const input = document.createElement('input');
@@ -2238,6 +2238,9 @@
         input.value = value ?? '';
         if (options.placeholder) {
             input.placeholder = options.placeholder;
+        }
+        if (options.spellcheck !== undefined) {
+            input.spellcheck = options.spellcheck;
         }
         input.addEventListener('input', (event) => onInput(event.target.value));
         wrapper.appendChild(input);
