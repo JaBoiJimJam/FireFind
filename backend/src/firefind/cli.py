@@ -34,9 +34,9 @@ def main(
         help="Path to input CSV/XLSX file or folder of files",
     ),
     vendor: str = typer.Option(
-        "fortinet",
+        "generic",
         "--vendor",
-        help="Vendor name (e.g., 'fortinet')",
+        help="Vendor name (e.g., 'generic')",
     ),
     out_csv: str = typer.Option(
         "out/findings.csv",

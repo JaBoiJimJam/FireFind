@@ -97,7 +97,7 @@ def main():
     # Build the command
     cmd = [
         sys.executable, "-m", "firefind.cli",
-        "--vendor", "fortinet",
+        "--vendor", "generic",
         "--input", samples_dir,
         "--out-csv", out_csv,
         "--out-pdf", out_pdf,

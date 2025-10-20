@@ -14,11 +14,11 @@ from .vendors import apply_vendor_normalizer
 from .vendors.utils import pick_first_present, normalize_action
 
 
-# Mapping of common Fortinet service object names to well-known ports.  These
-# values are primarily based on the Client 2 exports whose ``service`` column
-# lists human-readable names (e.g. ``HTTP``) rather than explicit ``TCP/80``
-# entries.  The dictionary intentionally focuses on the most common services
-# that affect exposure analysis; unknown names simply fall back to the raw text.
+# Mapping of common service object names to well-known ports.  These values are
+# primarily based on anonymised client exports whose ``service`` column lists
+# human-readable names (e.g. ``HTTP``) rather than explicit ``TCP/80`` entries.
+# The dictionary intentionally focuses on the most common services that affect
+# exposure analysis; unknown names simply fall back to the raw text.
 SERVICE_NAME_PORTS = {
     "HTTP": [80],
     "HTTPS": [443],

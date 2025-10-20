@@ -8,7 +8,7 @@ from ..vendors.utils import normalize_header
 
 
 # Heuristic markers that indicate a row is being used as the header line in
-# Fortinet exports.  Some of the sample CSV files contain banner text and other
+# firewall exports.  Some of the sample CSV files contain banner text and other
 # metadata before the actual column headings which confused the old
 # ``csv.DictReader`` logic because it would treat that banner row as the header
 # and return dictionaries containing only the empty string key.  By recognising
