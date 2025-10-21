@@ -11,7 +11,7 @@ if not defined FIRE_FIND_API_TOKEN (
 )
 
 echo [run_firefind.bat] Scheduling browser launch after server startup...
-start "" cmd /c "timeout /t 5 /nobreak > nul && start \"\" http://localhost:8000/"
+start "" powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds 5; Start-Process 'http://localhost:8000/'"
 
 echo [run_firefind.bat] Launching FastAPI dev server...
 cd /d "%~dp0"
