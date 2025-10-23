@@ -15,4 +15,4 @@ start "" powershell -NoLogo -NoProfile -Command "Start-Sleep -Seconds 5; Start-P
 
 echo [run_firefind.bat] Launching FastAPI dev server...
 cd /d "%~dp0"
-python -m uvicorn backend.dev_server:app --reload --host localhost --port 8000
+python -m uvicorn backend.dev_server:app --host localhost --port 8000

@@ -6,14 +6,10 @@
     "test": "jest",
     "test:frontend": "jest",
     "test:e2e": "playwright test",
-    "start": "node backend/file_server.js",
-    "dev": "node backend/file_server.js"
+    "start": "./start_dev.sh",
+    "dev": "./start_dev.sh"
   },
-  "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@playwright/test": "^1.44.0",
     "jest": "^29.7.0",
