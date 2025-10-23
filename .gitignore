@@ -6,3 +6,5 @@ __pycache__/
 !backend/samples/**/*.CSV
 
 node_modules/
+backend/src/firefind/vendors/__pycache__/fortinet.cpython-313.pyc
+backend/src/firefind/reporters/__pycache__/__init__.cpython-313.pyc
