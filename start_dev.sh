@@ -14,5 +14,4 @@ if [ -z "${FIRE_FIND_API_TOKEN:-}" ]; then
 fi
 
 # Launch FastAPI dev server serving API and static frontend assets
-exec python -m uvicorn backend.dev_server:app --reload --host 0.0.0.0 --port 8000 --reload-exclude ".venv/*" --reload-exclude "out/*" --reload-exclude "*.pyc" --reload-exclude "__pycache__/*"
-
+exec python -m uvicorn backend.dev_server:app --reload --host 0.0.0.0 --port 8000
