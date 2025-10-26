@@ -137,16 +137,14 @@
 
             const reportsHTML = reports.map(report => {
                 const reportType = report.type.toUpperCase();
-                
                 // Extract date/time from filename
                 const dateMatch = report.name.match(/(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})/);
                 let displayName = 'Report';
                 let dateTime = 'Unknown Date';
-                
+                let clientName = '';
                 if (dateMatch) {
                     const datePart = dateMatch[1]; // 2025-10-01
                     const timePart = dateMatch[2].replace(/-/g, ':'); // 12:51:38
-                    
                     // Format the date nicely
                     const date = new Date(datePart + 'T' + timePart);
                     dateTime = date.toLocaleDateString('en-US', {
@@ -158,24 +156,33 @@
                         minute: '2-digit'
                     });
                 }
-                
+                // Extract client name from filename (between first and second '_')
+                // Example: report_Triskele-Labs_2025-10-26_15-13-35.pdf
+                const clientMatch = report.name.match(/^[^_]+_([^_]+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}/);
+                if (clientMatch) {
+                    clientName = clientMatch[1];
+                }
                 // Set display name based on file type and content
                 if (report.type === 'pdf') {
                     displayName = 'Report';
                 } else if (report.type === 'csv' || report.type === 'xlsx') {
                     displayName = 'Findings';
                 }
-                
                 return `
                     <div class="report-item">
                         <div class="report-type">${reportType}</div>
                         <div class="report-name">${displayName}</div>
-                        <div class="report-meta">
-                            <div class="report-date">
-                                <i class="fas fa-calendar icon"></i>${dateTime}
-                            </div>
-                            <div class="report-size">
-                                <i class="fas fa-hdd icon"></i>${formatFileSize(report.size)}
+                        <div class="report-meta" style="display: flex; flex-direction: column; gap: 0.4em; margin-bottom: 0.7em;">
+                            <div style="display: flex; align-items: center; gap: 0.7em; justify-content: flex-start;">
+                                <div class="report-client" style="display: flex; align-items: center; gap: 0.3em; padding-right: 1em;">
+                                    <i class="fas fa-user icon"></i><span>${clientName ? clientName : 'Unknown Client'}</span>
+                                </div>
+                                <div class="report-date" style="display: flex; align-items: center; gap: 0.3em; padding-right: 1em;">
+                                    <i class="fas fa-calendar icon"></i><span>${dateTime}</span>
+                                </div>
+                                <div class="report-size" style="display: flex; align-items: center; gap: 0.3em;">
+                                    <i class="fas fa-hdd icon"></i><span>${formatFileSize(report.size)}</span>
+                                </div>
                             </div>
                         </div>
                         <div class="report-actions">

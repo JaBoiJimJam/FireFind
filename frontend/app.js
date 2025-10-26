@@ -307,7 +307,14 @@ function generateDateFilename(baseFilename, extension) {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
     
-    return `${baseFilename}_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.${extension}`;
+    // Optionally add client name if provided
+    let clientName = '';
+    const clientInput = document.getElementById('client-name');
+    if (clientInput && clientInput.value.trim() !== '') {
+        clientName = '-' + clientInput.value.trim().replace(/\s+/g, '-');
+    }
+    // Use baseFilename for flexibility (report for PDF, findings for CSV)
+    return `${baseFilename}${clientName}_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.${extension}`;
 }
 
 async function startScan(e) {
@@ -324,6 +331,11 @@ async function startScan(e) {
     uploadedFiles.forEach(f => {
         if (f.file) formData.append('files', f.file);
     });
+    // Add client name to form data
+    const clientInput = document.getElementById('client-name');
+    if (clientInput && clientInput.value.trim() !== '') {
+        formData.append('client_name', clientInput.value.trim());
+    }
 
     try {
         const scanUrl = '/api/scan?save_pdf=1&save_csv=1';
@@ -345,8 +357,8 @@ async function startScan(e) {
         
         if (data.pdf) {
             pdfLink.href = data.pdf;
-            // Generate date-formatted filename for PDF
-            const pdfFileName = generateDateFilename('firefind_report', 'pdf');
+            // Generate date-formatted filename for PDF with client name
+            const pdfFileName = generateDateFilename('report', 'pdf');
             pdfLink.setAttribute('download', pdfFileName);
             pdfLink.style.pointerEvents = 'auto';
             pdfLink.style.opacity = '1';
@@ -359,8 +371,8 @@ async function startScan(e) {
         
         if (data.csv) {
             csvLink.href = data.csv;
-            // Generate date-formatted filename for CSV
-            const csvFileName = generateDateFilename('firefind_report', 'csv');
+            // Generate date-formatted filename for CSV with client name
+            const csvFileName = generateDateFilename('findings', 'csv');
             csvLink.setAttribute('download', csvFileName);
             csvLink.style.pointerEvents = 'auto';
             csvLink.style.opacity = '1';

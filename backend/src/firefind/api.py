@@ -409,6 +409,8 @@ def _calculate_score(metrics: Dict[str, int]) -> int:
     return int(score)
 
 
+from fastapi import Form
+
 @app.post("/scan")
 @app.post("/api/scan")
 async def scan(
@@ -416,6 +418,7 @@ async def scan(
     vendor: str = "generic",
     save_csv: bool = False,
     save_pdf: bool = False,
+    client_name: Optional[str] = Form(None),
 ):
     """Analyze uploaded CSV/XLSX files and return findings as JSON."""
     # Persist uploads to a temporary directory so our loader can read them
@@ -461,13 +464,17 @@ async def scan(
             reports_dir = Path.cwd() / "out"
             reports_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            # Sanitize client name for filename (use '-' for spaces)
+            client_name_for_file = (client_name.strip().replace(' ', '-') if client_name else "FireFind-Analysis")
             if save_csv:
-                csv_path = reports_dir / f"findings_{timestamp}.csv"
+                csv_path = reports_dir / f"findings_{client_name_for_file}_{timestamp}.csv"
                 write_findings_csv(csv_path, findings)
             if save_pdf:
-                pdf_path = reports_dir / f"report_{timestamp}.pdf"
+                pdf_path = reports_dir / f"report_{client_name_for_file}_{timestamp}.pdf"
+                # Use provided client_name or fallback
+                name_for_pdf = client_name if client_name else "FireFind Analysis"
                 generate_pdf(
-                    pdf_path, findings, client_name="FireFind Analysis"
+                    pdf_path, findings, client_name=name_for_pdf
                 )
 
     response: Dict[str, Any] = {
