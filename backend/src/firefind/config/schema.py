@@ -13,6 +13,7 @@ class Severity(str, Enum):
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
+    CAUTIONARY = "cautionary"
     LOW = "low"
     INFORMATIONAL = "informational"
 

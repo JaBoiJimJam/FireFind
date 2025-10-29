@@ -392,7 +392,7 @@ def patch_rules_config(
     return {"config": config.to_dict(), "metadata": metadata}
 
 
-_SEVERITY_KEYS = ("critical", "high", "medium", "low", "info")
+_SEVERITY_KEYS = ("critical", "high", "medium", "cautionary", "low", "info")
 
 
 def _calculate_score(metrics: Dict[str, int]) -> int:
@@ -402,6 +402,7 @@ def _calculate_score(metrics: Dict[str, int]) -> int:
         "critical": 30,
         "high": 15,
         "medium": 5,
+        "cautionary": 3,
         "low": 2,
     }
     penalty = sum(metrics.get(level, 0) * weight for level, weight in weights.items())

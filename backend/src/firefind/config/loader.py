@@ -210,6 +210,14 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
                 "references": ["NIST CSF PR.AC"],
             },
         },
+        "cautionary": {
+            "label": "Cautionary Risk",
+            "severity": Severity.CAUTIONARY.value,
+            "thresholds": {"min_score": 25},
+            "rationale": {
+                "summary": "Emerging exposure that warrants monitoring and scheduled remediation.",
+            },
+        },
         "low": {
             "label": "Low Risk",
             "severity": Severity.LOW.value,
