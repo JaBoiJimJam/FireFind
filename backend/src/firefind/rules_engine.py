@@ -204,7 +204,7 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
         "port_lists": [],
     },
     "admin_port_exposed": {
-        "risk_levels": ["critical", "high", "medium", "low"],
+        "risk_levels": ["critical", "high", "medium", "cautionary", "low"],
         "network_scope": [],
         "port_lists": [
             "admin_ports",
@@ -517,6 +517,7 @@ def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
         'Critical': 'CRGEN',
         'High': 'HIGEN',
         'Medium': 'MEDGEN',
+        'Cautionary': 'CAUGEN',
         'Low': 'LOWGEN'
     }.get(severity, 'GEN')
 
@@ -629,7 +630,7 @@ def classify_admin_port_severity(
     if len(exposed_ports) >= 2:
         return "Medium"
 
-    return "Low"
+    return "Cautionary"
 
 
 def action_allows_traffic(action: str) -> bool:

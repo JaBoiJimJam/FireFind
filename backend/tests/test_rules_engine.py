@@ -57,7 +57,7 @@ def test_admin_port_risk_rating_varies_with_port():
     assert ratings["1"] == "Critical"
     assert ratings["2"] == "High"
     assert ratings["3"] == "Medium"
-    assert ratings["4"] == "Low"
+    assert ratings["4"] == "Cautionary"
 
 
 def test_run_checks_broad_cidr():

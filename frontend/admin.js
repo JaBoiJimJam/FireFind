@@ -14,6 +14,7 @@
         { value: 'critical', label: 'Critical' },
         { value: 'high', label: 'High' },
         { value: 'medium', label: 'Medium' },
+        { value: 'cautionary', label: 'Cautionary' },
         { value: 'low', label: 'Low' },
         { value: 'informational', label: 'Informational' },
     ];
