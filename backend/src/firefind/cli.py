@@ -122,12 +122,13 @@ def parse(
             raw_rows.append(row)
 
     typer.echo(f"Loaded {len(raw_rows)} rows")
-    findings_unique = run_analysis(
+    analysis = run_analysis(
         input_path,
         vendor=vendor,
         rules_path=Path(rules),
         mappings_path=Path(mappings),
     )
+    findings_unique = analysis.findings
 
     # Save reports
     save_csv(findings_unique, Path(out_csv))

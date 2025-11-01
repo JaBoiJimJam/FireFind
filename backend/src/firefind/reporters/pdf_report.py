@@ -169,7 +169,8 @@ class PDFReport(FPDF):
         # Count findings by severity
         severity_counts = {}
         for finding in findings:
-            severity = finding.severity
+            rating = getattr(finding, "risk_rating", "")
+            severity = rating or finding.severity
             severity_counts[severity] = severity_counts.get(severity, 0) + 1
             
         # Risk level boxes - stack vertically for better fit
