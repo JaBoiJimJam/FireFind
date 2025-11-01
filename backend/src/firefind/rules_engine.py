@@ -35,6 +35,14 @@ DEFAULT_LOW_RISK_ADMIN_PORTS: Set[int] = set(
 )
 DEFAULT_ADMIN_PORTS = sorted(DEFAULT_RULES_CONFIG.admin_ports)
 
+_SEVERITY_LADDER = ["Critical", "High", "Medium", "Cautionary", "Low", "Info"]
+_SEVERITY_INDEX = {label: idx for idx, label in enumerate(_SEVERITY_LADDER)}
+_LOWEST_ADMIN_SEVERITY = _SEVERITY_INDEX["Low"]
+
+_WEB_PORTS = {80, 443}
+_SSH_PORTS = {22}
+_RDP_PORTS = {3389}
+
 Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
 
@@ -646,6 +654,98 @@ def looks_internet_facing(value: str) -> bool:
     return any(token in v for token in candidates)
 
 
+def _downgrade_severity(severity: str, steps: int) -> str:
+    if steps <= 0:
+        return severity
+    start = _SEVERITY_INDEX.get(severity, 0)
+    target = min(start + steps, _LOWEST_ADMIN_SEVERITY)
+    return _SEVERITY_LADDER[target]
+
+
+def _is_scope_broad(value: str) -> bool:
+    text = (value or "").strip()
+    if not text:
+        return True
+
+    lowered = text.lower()
+    if lowered in {"*", "any", "all"}:
+        return True
+
+    keyword_matches = [
+        "0.0.0.0/0",
+        "::/0",
+        "internet",
+        "wan",
+        "dmz",
+        "external",
+        "outside",
+        "public",
+        "anywhere",
+        "untrust",
+    ]
+    if any(keyword in lowered for keyword in keyword_matches):
+        return True
+
+    try:
+        network = ipaddress.ip_network(text, strict=False)
+    except Exception:
+        return False
+
+    if network.version == 4 and network.prefixlen <= 16:
+        return True
+    if network.version == 6 and network.prefixlen <= 32:
+        return True
+    return False
+
+
+def _port_profile(ports: Set[int]) -> str:
+    if not ports:
+        return "none"
+    if ports <= _WEB_PORTS:
+        return "web"
+    if ports <= _SSH_PORTS:
+        return "ssh"
+    if ports <= _RDP_PORTS:
+        return "rdp"
+    return "mixed"
+
+
+def _adjust_admin_port_severity(rule: Rule, severity: str, exposed_ports: Set[int]) -> str:
+    service_all = is_all_ports(rule.port)
+    src_any = is_any(rule.src)
+    dst_any = is_any(rule.dst)
+    src_broad = _is_scope_broad(rule.src)
+    dst_broad = _is_scope_broad(rule.dst)
+    profile = _port_profile(exposed_ports)
+
+    downgrade = 0
+
+    if service_all:
+        if src_any or dst_any:
+            downgrade = max(downgrade, 2)
+        elif not src_broad and not dst_broad:
+            downgrade = max(downgrade, 4)
+        else:
+            downgrade = max(downgrade, 1)
+    else:
+        if profile == "web":
+            downgrade = max(downgrade, 4)
+        if not src_broad and not dst_broad:
+            if profile in {"ssh", "web"}:
+                downgrade = max(downgrade, 4)
+            elif profile == "rdp":
+                downgrade = max(downgrade, 2)
+            else:
+                downgrade = max(downgrade, 2)
+
+    if not service_all and (src_broad ^ dst_broad) and not dst_any:
+        downgrade = max(downgrade, 1)
+
+    if downgrade:
+        return _downgrade_severity(severity, downgrade)
+    return severity
+
+
 def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     rules_cfg = _coerce_rules_config(cfg)
     rules_list = list(rules)
@@ -728,6 +828,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 high_risk_admin_ports,
                 medium_risk_admin_ports,
             )
+            severity = _adjust_admin_port_severity(r, severity, exposed_admin_ports)
             risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
 
