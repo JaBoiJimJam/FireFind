@@ -390,7 +390,13 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
     srcintf = pick_first_present(normalized_row, mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
     dstintf = pick_first_present(normalized_row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
     source_file = str(normalized_row.get("_source_file", ""))
-    risk_rating = normalize_risk_rating(normalized_row.get("Risk Rating"))
+    risk_rating_fields = mapping.get("risk_rating", [])
+    risk_rating_raw = (
+        pick_first_present(normalized_row, risk_rating_fields)
+        if risk_rating_fields
+        else ""
+    )
+    risk_rating = normalize_risk_rating(risk_rating_raw)
 
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None
