@@ -191,9 +191,21 @@ def run_analysis(
         Path to the vendor mappings YAML file.
     """
 
+    def _resolve_config_path(path: Path) -> Path:
+        if path.exists():
+            return path
+        if path.is_absolute():
+            return path
+        base = Path(__file__).resolve().parents[2]
+        candidate = base / path
+        return candidate if candidate.exists() else path
+
+    rules_path = _resolve_config_path(Path(rules_path))
+    mappings_path = _resolve_config_path(Path(mappings_path))
+
     # Load configs
-    rules_cfg = load_rules_config(Path(rules_path))
-    vendor_mappings = load_yaml(Path(mappings_path))
+    rules_cfg = load_rules_config(rules_path)
+    vendor_mappings = load_yaml(mappings_path)
     mapping = pick_mapping(vendor_mappings, vendor)
 
     # Collect rows from one or many files
@@ -214,14 +226,14 @@ def run_analysis(
     rules_norm: List[Rule] = []
     seen_rules = set()
     for row in raw_rows:
-        r = to_rule(row, mapping, vendor=vendor)
-        if not r:
+        rule = to_rule(row, mapping, vendor=vendor)
+        if not rule:
             continue
-        key = (r.rule_id, r.src, r.dst, r.proto, r.port, r.action)
+        key = (rule.rule_id, rule.src, rule.dst, rule.proto, rule.port, rule.action)
         if key in seen_rules:
             continue
         seen_rules.add(key)
-        rules_norm.append(r)
+        rules_norm.append(rule)
 
     # Analyze
     findings = run_checks(vendor, rules_norm, rules_cfg)

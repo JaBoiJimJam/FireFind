@@ -98,6 +98,44 @@ def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
         if header_row_idx is None:
             return
 
+        # Backfill empty header cells using the previous row when available. Many
+        # vendor exports repeat banner metadata above the real table headings but
+        # place labels such as "Risk Rating" there.  Without this step those
+        # values would be lost because the actual header row contains blank
+        # cells at the same positions.
+        if header_row_idx > 1:
+            previous = next(
+                ws.iter_rows(
+                    min_row=header_row_idx - 1,
+                    max_row=header_row_idx - 1,
+                    values_only=True,
+                )
+            )
+            previous_cells = [
+                str(cell).strip() if cell is not None else "" for cell in previous
+            ]
+            headers = [
+                header if (header or "").strip() else previous_cells[idx]
+                if idx < len(previous_cells)
+                else ""
+                for idx, header in enumerate(headers)
+            ]
+
+        # Ensure header names remain unique so trailing columns are not
+        # collapsed when converted to a dictionary.
+        seen_headers: Dict[str, int] = {}
+        normalised_headers: List[str] = []
+        for idx, header in enumerate(headers):
+            base = (header or "").strip()
+            counter = seen_headers.get(base, 0)
+            seen_headers[base] = counter + 1
+            if counter:
+                normalised_headers.append(f"{base}__{counter}")
+            else:
+                normalised_headers.append(base)
+
+        headers = normalised_headers
+
         # iterate rows after header
         for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
             values = [("" if v is None else str(v).strip()) for v in row]
