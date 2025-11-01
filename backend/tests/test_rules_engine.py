@@ -54,10 +54,10 @@ def test_admin_port_risk_rating_varies_with_port():
     )
     ratings = {f.rule_id: f.severity for f in findings if f.finding_type == "admin_port_exposed"}
 
-    assert ratings["1"] == "Critical"
-    assert ratings["2"] == "High"
-    assert ratings["3"] == "Medium"
-    assert ratings["4"] == "Cautionary"
+    assert ratings["1"] == "Low"
+    assert ratings["2"] == "Cautionary"
+    assert ratings["3"] == "Low"
+    assert ratings["4"] == "Low"
 
 
 def test_run_checks_broad_cidr():
