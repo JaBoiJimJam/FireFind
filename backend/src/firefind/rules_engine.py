@@ -481,6 +481,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                         severity=severity,
                         rationale=" ".join(rationale_bits),
                         source_file=candidate.source_file,
+                        risk_rating=candidate.risk_rating,
                     )
                 )
                 break
@@ -509,6 +510,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                     severity=severity,
                     rationale=" ".join(rationale_bits),
                     source_file=candidate.source_file,
+                    risk_rating=candidate.risk_rating,
                 )
             )
             break
@@ -812,6 +814,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity="High",
                     rationale="Rule allows any-to-any access",
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 
@@ -846,6 +849,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
                     risk_code=risk_code,
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 
@@ -888,6 +892,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity=cidr_severity,
                     rationale="; ".join(cidr_messages),
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 
@@ -914,6 +919,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity=severity,
                     rationale="; ".join(rationale_bits),
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 

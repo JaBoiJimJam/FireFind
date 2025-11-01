@@ -3,11 +3,12 @@ from __future__ import annotations
 """FastAPI application exposing FireFind analysis as an HTTP service."""
 
 import os
+import re
 from pathlib import Path
 import tempfile
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import asdict
-from typing import Any, Dict, List, Literal, Mapping, Optional, Set
+from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Tuple
 from uuid import uuid4
 from datetime import datetime
 
@@ -31,7 +32,8 @@ from pydantic import (
     model_validator,
 )
 
-from .service import run_analysis
+from .model import Finding
+from .service import AnalysisResult, run_analysis
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
 from .config import (
@@ -410,6 +412,124 @@ def _calculate_score(metrics: Dict[str, int]) -> int:
     return int(score)
 
 
+def _normalise_severity_key(value: str) -> str:
+    label = (value or "").strip().lower()
+    if not label:
+        return ""
+    if label in {"informational", "information", "inform"}:
+        return "info"
+    return label
+
+
+def _format_location_token(token: str) -> str:
+    upper = token.upper()
+    if upper == "FW":
+        return "FW"
+    if upper == "DAAS":
+        return "DaaS"
+    if upper in {"DMZ", "WAN"}:
+        return upper
+    return token.capitalize()
+
+
+def _derive_location_label(source_file: str) -> str:
+    if not source_file:
+        return "Unknown"
+
+    stem = Path(source_file).stem
+    segment = stem
+    marker = "Firewall Policy-"
+    if marker in stem:
+        segment = stem.split(marker, 1)[1]
+
+    segment = segment.split(" - ", 1)[0].strip()
+    if not segment:
+        segment = stem
+
+    tokens = [tok for tok in re.split(r"[-_]+", segment) if tok]
+    formatted: list[str] = []
+    for token in tokens:
+        cleaned = re.sub(r"\d+$", "", token).strip()
+        if not cleaned:
+            continue
+        formatted.append(_format_location_token(cleaned))
+        if len(formatted) == 2:
+            break
+
+    if not formatted and tokens:
+        formatted.append(_format_location_token(tokens[0]))
+
+    if not formatted:
+        return stem or "Unknown"
+
+    return " ".join(formatted)
+
+
+def _metrics_from_findings(findings: List[Finding]) -> Dict[str, Any]:
+    totals: Counter[str] = Counter()
+    locations: dict[str, Counter[str]] = defaultdict(Counter)
+
+    for finding in findings:
+        severity_key = _normalise_severity_key(getattr(finding, "severity", ""))
+        if not severity_key:
+            continue
+        location = _derive_location_label(getattr(finding, "source_file", ""))
+        totals[severity_key] += 1
+        locations[location][severity_key] += 1
+
+    metrics: Dict[str, Any] = {key: int(totals.get(key, 0)) for key in _SEVERITY_KEYS}
+    total_findings = sum(metrics[key] for key in _SEVERITY_KEYS)
+    metrics["total"] = total_findings
+    metrics["score"] = _calculate_score(metrics)
+    metrics["by_location"] = {
+        location: {key: int(counts.get(key, 0)) for key in _SEVERITY_KEYS}
+        for location, counts in sorted(locations.items())
+    }
+    return metrics
+
+
+def _build_metrics(result: AnalysisResult) -> Dict[str, Any]:
+    rated_totals: Counter[str] = Counter()
+    rated_locations: dict[str, Counter[str]] = defaultdict(Counter)
+    unrated_locations: dict[str, int] = defaultdict(int)
+
+    for rule in result.rules:
+        rating = _normalise_severity_key(getattr(rule, "risk_rating", ""))
+        location = _derive_location_label(getattr(rule, "source_file", ""))
+        if rating:
+            rated_totals[rating] += 1
+            rated_locations[location][rating] += 1
+        else:
+            unrated_locations[location] += 1
+
+    if rated_totals:
+        metrics: Dict[str, Any] = {
+            key: int(rated_totals.get(key, 0)) for key in _SEVERITY_KEYS
+        }
+        total_findings = sum(metrics[key] for key in _SEVERITY_KEYS)
+        metrics["total"] = total_findings
+        metrics["score"] = _calculate_score(metrics)
+        metrics["by_location"] = {
+            location: {key: int(counts.get(key, 0)) for key in _SEVERITY_KEYS}
+            for location, counts in sorted(rated_locations.items())
+        }
+
+        unrated_total = sum(unrated_locations.values())
+        if unrated_total:
+            metrics["unrated_rules"] = {
+                "total": int(unrated_total),
+                "by_location": {
+                    location: int(count)
+                    for location, count in sorted(unrated_locations.items())
+                    if count
+                },
+            }
+
+        return metrics
+
+    return _metrics_from_findings(result.findings)
+
+
 from fastapi import Form
 
 @app.post("/scan")
@@ -433,29 +553,15 @@ async def scan(
         # Resolve configuration file locations relative to the backend package
         base_dir = Path(__file__).resolve().parents[2]
         rules_dir = base_dir / "rules"
-        findings = run_analysis(
+        analysis = run_analysis(
             tmp_path,
             vendor=vendor,
             rules_path=rules_dir / "rules.yaml",
             mappings_path=rules_dir / "vendor_mappings.yaml",
         )
+        findings = analysis.findings
         # Build metrics by severity
-        severity_counts: Counter[str] = Counter()
-        for finding in findings:
-            severities = (
-                finding.contributing_severities
-                if getattr(finding, "contributing_severities", None)
-                else (finding.severity,)
-            )
-            for severity in severities:
-                if not severity:
-                    continue
-                severity_counts[severity.lower()] += 1
-        metrics: Dict[str, Any] = {
-            key: int(severity_counts.get(key, 0)) for key in _SEVERITY_KEYS
-        }
-        metrics["total"] = len(findings)
-        metrics["score"] = _calculate_score(metrics)
+        metrics = _build_metrics(analysis)
 
         pdf_path: Path | None = None
         csv_path: Path | None = None

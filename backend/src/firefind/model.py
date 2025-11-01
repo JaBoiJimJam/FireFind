@@ -14,6 +14,7 @@ class Rule:
     dst_interface: str = ""
     service: str = ""
     source_file: str = ""
+    risk_rating: str = ""
 
 @dataclass
 class Finding:
@@ -30,3 +31,4 @@ class Finding:
     risk_code: str = ""  # Add this field
     source_file: str = ""
     contributing_severities: Tuple[str, ...] = field(default_factory=tuple)
+    risk_rating: str = ""

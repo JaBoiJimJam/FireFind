@@ -227,15 +227,15 @@ def test_run_analysis_directory_and_dedup(tmp_path):
     rules_path = BACKEND_DIR / "rules" / "rules.yaml"
     mappings_path = BACKEND_DIR / "rules" / "vendor_mappings.yaml"
 
-    findings = run_analysis(
+    analysis = run_analysis(
         input_path=data_dir,
         vendor="generic",
         rules_path=rules_path,
         mappings_path=mappings_path,
     )
 
-    assert len(findings) == 3
-    types = {f.finding_type for f in findings}
+    assert len(analysis.findings) == 3
+    types = {f.finding_type for f in analysis.findings}
     assert {"allow_any", "admin_port_exposed", "broad_cidr"} <= types
     assert "admin_port_exposed" in types
 
@@ -258,15 +258,15 @@ def test_run_analysis_custom_config_loading(tmp_path):
         "  action: ['act_col']\n"
     )
 
-    findings = run_analysis(
+    analysis = run_analysis(
         input_path=data_dir,
         vendor="custom",
         rules_path=rules_yaml,
         mappings_path=mapping_yaml,
     )
 
-    assert len(findings) == 1
-    f = findings[0]
+    assert len(analysis.findings) == 1
+    f = analysis.findings[0]
     assert f.finding_type == "admin_port_exposed"
     assert f.rule_id == "1"
     assert f.src == "1.1.1.1"
@@ -291,15 +291,15 @@ def test_run_analysis_no_seq_column(tmp_path):
         "  action: ['act_col']\n"
     )
 
-    findings = run_analysis(
+    analysis = run_analysis(
         input_path=data_dir,
         vendor="noseq",
         rules_path=rules_yaml,
         mappings_path=mapping_yaml,
     )
 
-    assert len(findings) == 1
-    f = findings[0]
+    assert len(analysis.findings) == 1
+    f = analysis.findings[0]
     assert f.finding_type == "admin_port_exposed"
     assert f.rule_id == "1"
     assert f.src == "1.1.1.1"

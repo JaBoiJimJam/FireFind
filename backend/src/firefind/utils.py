@@ -336,6 +336,42 @@ def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
     return ("any", "any")
 
 
+def normalize_risk_rating(value: str) -> str:
+    """Return a canonical severity label from vendor risk rating text."""
+
+    if value is None:
+        return ""
+
+    cleaned = str(value).strip()
+    if not cleaned:
+        return ""
+
+    normalized = cleaned.lower()
+    normalized = normalized.replace("risk", "")
+    for sep in ("-", "_", "\u2013", "\u2014"):
+        normalized = normalized.replace(sep, " ")
+    normalized = " ".join(part for part in normalized.split() if part)
+    collapsed = normalized.replace(" ", "")
+
+    if not collapsed:
+        return ""
+
+    if collapsed.startswith("crit"):
+        return "Critical"
+    if collapsed.startswith("high"):
+        return "High"
+    if collapsed.startswith("med"):
+        return "Medium"
+    if collapsed.startswith("low"):
+        return "Low"
+    if collapsed.startswith("info"):
+        return "Info"
+    if collapsed.startswith("caut") or collapsed.endswith("tionary"):
+        return "Cautionary"
+
+    return cleaned.capitalize()
+
+
 def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | None:
     """Map a raw row into a :class:`Rule` or return ``None`` for noise."""
     vendor_name = vendor or mapping.get("__vendor__", "")
@@ -354,6 +390,7 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
     srcintf = pick_first_present(normalized_row, mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
     dstintf = pick_first_present(normalized_row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
     source_file = str(normalized_row.get("_source_file", ""))
+    risk_rating = normalize_risk_rating(normalized_row.get("Risk Rating"))
 
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None
@@ -370,4 +407,5 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
         dst_interface=dstintf,
         service=service,
         source_file=source_file,
+        risk_rating=risk_rating,
     )
