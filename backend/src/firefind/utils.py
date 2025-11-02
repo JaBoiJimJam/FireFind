@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable, Mapping, Tuple
-import re
 import yaml
 
 from ruamel.yaml import YAML
@@ -48,8 +47,6 @@ SERVICE_NAME_PORTS = {
     "VNC": [5900],
     "SYSLOG": [514],
     "SHELL": [514],
-    "MICROSOFT-DS": [445],
-    "ADPORTS": [88, 135, 137, 138, 139, 389, 445, 464, 3268, 3269],
     "NBT_": [137, 138, 139],
     "NATAGRAM": [138],
     "NBNAME": [137],
@@ -71,98 +68,10 @@ SERVICE_NAME_PORTS = {
     "TCP-HIGH-PORTS": [1024, 65535],
     "TCP-49152_65535": [49152, 65535],
     "TCP-49152_65435": [49152, 65435],
-    "LPDW0RM": [515],
+    "LDPW0RM": [515],
     "PING": [],
     "ICMP": [],
 }
-
-_PORT_MARKER_PREFIXES = (
-    "TCP",
-    "UDP",
-    "HTTP",
-    "HTTPS",
-    "SSH",
-    "TELNET",
-    "SMTP",
-    "RDP",
-    "FTP",
-)
-
-
-_PORT_FALLBACK_EXCLUDED_HEADERS = {
-    "seq_#",
-    "id",
-    "rid",
-    "name",
-    "action",
-    "source",
-    "destination",
-    "schedule",
-    "comments",
-    "install_on",
-    "created_time",
-    "last_modified_time",
-    "last_modified_by",
-    "hit_counts",
-    "risk_rating",
-    "tl_comment",
-    "log",
-    "nat",
-    "traffic_shaping",
-}
-
-
-def _filter_numeric_tokens(tokens: Iterable[str]) -> list[str]:
-    """Return tokens that represent concrete port numbers or ranges."""
-
-    filtered: list[str] = []
-    for part in tokens:
-        upper = part.upper()
-        if upper == "ALL":
-            filtered.append(part)
-            continue
-        stripped = part.replace("-", "")
-        if stripped.isdigit():
-            filtered.append(part)
-            continue
-        if "/" in part and any(ch.isdigit() for ch in part):
-            filtered.append(part)
-            continue
-    return filtered
-
-
-def _token_has_port_hint(token: str) -> bool:
-    """Return ``True`` if ``token`` resembles a port or service reference."""
-
-    upper = token.upper()
-    if upper in {"ALL", "ANY", "*"}:
-        return True
-    if upper in SERVICE_NAME_PORTS:
-        return True
-    if any(upper.startswith(prefix) for prefix in _PORT_MARKER_PREFIXES):
-        return True
-
-    stripped = token.replace("-", "")
-    if stripped.isdigit():
-        return True
-
-    if "/" in token:
-        prefix, _, suffix = token.partition("/")
-        if suffix and any(ch.isdigit() for ch in suffix):
-            prefix_upper = prefix.upper()
-            if not prefix:
-                return True
-            if prefix_upper in _PORT_MARKER_PREFIXES:
-                return True
-            cleaned_prefix = prefix.replace("-", "")
-            if cleaned_prefix.isdigit():
-                return True
-
-    return False
-
-
-def _tokens_contain_port_hint(tokens: Iterable[str]) -> bool:
-    return any(_token_has_port_hint(token) for token in tokens)
 
 
 def _tokenise_service_values(text: str) -> Iterable[str]:
@@ -197,33 +106,11 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
             break
 
         if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
-            prefix, _, suffix = cleaned.partition("/")
-            suffix_normalised = suffix.replace(" ", "")
-            # Previously these tokens were converted directly into bare numbers
-            # which caused us to lose the protocol prefix (``TCP/`` or ``UDP/``)
-            # when presenting results.  Keep the original token so downstream
-            # consumers such as the PDF/CSV reports preserve the vendor's
-            # explicit notation while still allowing :func:`parse_ports` to
-            # interpret the numeric component when required.
             normalised = cleaned.replace(" ", "")
             lowered = normalised.lower()
             if lowered not in seen_explicit:
                 seen_explicit.add(lowered)
                 explicit_tokens.append(normalised)
-            # For range tokens such as ``TCP/49152-65535`` ensure we still
-            # register the numeric bounds so duplicate suppression continues to
-            # work when a later bare ``49152-65535`` token is encountered.
-            if any(ch.isalpha() for ch in prefix):
-                if "-" in suffix_normalised:
-                    start, end = suffix_normalised.split("-", 1)
-                    if start.isdigit() and end.isdigit() and int(start) <= int(end):
-                        for port in (int(start), int(end)):
-                            if 1 <= port <= 65535:
-                                seen_numeric.add(port)
-                elif suffix_normalised.isdigit():
-                    port = int(suffix_normalised)
-                    if 1 <= port <= 65535:
-                        seen_numeric.add(port)
             continue
 
         if "-" in cleaned:
@@ -234,42 +121,6 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
                     seen_explicit.add(lowered)
                     explicit_tokens.append(cleaned)
                 continue
-
-        # Handle common tokens such as "TCP_443" or "UDP_49152_65535" by
-        # stripping protocol prefixes and normalising range delimiters so that
-        # they can be interpreted as numeric ports.  Previously these strings
-        # were passed through as literals which meant the downstream
-        # ``parse_ports`` routine ignored them entirely.  As a result dozens of
-        # client-provided risk ratings were silently dropped because the engine
-        # believed no administrative ports were exposed.
-        prefix_stripped = re.sub(r"^[A-Za-z]+[-_]*", "", cleaned)
-        if prefix_stripped and all(ch.isdigit() or ch in "-_" for ch in prefix_stripped):
-            normalised = prefix_stripped.replace("_", "-")
-            if "-" in normalised:
-                start, end = normalised.split("-", 1)
-                if start.isdigit() and end.isdigit():
-                    # Ranges will be handled by ``parse_ports`` once converted
-                    # back into an explicit token.
-                    tokenised = f"{int(start)}-{int(end)}"
-                    lowered = tokenised.lower()
-                    if lowered not in seen_explicit:
-                        seen_explicit.add(lowered)
-                        explicit_tokens.append(tokenised)
-                    continue
-            elif normalised.isdigit():
-                port = int(normalised)
-                if 1 <= port <= 65535 and port not in seen_numeric:
-                    seen_numeric.add(port)
-                    numeric_ports.append(port)
-                    continue
-
-        mapped = SERVICE_NAME_PORTS.get(upper)
-        if mapped is not None:
-            for port in mapped:
-                if 1 <= port <= 65535 and port not in seen_numeric:
-                    seen_numeric.add(port)
-                    numeric_ports.append(port)
-            continue
 
         if cleaned.isdigit():
             port = int(cleaned)
@@ -385,9 +236,6 @@ def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
         row,
         [
             "Service.1",
-            "Service__1",
-            "Service__2",
-            "Service__3",
             "Service Port",
             "Service Ports",
             "Port",
@@ -432,58 +280,90 @@ def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
         if normalised:
             return ("any", ",".join(normalised))
 
-    # Some vendor exports place port lists in unlabeled columns adjacent to the
-    # ``Service`` field.  These headers are normalised to ``__<n>`` during
-    # ingestion, so explicitly scan those positions for known protocol markers
-    # before falling back to the broader heuristics.
-    for key, value in row.items():
-        if not isinstance(key, str) or not key.startswith("__"):
+    for value in row.values():
+        tokens = list(_tokenise_service_values(str(value or "")))
+        if not tokens:
             continue
-        value_str = str(value or "").strip()
-        if not value_str:
+        filtered: list[str] = []
+        for token in tokens:
+            cleaned = token.strip()
+            if not cleaned:
+                continue
+            if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
+                head = cleaned.split("/", 1)[0]
+                if any(ch.isalpha() for ch in head):
+                    filtered.append(cleaned)
+                continue
+            if "-" in cleaned:
+                range_parts = cleaned.split("-", 1)
+                if all(part.isdigit() for part in range_parts):
+                    filtered.append(cleaned)
+        if not filtered:
             continue
-        tokens = list(_tokenise_service_values(value_str))
-        if not tokens or not _tokens_contain_port_hint(tokens):
-            continue
-        normalised = _prepare_port_tokens(tokens)
-        if not normalised:
-            continue
-        numeric_parts = _filter_numeric_tokens(normalised)
-        if not numeric_parts:
-            continue
-        return ("any", ",".join(numeric_parts))
+        normalised = _prepare_port_tokens(filtered)
+        if normalised:
+            return ("any", ",".join(normalised))
 
     svc_name = service_hint or pick_first_present(row, ["Service"])
     if svc_name.strip():
         tokens = list(_tokenise_service_values(str(svc_name)))
         if not tokens:
             return ("any", str(svc_name).strip())
-        normalised = _prepare_port_tokens(tokens)
-        numeric_parts = _filter_numeric_tokens(normalised)
-        if numeric_parts:
-            return ("any", ",".join(numeric_parts))
 
-    for key, value in row.items():
-        norm_key = normalize_header(str(key)) if key is not None else ""
-        if norm_key in _PORT_FALLBACK_EXCLUDED_HEADERS:
-            continue
-        if "proto" in norm_key:
-            continue
-        tokens = list(_tokenise_service_values(str(value or "")))
-        if not tokens or not _tokens_contain_port_hint(tokens):
-            continue
-        if not any(
-            marker in norm_key
-            for marker in ("service", "port", "svc", "sport", "dport")
-        ) and not _tokens_contain_port_hint(tokens):
-            continue
-        normalised = _prepare_port_tokens(tokens)
-        if not normalised:
-            continue
-        numeric_parts = _filter_numeric_tokens(normalised)
-        if not numeric_parts:
-            continue
-        return ("any", ",".join(numeric_parts))
+        numeric_ports: set[int] = set()
+        explicit_values: list[str] = []
+        seen_explicit: set[str] = set()
+        for token in tokens:
+            cleaned = token.strip()
+            if not cleaned:
+                continue
+            upper = cleaned.upper()
+            if upper in {"ALL", "ANY", "*"}:
+                return ("any", "ALL")
+
+            if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
+                normalised = cleaned.replace(" ", "")
+                lowered = normalised.lower()
+                if lowered not in seen_explicit:
+                    seen_explicit.add(lowered)
+                    explicit_values.append(normalised)
+                continue
+
+            if "-" in cleaned:
+                range_parts = cleaned.split("-", 1)
+                if all(part.isdigit() for part in range_parts):
+                    lowered = cleaned.lower()
+                    if lowered not in seen_explicit:
+                        seen_explicit.add(lowered)
+                        explicit_values.append(cleaned)
+                    continue
+
+            if cleaned.isdigit():
+                port = int(cleaned)
+                if 1 <= port <= 65535:
+                    numeric_ports.add(port)
+                continue
+
+            mapped = SERVICE_NAME_PORTS.get(upper)
+            if mapped is not None:
+                for port in mapped:
+                    if 1 <= port <= 65535:
+                        numeric_ports.add(port)
+                continue
+
+            lowered = cleaned.lower()
+            if lowered not in seen_explicit:
+                seen_explicit.add(lowered)
+                explicit_values.append(cleaned)
+
+        combined: list[str] = []
+        if numeric_ports:
+            combined.extend(str(port) for port in sorted(numeric_ports))
+        combined.extend(explicit_values)
+        if combined:
+            return ("any", ",".join(combined))
+
+        return ("any", str(svc_name).strip())
 
     return ("any", "any")
 
