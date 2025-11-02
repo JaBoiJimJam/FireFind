@@ -46,6 +46,33 @@ _RDP_PORTS = {3389}
 Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
 
+def _normalize_service_tokens(text: str) -> Tuple[str, ...]:
+    tokens: set[str] = set()
+    for part in (text or "").replace("\r", "\n").split("\n"):
+        cleaned = part.strip().lower()
+        if not cleaned or cleaned.startswith("group member"):
+            continue
+        tokens.add(cleaned)
+    return tuple(sorted(tokens))
+
+
+def _canonical_severity(label: str) -> str:
+    normalized = (label or "").strip()
+    if not normalized:
+        return ""
+    lowered = normalized.lower()
+    mapping = {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "cautionary": "Cautionary",
+        "low": "Low",
+        "info": "Info",
+        "informational": "Info",
+    }
+    return mapping.get(lowered, normalized.capitalize())
+
+
 @dataclass(frozen=True)
 class ResolvedCIDRPolicy:
     """Policy ready for evaluation with parsed CIDR metadata."""
@@ -245,21 +272,30 @@ def parse_ports(port_str: str) -> List[int]:
     # treat "any" as "unspecified" (empty list), not all ports
     if s in ("", "any", "*"):
         return []
-    parts = [p.strip() for p in s.split(",") if p.strip()]
+
+    tokens: List[str] = []
+    for line in s.replace("\r", "\n").split("\n"):
+        cleaned = line.strip()
+        if not cleaned or cleaned.startswith("group member"):
+            continue
+        tokens.extend(part.strip() for part in cleaned.split(",") if part.strip())
+
     out: List[int] = []
-    for p in parts:
-        if "-" in p:
-            a, b = p.split("-", 1)
+    for token in tokens:
+        if "-" in token:
+            a, b = token.split("-", 1)
             try:
                 a_i, b_i = int(a), int(b)
-                out.extend(range(a_i, b_i + 1))
             except ValueError:
                 continue
-        else:
-            try:
-                out.append(int(p))
-            except ValueError:
-                continue
+            out.extend(range(a_i, b_i + 1))
+            continue
+
+        try:
+            out.append(int(token))
+        except ValueError:
+            continue
+
     return sorted({x for x in out if 1 <= x <= 65535})
 
 
@@ -616,6 +652,7 @@ def classify_admin_port_severity(
     critical_risk_ports: Set[int],
     high_risk_ports: Set[int],
     medium_risk_ports: Set[int],
+    low_risk_ports: Optional[Set[int]] = None,
 ) -> str:
     """Return a qualitative severity based on the exposed admin ports."""
 
@@ -630,6 +667,9 @@ def classify_admin_port_severity(
 
     if exposed_ports & medium_risk_ports:
         return "Medium"
+
+    if low_risk_ports and exposed_ports <= low_risk_ports:
+        return "Low"
 
     if len(exposed_ports) >= 8:
         return "Critical"
@@ -713,44 +753,56 @@ def _port_profile(ports: Set[int]) -> str:
 
 
 def _adjust_admin_port_severity(rule: Rule, severity: str, exposed_ports: Set[int]) -> str:
-    service_all = is_all_ports(rule.port)
-    src_any = is_any(rule.src)
-    dst_any = is_any(rule.dst)
-    src_broad = _is_scope_broad(rule.src)
-    dst_broad = _is_scope_broad(rule.dst)
-    profile = _port_profile(exposed_ports)
+    """Apply contextual tweaks while keeping catalogue severities intact."""
 
-    downgrade = 0
+    if not exposed_ports:
+        return severity
 
-    if service_all:
-        if src_any or dst_any:
-            downgrade = max(downgrade, 2)
-        elif not src_broad and not dst_broad:
-            downgrade = max(downgrade, 4)
-        else:
-            downgrade = max(downgrade, 1)
-    else:
-        if profile == "web":
-            downgrade = max(downgrade, 4)
-        if not src_broad and not dst_broad:
-            if profile in {"ssh", "web"}:
-                downgrade = max(downgrade, 4)
-            elif profile == "rdp":
-                downgrade = max(downgrade, 2)
-            else:
-                downgrade = max(downgrade, 2)
+    # Service objects that expand to "all" should not outrank the catalogue's
+    # explicitly critical ports. Cap them at "High" so they remain urgent
+    # without eclipsing targeted exposures.
+    if is_all_ports(rule.port):
+        start = _SEVERITY_INDEX.get(severity, 0)
+        high_idx = _SEVERITY_INDEX["High"]
+        if start < high_idx:
+            return "High"
+        return severity
 
-    if not service_all and (src_broad ^ dst_broad) and not dst_any:
-        downgrade = max(downgrade, 1)
+    # HTTP exposures – including mixed service groups – are always reported as
+    # cautionary hygiene items.
+    if 80 in exposed_ports and severity != "Critical":
+        start = _SEVERITY_INDEX.get(severity, _LOWEST_ADMIN_SEVERITY)
+        cautionary_idx = _SEVERITY_INDEX["Cautionary"]
+        if start < cautionary_idx:
+            return "Cautionary"
+        return severity
 
-    if downgrade:
-        return _downgrade_severity(severity, downgrade)
     return severity
 
 
 def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     rules_cfg = _coerce_rules_config(cfg)
     rules_list = list(rules)
+
+    signature_lookup: Dict[frozenset[int], List[Tuple[Tuple[str, ...], str]]] = {}
+    admin_port_signatures = getattr(rules_cfg, "admin_port_signatures", {}) or {}
+    if isinstance(admin_port_signatures, Mapping):
+        for label, combos in admin_port_signatures.items():
+            severity_label = _canonical_severity(label)
+            if not severity_label:
+                continue
+            for signature in combos or ():
+                ports = getattr(signature, "ports", None)
+                services = getattr(signature, "services", tuple())
+                if not ports:
+                    continue
+                key = frozenset(int(port) for port in ports)
+                entries = signature_lookup.setdefault(key, [])
+                if isinstance(services, tuple):
+                    required_services = services
+                else:
+                    required_services = tuple()
+                entries.append((required_services, severity_label))
 
     critical_risk_admin_ports = set(rules_cfg.critical_risk_admin_ports)
     if not critical_risk_admin_ports:
@@ -825,33 +877,49 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
 
         exposed_admin_ports = admin_ports.intersection(ports)
         if exposed_admin_ports:
-            severity = classify_admin_port_severity(
-                exposed_admin_ports,
-                critical_risk_admin_ports,
-                high_risk_admin_ports,
-                medium_risk_admin_ports,
-            )
-            severity = _adjust_admin_port_severity(r, severity, exposed_admin_ports)
-            risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
-            risk_code_counter += 1
-
-            findings.append(
-                Finding(
-                    vendor,
-                    r.rule_id,
-                    r.src,
-                    r.dst,
-                    r.proto,
-                    r.port,
-                    r.action,
-                    finding_type="admin_port_exposed",
-                    severity=severity,
-                    rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
-                    risk_code=risk_code,
-                    source_file=r.source_file,
-                    risk_rating=r.risk_rating,
+            signature = frozenset(exposed_admin_ports)
+            severity = None
+            candidates = signature_lookup.get(signature)
+            if candidates:
+                services = _normalize_service_tokens(r.service)
+                services_set = set(services)
+                for required_services, label in candidates:
+                    if required_services:
+                        required_set = set(required_services)
+                        if not services_set or services_set != required_set:
+                            continue
+                    severity = label
+                    break
+            if severity is None and not signature_lookup:
+                severity = classify_admin_port_severity(
+                    exposed_admin_ports,
+                    critical_risk_admin_ports,
+                    high_risk_admin_ports,
+                    medium_risk_admin_ports,
+                    low_risk_admin_ports,
                 )
-            )
+            if severity is not None:
+                severity = _adjust_admin_port_severity(r, severity, exposed_admin_ports)
+                risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
+                risk_code_counter += 1
+
+                findings.append(
+                    Finding(
+                        vendor,
+                        r.rule_id,
+                        r.src,
+                        r.dst,
+                        r.proto,
+                        r.port,
+                        r.action,
+                        finding_type="admin_port_exposed",
+                        severity=severity,
+                        rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
+                        risk_code=risk_code,
+                        source_file=r.source_file,
+                        risk_rating=r.risk_rating,
+                    )
+                )
 
         # Broad CIDR (src or dst)
         cidr_messages: List[str] = []

@@ -1,168 +1,113 @@
-# Minimal rules for Sprint 1 demo
+# Minimal ruleset derived from client 1 risk catalogue
 admin_ports:
-  - 2
-  - 3
-  - 4
-  - 5
-  - 8
-  - 12
   - 21
   - 22
   - 23
   - 25
   - 53
   - 80
-  - 110
-  - 111
+  - 88
+  - 123
   - 135
   - 137
   - 138
   - 139
-  - 143
-  - 161
   - 389
   - 443
   - 445
   - 464
-  - 465
   - 514
   - 515
+  - 587
   - 636
-  - 993
-  - 995
   - 1024
   - 1025
   - 1026
-  - 1080
   - 1433
-  - 1434
-  - 1521
-  - 1723
-  - 1900
-  - 2049
-  - 2082
-  - 2083
-  - 2303
-  - 3074
-  - 3128
   - 3268
   - 3269
-  - 3306
   - 3389
-  - 4000
-  - 4444
-  - 5000
-  - 5060
-  - 5432
-  - 5555
-  - 5900
-  - 5939
-  - 5985
-  - 5986
-  - 6379
-  - 6667
-  - 6697
+  - 27000
   - 7279
-  - 8000
-  - 8080
-  - 8081
-  - 8443
   - 8810
   - 8811
-  - 8888
-  - 9090
-  - 9100
-  - 9200
-  - 10000
-  - 27000
-  - 27017
-  - 28017
   - 49152
   - 65435
   - 65535
 critical_risk_admin_ports:
-  - 4
-  - 5
-  - 8
-  - 12
   - 21
-  - 22
-  - 80
   - 135
-  - 443
-  - 445
-  - 464
+  - 137
+  - 138
+  - 139
   - 514
   - 1024
   - 1025
   - 1026
-  - 3268
-  - 3269
-  - 7279
   - 27000
+  - 7279
   - 49152
   - 65435
   - 65535
 high_risk_admin_ports:
+  - 22
   - 23
   - 3389
   - 515
-  - 5900
-  - 5985
-  - 5986
   - 8810
   - 8811
 medium_risk_admin_ports:
-  - 2
-  - 3
-  - 53
-  - 110
-  - 111
-  - 137
-  - 138
-  - 139
-  - 143
-  - 161
-  - 389
-  - 465
-  - 636
-  - 993
-  - 995
-  - 1080
-  - 1433
-  - 1434
-  - 1521
-  - 1723
-  - 1900
-  - 2049
-  - 2082
-  - 2083
-  - 2303
-  - 3074
-  - 3128
-  - 3306
-  - 4000
-  - 4444
-  - 5000
-  - 5060
-  - 5432
-  - 5555
-  - 5939
-  - 6379
-  - 6667
-  - 6697
-  - 8000
-  - 8080
-  - 8081
-  - 8443
-  - 8888
-  - 9090
-  - 9100
-  - 9200
-  - 10000
-  - 27017
-  - 28017
+  - 445
 low_risk_admin_ports:
   - 25
+  - 587
+admin_port_signatures:
+  Critical:
+    - ports: [21]
+      services: [ftp]
+    - ports: [21, 22, 80, 443]
+      services: [ftp, http, https, ssh]
+    - ports: [1025, 1026, 49152, 65435]
+      services: [adports, echo-reply, echo-request, remote_storm, tcp-49152_65435, tcp_1026]
+    - ports: [1025, 1026, 49152, 65435, 65535]
+      services: [adports, echo-reply, echo-request, remote_storm, tcp-49152_65535, tcp_1026]
+    - ports: [135, 445]
+      services: [microsoft-ds, nbt_, tcp_135]
+    - ports: [135, 1024, 1025, 1026, 1433, 3268, 3269, 3389, 7279, 8810, 8811, 27000, 49152, 65435, 65535]
+      services: [tcp-high-ports, tcp_135, tcp_27000, tcp_7279]
+    - ports: [464, 1024, 1025, 1026, 1433, 3268, 3269, 3389, 7279, 8810, 8811, 27000, 49152, 65435, 65535]
+      services: [adports, tcp-high-ports, tcp_464]
+    - ports: [514]
+      services: [shell, syslog]
+  High:
+    - ports: [22]
+      services: [ssh]
+    - ports: [22, 23]
+      services: [ssh, ssh_version_2, telnet]
+    - ports: [22, 8810, 8811]
+      services: [ssh, tcp_8810-8811]
+    - ports: [3389]
+      services: [rdp]
+    - ports: [515]
+      services: [lpdw0rm]
+  Medium:
+    - ports: [445]
+      services: [microsoft-ds]
+  Low:
+    - ports: [25]
+      services: [smtp]
+  Cautionary:
+    - ports: [53, 636]
+      services: [domain-udp_, ldap-ssl]
+    - ports: [80]
+      services: [http]
+    - ports: [80, 1433]
+      services: [http, ms-sql-server]
+    - ports: [80, 443]
+      services: [http, https]
+    - ports: [80, 443, 1433]
+      services: [http, https, ms-sql-server]
+    - ports: [389, 464, 3268]
+      services: [dns_, kerberos_, ldap, ntp, tcp_3268, tcp_464, udp_464]
 # Flag networks as 'broad' when prefix length is <= this value (e.g., /0..../8)
 broad_cidr_prefix_max: 8
