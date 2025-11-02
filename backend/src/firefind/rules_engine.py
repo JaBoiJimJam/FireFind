@@ -481,7 +481,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                         severity=severity,
                         rationale=" ".join(rationale_bits),
                         source_file=candidate.source_file,
-                        risk_rating=candidate.risk_rating,
+                        risk_rating="",
                     )
                 )
                 break
@@ -510,7 +510,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                     severity=severity,
                     rationale=" ".join(rationale_bits),
                     source_file=candidate.source_file,
-                    risk_rating=candidate.risk_rating,
+                    risk_rating="",
                 )
             )
             break
@@ -820,7 +820,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity="High",
                     rationale="Rule allows any-to-any access",
                     source_file=r.source_file,
-                    risk_rating=r.risk_rating,
+                    risk_rating="",
                 )
             )
 
@@ -838,8 +838,18 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 medium_risk_admin_ports,
             )
             severity = _adjust_admin_port_severity(r, severity, exposed_admin_ports)
+            if r.risk_rating:
+                severity = r.risk_rating
             risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
+
+            comment_text = str(r.comment or "").strip()
+            if r.risk_rating and comment_text:
+                rationale_text = comment_text
+            else:
+                rationale_text = (
+                    f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}"
+                )
 
             findings.append(
                 Finding(
@@ -852,7 +862,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     r.action,
                     finding_type="admin_port_exposed",
                     severity=severity,
-                    rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
+                    rationale=rationale_text,
                     risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
@@ -898,7 +908,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity=cidr_severity,
                     rationale="; ".join(cidr_messages),
                     source_file=r.source_file,
-                    risk_rating=r.risk_rating,
+                    risk_rating="",
                 )
             )
 
@@ -925,7 +935,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity=severity,
                     rationale="; ".join(rationale_bits),
                     source_file=r.source_file,
-                    risk_rating=r.risk_rating,
+                    risk_rating="",
                 )
             )
 
