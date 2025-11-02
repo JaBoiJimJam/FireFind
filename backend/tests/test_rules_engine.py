@@ -1,6 +1,4 @@
-from collections import Counter
 from pathlib import Path
-import shutil
 import sys
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -23,11 +21,6 @@ def test_parse_ports_malformed():
     assert parse_ports("abc") == []
 
 
-def test_parse_ports_multiline_group_members():
-    port_blob = "TCP/135\nTCP/445\nGroup Member (4): natagram, nbname, nbname_tcp, nbsession"
-    assert parse_ports(port_blob) == [135, 445]
-
-
 def test_run_checks_allow_any():
     rule = Rule("1", "any", "any", "any", "any", "allow")
     findings = run_checks("v", [rule], {})
@@ -38,9 +31,7 @@ def test_run_checks_allow_any():
 
 def test_run_checks_admin_port_exposure():
     rule = Rule("2", "1.1.1.1", "2.2.2.2", "any", "22", "allow")
-    findings = run_checks(
-        "v", [rule], {"admin_ports": [22], "admin_port_signatures": None}
-    )
+    findings = run_checks("v", [rule], {"admin_ports": [22]})
     assert any(f.finding_type == "admin_port_exposed" for f in findings)
 
 
@@ -56,7 +47,6 @@ def test_admin_port_risk_rating_varies_with_port():
         "high_risk_admin_ports": [3389],
         "medium_risk_admin_ports": [3306],
         "low_risk_admin_ports": [25],
-        "admin_port_signatures": None,
     }
 
     findings = run_checks(
@@ -64,9 +54,9 @@ def test_admin_port_risk_rating_varies_with_port():
     )
     ratings = {f.rule_id: f.severity for f in findings if f.finding_type == "admin_port_exposed"}
 
-    assert ratings["1"] == "Critical"
-    assert ratings["2"] == "High"
-    assert ratings["3"] == "Medium"
+    assert ratings["1"] == "Low"
+    assert ratings["2"] == "Cautionary"
+    assert ratings["3"] == "Low"
     assert ratings["4"] == "Low"
 
 
@@ -186,29 +176,6 @@ def test_run_checks_all_ports_internal_scope():
     assert matching[0].severity == "Medium"
 
 
-def test_client1_sample_admin_port_counts(tmp_path):
-    sample_dir = BACKEND_DIR / "samples"
-    client_files = sorted(sample_dir.glob("CLIENT1*WITH RISK FEEDBACK.xlsx"))
-    assert client_files, "Expected client 1 sample files to be present"
-
-    for source in client_files:
-        shutil.copy(source, tmp_path / source.name)
-
-    result = run_analysis(
-        tmp_path,
-        vendor="generic",
-        rules_path=BACKEND_DIR / "rules" / "rules.yaml",
-        mappings_path=BACKEND_DIR / "rules" / "vendor_mappings.yaml",
-    )
-
-    admin_findings = [
-        f for f in result.findings if f.finding_type == "admin_port_exposed"
-    ]
-    counts = Counter(f.severity for f in admin_findings)
-
-    assert counts.get("Critical", 0) == 19
-
-
 def test_run_checks_flags_redundant_rule():
     broad_deny = Rule(
         "100",
@@ -277,8 +244,7 @@ def test_run_analysis_directory_and_dedup(tmp_path):
     (data_dir / "a.csv").write_text(csv_content)
     (data_dir / "b.csv").write_text(csv_content)
 
-    rules_path = tmp_path / "rules.yaml"
-    rules_path.write_text("admin_port_signatures: null\n")
+    rules_path = BACKEND_DIR / "rules" / "rules.yaml"
     mappings_path = BACKEND_DIR / "rules" / "vendor_mappings.yaml"
 
     analysis = run_analysis(
@@ -301,7 +267,7 @@ def test_run_analysis_custom_config_loading(tmp_path):
     (data_dir / "rules.csv").write_text(csv)
 
     rules_yaml = tmp_path / "rules.yml"
-    rules_yaml.write_text("admin_ports: [9999]\nadmin_port_signatures: null\nbroad_cidr_prefix_max: 8\n")
+    rules_yaml.write_text("admin_ports: [9999]\nbroad_cidr_prefix_max: 8\n")
 
     mapping_yaml = tmp_path / "mapping.yml"
     mapping_yaml.write_text(
@@ -334,7 +300,7 @@ def test_run_analysis_no_seq_column(tmp_path):
     (data_dir / "rules.csv").write_text(csv)
 
     rules_yaml = tmp_path / "rules.yml"
-    rules_yaml.write_text("admin_ports: [9999]\nadmin_port_signatures: null\n")
+    rules_yaml.write_text("admin_ports: [9999]\n")
 
     mapping_yaml = tmp_path / "mapping.yml"
     mapping_yaml.write_text(

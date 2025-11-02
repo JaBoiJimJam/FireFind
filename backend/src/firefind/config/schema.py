@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import ipaddress
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence
 
 
 class Severity(str, Enum):
@@ -445,18 +445,6 @@ class RuleDefinition:
         }
 
 
-@dataclass(frozen=True)
-class AdminPortSignature:
-    ports: Tuple[int, ...]
-    services: Tuple[str, ...] = tuple()
-
-    def to_dict(self) -> dict:
-        data = {"ports": list(self.ports)}
-        if self.services:
-            data["services"] = list(self.services)
-        return data
-
-
 @dataclass
 class RulesConfig:
     """Normalized rules configuration with backwards-compatibility helpers."""
@@ -466,9 +454,6 @@ class RulesConfig:
     high_risk_admin_ports: set[int] = field(default_factory=set)
     medium_risk_admin_ports: set[int] = field(default_factory=set)
     low_risk_admin_ports: set[int] = field(default_factory=set)
-    admin_port_signatures: Dict[str, Tuple["AdminPortSignature", ...]] = field(
-        default_factory=dict
-    )
     broad_cidr_prefix_max: int = 8
     risk_levels: Dict[str, RiskLevelDefinition] = field(default_factory=dict)
     cidr_limits: Dict[str, CIDRLimitSet] = field(default_factory=dict)
@@ -483,10 +468,6 @@ class RulesConfig:
             "high_risk_admin_ports": sorted(self.high_risk_admin_ports),
             "medium_risk_admin_ports": sorted(self.medium_risk_admin_ports),
             "low_risk_admin_ports": sorted(self.low_risk_admin_ports),
-            "admin_port_signatures": {
-                name: [signature.to_dict() for signature in combos]
-                for name, combos in self.admin_port_signatures.items()
-            },
             "broad_cidr_prefix_max": int(self.broad_cidr_prefix_max),
             "risk_levels": {name: definition.to_dict() for name, definition in self.risk_levels.items()},
             "cidr_limits": {name: limit_set.to_dict() for name, limit_set in self.cidr_limits.items()},
@@ -538,49 +519,6 @@ class RulesConfig:
         high_ports = cls._normalize_ports(data.get("high_risk_admin_ports", []))
         medium_ports = cls._normalize_ports(data.get("medium_risk_admin_ports", []))
         low_ports = cls._normalize_ports(data.get("low_risk_admin_ports", []))
-
-        signatures_raw = data.get("admin_port_signatures", {}) or {}
-        admin_port_signatures: Dict[str, Tuple[AdminPortSignature, ...]] = {}
-        if isinstance(signatures_raw, Mapping):
-            for label, combos in signatures_raw.items():
-                if not isinstance(combos, Iterable):
-                    continue
-                signatures: list[AdminPortSignature] = []
-                for combo in combos or []:
-                    if combo is None:
-                        continue
-                    ports_value = combo
-                    services_value: Iterable[object] | object = []
-                    if isinstance(combo, Mapping):
-                        ports_value = combo.get("ports", [])
-                        services_value = combo.get("services", [])
-                    if isinstance(ports_value, (str, bytes)):
-                        ports_iter: Iterable[object] = [ports_value]
-                    elif isinstance(ports_value, Iterable):
-                        ports_iter = ports_value
-                    else:
-                        ports_iter = [ports_value]
-                    normalized_ports = sorted(cls._normalize_ports(ports_iter))
-                    if not normalized_ports:
-                        continue
-                    services_tokens: list[str] = []
-                    if isinstance(services_value, (list, tuple, set)):
-                        services_tokens = [
-                            str(token).strip().lower()
-                            for token in services_value
-                            if str(token or "").strip()
-                        ]
-                    elif isinstance(services_value, (str, bytes)):
-                        token = str(services_value).strip().lower()
-                        if token:
-                            services_tokens = [token]
-                    signature = AdminPortSignature(
-                        tuple(normalized_ports),
-                        tuple(sorted(set(services_tokens))),
-                    )
-                    signatures.append(signature)
-                if signatures:
-                    admin_port_signatures[str(label)] = tuple(signatures)
 
         broad_cidr_prefix = int(data.get("broad_cidr_prefix_max", 8))
 
@@ -755,7 +693,6 @@ class RulesConfig:
             high_risk_admin_ports=high_ports,
             medium_risk_admin_ports=medium_ports,
             low_risk_admin_ports=low_ports,
-            admin_port_signatures=admin_port_signatures,
             broad_cidr_prefix_max=broad_cidr_prefix,
             risk_levels=risk_levels,
             cidr_limits=cidr_limits,
