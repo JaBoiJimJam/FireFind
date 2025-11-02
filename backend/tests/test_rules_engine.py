@@ -60,6 +60,26 @@ def test_admin_port_risk_rating_varies_with_port():
     assert ratings["4"] == "Low"
 
 
+def test_http_admin_port_finding_is_cautionary():
+    rule = Rule("web", "10.0.0.0/24", "0.0.0.0/0", "tcp", "80", "allow")
+    findings = run_checks(
+        "vendor",
+        [rule],
+        {
+            "admin_ports": [80],
+            "critical_risk_admin_ports": [],
+            "high_risk_admin_ports": [],
+            "medium_risk_admin_ports": [],
+            "low_risk_admin_ports": [],
+        },
+    )
+
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["Cautionary"]
+
+
 def test_run_checks_broad_cidr():
     rule = Rule("3", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow")
     findings = run_checks("v", [rule], {"broad_cidr_prefix_max": 8})
