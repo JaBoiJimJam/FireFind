@@ -777,6 +777,14 @@ def _adjust_admin_port_severity(rule: Rule, severity: str, exposed_ports: Set[in
             return "Cautionary"
         return severity
 
+    if downgrade:
+        if profile == "web":
+            start = _SEVERITY_INDEX.get(severity, 0)
+            web_floor = _SEVERITY_INDEX["Cautionary"]
+            target = min(start + downgrade, web_floor)
+            target = max(target, start)
+            return _SEVERITY_LADDER[target]
+        return _downgrade_severity(severity, downgrade)
     return severity
 
 

@@ -81,7 +81,6 @@ def test_http_admin_port_finding_is_cautionary():
             "high_risk_admin_ports": [],
             "medium_risk_admin_ports": [],
             "low_risk_admin_ports": [],
-            "admin_port_signatures": None,
         },
     )
 
