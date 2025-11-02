@@ -6,6 +6,26 @@ from datetime import datetime
 from ..model import Finding
 
 
+_SEVERITY_CANONICAL = {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "cautionary": "Cautionary",
+    "low": "Low",
+    "info": "Info",
+    "informational": "Info",
+}
+
+_SEVERITY_RANK = {
+    "Critical": 5,
+    "High": 4,
+    "Medium": 3,
+    "Cautionary": 2,
+    "Low": 1,
+    "Info": 0,
+}
+
+
 logger = logging.getLogger(__name__)
 
 class PDFReport(FPDF):
@@ -166,12 +186,13 @@ class PDFReport(FPDF):
         self.cell(0, 10, 'Risk Summary Dashboard', 0, 1, 'L')
         self.ln(5)
 
-        # Count findings by severity
+        # Count findings by severity, favouring the highest severity between
+        # calculated findings and any vendor-supplied risk rating.
         severity_counts = {}
         for finding in findings:
             rating = getattr(finding, "risk_rating", "")
-            severity = rating or finding.severity
-            severity_counts[severity] = severity_counts.get(severity, 0) + 1
+            chosen = self.pick_display_severity(rating, finding.severity)
+            severity_counts[chosen] = severity_counts.get(chosen, 0) + 1
             
         # Risk level boxes - stack vertically for better fit
         y_start = self.get_y()
@@ -250,6 +271,36 @@ class PDFReport(FPDF):
         for metric in metrics:
             self.cell(0, 6, f"* {metric}", 0, 1, 'L')
         
+    @staticmethod
+    def pick_display_severity(rating: str, severity: str) -> str:
+        """Return the most severe label from ``rating`` and ``severity``."""
+
+        def _canonical(value: str) -> str:
+            key = (value or "").strip()
+            if not key:
+                return ""
+            lowered = key.lower()
+            for alias, label in _SEVERITY_CANONICAL.items():
+                if lowered.startswith(alias):
+                    return label
+            return key
+
+        rating_label = _canonical(rating)
+        severity_label = _canonical(severity)
+
+        if rating_label and severity_label:
+            rating_rank = _SEVERITY_RANK.get(rating_label, -1)
+            severity_rank = _SEVERITY_RANK.get(severity_label, -1)
+            if severity_rank > rating_rank:
+                return severity_label
+            return rating_label
+
+        if severity_label:
+            return severity_label
+        if rating_label:
+            return rating_label
+        return "Info"
+
     def generate_risk_id(self, finding: Finding, index: int):
         """Generate a unique risk ID for tracking"""
         severity_prefix = {
