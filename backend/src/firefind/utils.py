@@ -68,6 +68,8 @@ SERVICE_NAME_PORTS = {
     "TCP-HIGH-PORTS": [1024, 65535],
     "TCP-49152_65535": [49152, 65535],
     "TCP-49152_65435": [49152, 65435],
+    "MICROSOFT-DS": [445],
+    "MICROSOFT_DS": [445],
     "LDPW0RM": [515],
     "PING": [],
     "ICMP": [],
@@ -104,6 +106,17 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
         if upper in {"ALL", "ANY", "*"}:
             wildcard = "ALL"
             break
+
+        mapped_ports = SERVICE_NAME_PORTS.get(upper)
+        if mapped_ports is not None:
+            added = False
+            for port in mapped_ports:
+                if isinstance(port, int) and 1 <= port <= 65535 and port not in seen_numeric:
+                    seen_numeric.add(port)
+                    numeric_ports.append(port)
+                    added = True
+            if added:
+                continue
 
         if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
             normalised = cleaned.replace(" ", "")

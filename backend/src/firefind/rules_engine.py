@@ -712,7 +712,45 @@ def _port_profile(ports: Set[int]) -> str:
     return "mixed"
 
 
-def _adjust_admin_port_severity(rule: Rule, severity: str, exposed_ports: Set[int]) -> str:
+def _max_admin_port_downgrade(
+    exposed_ports: Set[int],
+    profile: str,
+    critical_ports: Set[int],
+    high_ports: Set[int],
+    medium_ports: Set[int],
+) -> int:
+    """Return the maximum downgrade allowed based on the ports in scope."""
+
+    if exposed_ports & critical_ports:
+        # Allow legacy SSH-specific tuning to continue downgrading when
+        # organisations categorise SSH as a critical service, but retain a
+        # strict floor for other critical protocols (e.g. SMB, NetBIOS).
+        return 4 if profile == "ssh" else 0
+
+    if exposed_ports & high_ports:
+        if profile == "ssh":
+            return 4
+        if profile == "rdp":
+            return 2
+        return 2
+
+    if exposed_ports & medium_ports:
+        return 3
+
+    # Low-risk and informational ports can still fall to "Low" severity when
+    # scope justifies it.
+    return 4
+
+
+def _adjust_admin_port_severity(
+    rule: Rule,
+    severity: str,
+    exposed_ports: Set[int],
+    *,
+    critical_ports: Set[int],
+    high_ports: Set[int],
+    medium_ports: Set[int],
+) -> str:
     service_all = is_all_ports(rule.port)
     src_any = is_any(rule.src)
     dst_any = is_any(rule.dst)
@@ -744,13 +782,21 @@ def _adjust_admin_port_severity(rule: Rule, severity: str, exposed_ports: Set[in
         downgrade = max(downgrade, 1)
 
     if downgrade:
+        allowed = _max_admin_port_downgrade(
+            exposed_ports, profile, critical_ports, high_ports, medium_ports
+        )
+        downgrade = min(downgrade, allowed)
+
+    if downgrade:
         if profile == "web":
             start = _SEVERITY_INDEX.get(severity, 0)
             web_floor = _SEVERITY_INDEX["Cautionary"]
             target = min(start + downgrade, web_floor)
             target = max(target, start)
             return _SEVERITY_LADDER[target]
-        return _downgrade_severity(severity, downgrade)
+        start = _SEVERITY_INDEX.get(severity, 0)
+        target = min(start + downgrade, _LOWEST_ADMIN_SEVERITY)
+        return _SEVERITY_LADDER[target]
     return severity
 
 
@@ -837,7 +883,14 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 high_risk_admin_ports,
                 medium_risk_admin_ports,
             )
-            severity = _adjust_admin_port_severity(r, severity, exposed_admin_ports)
+            severity = _adjust_admin_port_severity(
+                r,
+                severity,
+                exposed_admin_ports,
+                critical_ports=critical_risk_admin_ports,
+                high_ports=high_risk_admin_ports,
+                medium_ports=medium_risk_admin_ports,
+            )
             risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
 
