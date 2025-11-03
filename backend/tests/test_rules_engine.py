@@ -60,6 +60,31 @@ def test_admin_port_risk_rating_varies_with_port():
     assert ratings["4"] == "Low"
 
 
+def test_mixed_critical_ports_stay_critical():
+    rule = Rule(
+        "mixed-critical",
+        "10.0.0.0/24",
+        "10.1.0.0/24",
+        "any",
+        "135,137,138,139,445",
+        "allow",
+    )
+
+    cfg = {
+        "admin_ports": [135, 137, 138, 139, 445],
+        "critical_risk_admin_ports": [135, 137, 138, 139],
+        "high_risk_admin_ports": [],
+        "medium_risk_admin_ports": [445],
+        "low_risk_admin_ports": [],
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["Critical"]
+
+
 def test_http_admin_port_finding_is_cautionary():
     rule = Rule("web", "10.0.0.0/24", "0.0.0.0/0", "tcp", "80", "allow")
     findings = run_checks(
