@@ -13,7 +13,6 @@ from firefind.api import app  # noqa: E402
 
 client = TestClient(app)
 
-
 def make_sample_file(fmt: str):
     """Return (filename, bytes, mime) for a small CSV or XLSX firewall export."""
     headers = [
@@ -51,7 +50,7 @@ def make_sample_file(fmt: str):
         raise ValueError(fmt)
 
 
-@pytest.mark.parametrize("fmt", ["csv", "xlsx"])
+@pytest.mark.parametrize("fmt", ["csv", "xlsx"])  
 @pytest.mark.parametrize("route", ["/scan", "/api/scan"])
 def test_scan_basic(tmp_path, monkeypatch, fmt, route):
     monkeypatch.chdir(tmp_path)
