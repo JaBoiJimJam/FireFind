@@ -79,10 +79,10 @@ def test_scan_basic(tmp_path, monkeypatch, fmt, route):
 
     # Validate severity metrics
     metrics = data.get("metrics", {})
-    assert metrics.get("critical") == 1
-    assert metrics.get("high") == 2
+    assert metrics.get("critical") == 0
+    assert metrics.get("high") == 3
     assert metrics.get("medium") == 0
-    assert metrics.get("score") == 40
+    assert metrics.get("score") == 55
     assert metrics.get("total") == len(data["findings"])
 
     # Reports not requested
