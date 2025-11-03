@@ -10,27 +10,20 @@
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.7/dist/purify.min.js"></script>
 
     <script>
-        // Override the createParticle function to do nothing
-        function createParticle() {
-            // Do nothing - no particles on reports page
-        }
-        
-        // Clear any existing particle interval
+        function createParticle() {}
+
         if (typeof particleInterval !== 'undefined') {
             clearInterval(particleInterval);
         }
     </script>
 </head>
 <body class="reports-page">
-    <!-- Background -->
     <div class="bg-animation">
         <div class="cyber-grid"></div>
     </div>
 
-    <!-- Scanning Line -->
     <div class="scan-line"></div>
 
-    <!-- Header -->
     <header id="header">
         <nav>
             <div class="logo">
@@ -45,7 +38,6 @@
         </nav>
     </header>
 
-    <!-- Main Content -->
     <main>
         <div class="reports-content">
             <div class="reports-header">
@@ -65,21 +57,17 @@
         </div>
     </main>
 
-    <!-- Footer -->
     <footer>
-        <p>&copy; 2025 FireFind by Team Five Guys | Triskele Labs</p>
+        <p>&copy; 2025 FireFind | Triskele Labs | By team Five guys</p>
     </footer>
-    
+
     <script src="app.js"></script>
     <script>
-        // Page-specific initialization
         document.addEventListener('DOMContentLoaded', function() {
-            // Clean URL on page load
             if (window.location.pathname.includes('reports.html')) {
                 history.replaceState({ file: 'reports.html' }, 'Reports - FireFind', '/reports');
             }
-            
-            // Set active navigation state for reports page
+
             setTimeout(function() {
                 const navLinks = document.querySelectorAll('.nav-links a');
                 navLinks.forEach(link => link.classList.remove('active'));
@@ -94,8 +82,7 @@
 
         async function loadReports() {
             const container = document.getElementById('reportsContainer');
-            
-            // Show loading state
+
             container.innerHTML = `
                 <div class="loading">
                     <div class="loading-spinner"></div>
@@ -137,15 +124,13 @@
 
             const reportsHTML = reports.map(report => {
                 const reportType = report.type.toUpperCase();
-                // Extract date/time from filename
                 const dateMatch = report.name.match(/(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})/);
                 let displayName = 'Report';
                 let dateTime = 'Unknown Date';
                 let clientName = '';
                 if (dateMatch) {
-                    const datePart = dateMatch[1]; // 2025-10-01
-                    const timePart = dateMatch[2].replace(/-/g, ':'); // 12:51:38
-                    // Format the date nicely
+                    const datePart = dateMatch[1];
+                    const timePart = dateMatch[2].replace(/-/g, ':');
                     const date = new Date(datePart + 'T' + timePart);
                     dateTime = date.toLocaleDateString('en-US', {
                         year: 'numeric',
@@ -156,13 +141,10 @@
                         minute: '2-digit'
                     });
                 }
-                // Extract client name from filename (between first and second '_')
-                // Example: report_Triskele-Labs_2025-10-26_15-13-35.pdf
                 const clientMatch = report.name.match(/^[^_]+_([^_]+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}/);
                 if (clientMatch) {
                     clientName = clientMatch[1];
                 }
-                // Set display name based on file type and content
                 if (report.type === 'pdf') {
                     displayName = 'Report';
                 } else if (report.type === 'csv' || report.type === 'xlsx') {
@@ -242,16 +224,15 @@
 
         function deleteReport(filename) {
             const decodedFilename = decodeURIComponent(filename);
-            
+
             if (confirm(`Are you sure you want to delete "${decodedFilename}"?\n\nThis action cannot be undone.`)) {
-                // Make API call to delete the file
                 fetch(`http://localhost:8000/api/reports/${filename}`, {
                     method: 'DELETE'
                 })
                 .then(response => {
                     if (response.ok) {
                         showToast('Report deleted successfully', 'success');
-                        loadReports(); // Refresh the list
+                        loadReports();
                     } else {
                         throw new Error('Failed to delete report');
                     }
@@ -265,13 +246,11 @@
 
         function openSpreadsheet(filename, fileType) {
             const fileUrl = `http://localhost:8000/out/${filename}`;
-            
+
             if (fileType === 'csv') {
-                // CSV files can be opened in browser
                 window.open(fileUrl, '_blank');
                 showToast('CSV file opened in new tab', 'success');
             } else if (fileType === 'xlsx') {
-                // For Excel files, try to open with system default
                 if (navigator.platform.includes('Win')) {
                     try {
                         window.location.href = `ms-excel:ofe|u|${fileUrl}`;
@@ -287,34 +266,29 @@
             }
         }
 
-        // Unified notification system
         function sanitize(str) {
             if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
                 return DOMPurify.sanitize(str);
             }
-            // Basic HTML escaping as fallback
             return String(str).replace(/[&<>"']/g, (s) => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
             })[s]);
         }
 
         function showToast(message, type = 'info') {
-            // Remove any existing toasts
             const existing = document.querySelector('.toast');
             if (existing) existing.remove();
-            
+
             const toast = document.createElement('div');
             toast.className = `toast toast-${type}`;
             toast.innerHTML = sanitize(message);
-            
+
             document.body.appendChild(toast);
-            
-            // Trigger animation
+
             setTimeout(() => {
                 toast.classList.add('show');
             }, 10);
-            
-            // Auto-remove after appropriate duration (longer for errors)
+
             const duration = type === 'error' ? 5000 : 3000;
             setTimeout(() => {
                 toast.classList.remove('show');

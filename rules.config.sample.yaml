@@ -62,6 +62,13 @@ risk_levels:
       min_score: 40
     rationale:
       summary: "Meaningful exposure to address during the next change window."
+  cautionary:
+    label: "Cautionary Risk"
+    severity: cautionary
+    thresholds:
+      min_score: 25
+    rationale:
+      summary: "Monitor the condition and schedule remediation before the next audit."
   low:
     label: "Low Risk"
     severity: low

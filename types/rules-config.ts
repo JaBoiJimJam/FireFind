@@ -4,6 +4,7 @@ export const SeveritySchema = z.enum([
   "critical",
   "high",
   "medium",
+  "cautionary",
   "low",
   "informational",
 ]);

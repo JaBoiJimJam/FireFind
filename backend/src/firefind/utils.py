@@ -11,7 +11,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .model import Rule
 from .vendors import apply_vendor_normalizer
-from .vendors.utils import pick_first_present, normalize_action
+from .vendors.utils import normalize_header, pick_first_present, normalize_action
 
 
 # Mapping of common service object names to well-known ports.  These values are
@@ -27,16 +27,50 @@ SERVICE_NAME_PORTS = {
     "FTP": [21],
     "FTPS": [990, 989, 21],
     "DNS": [53],
+    "DNS_": [53],
+    "DOMAIN-TCP": [53],
+    "DOMAIN-UDP": [53],
+    "DOMAIN-UDP_": [53],
     "SMTP": [25],
     "SMTPS": [465],
+    "TCP-587": [587],
     "POP3": [110],
     "IMAP": [143],
+    "LDAP": [389],
+    "LDAP-SSL": [636],
     "RDP": [3389],
     "SQL": [1433],
+    "MS-SQL-SERVER": [1433],
     "MYSQL": [3306],
     "POSTGRES": [5432],
     "HTTP_PROXY": [8080],
     "VNC": [5900],
+    "SYSLOG": [514],
+    "SHELL": [514],
+    "NBT_": [137, 138, 139],
+    "NATAGRAM": [138],
+    "NBNAME": [137],
+    "NBNAME_TCP": [137],
+    "NBSESSION": [139],
+    "KERBEROS": [88],
+    "KERBEROS_": [88],
+    "KERBEROS_V5_TCP": [88],
+    "KERBEROS_V5_UDP": [88],
+    "KERBEROS-TCP-V4": [88],
+    "KERBEROS-UDP-V4_": [88],
+    "NTP-UDP": [123],
+    "NTP-TCP": [123],
+    "TCP_135": [135],
+    "TCP_3268": [3268],
+    "TCP_3269": [3269],
+    "TCP_464": [464],
+    "TCP_8810-8811": [8810, 8811],
+    "TCP-HIGH-PORTS": [1024, 65535],
+    "TCP-49152_65535": [49152, 65535],
+    "TCP-49152_65435": [49152, 65435],
+    "MICROSOFT-DS": [445],
+    "MICROSOFT_DS": [445],
+    "LDPW0RM": [515],
     "PING": [],
     "ICMP": [],
 }
@@ -52,6 +86,75 @@ def _tokenise_service_values(text: str) -> Iterable[str]:
         .replace("/ ", "/")
     )
     return [part for part in cleaned.split() if part]
+
+
+def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
+    """Normalise ``tokens`` describing ports while removing duplicates."""
+
+    wildcard = None
+    numeric_ports: list[int] = []
+    seen_numeric: set[int] = set()
+    explicit_tokens: list[str] = []
+    seen_explicit: set[str] = set()
+
+    for token in tokens:
+        cleaned = token.strip()
+        if not cleaned:
+            continue
+        upper = cleaned.upper()
+
+        if upper in {"ALL", "ANY", "*"}:
+            wildcard = "ALL"
+            break
+
+        mapped_ports = SERVICE_NAME_PORTS.get(upper)
+        if mapped_ports is not None:
+            added = False
+            for port in mapped_ports:
+                if isinstance(port, int) and 1 <= port <= 65535 and port not in seen_numeric:
+                    seen_numeric.add(port)
+                    numeric_ports.append(port)
+                    added = True
+            if added:
+                continue
+
+        if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
+            normalised = cleaned.replace(" ", "")
+            lowered = normalised.lower()
+            if lowered not in seen_explicit:
+                seen_explicit.add(lowered)
+                explicit_tokens.append(normalised)
+            continue
+
+        if "-" in cleaned:
+            range_parts = cleaned.split("-", 1)
+            if all(part.isdigit() for part in range_parts):
+                lowered = cleaned.lower()
+                if lowered not in seen_explicit:
+                    seen_explicit.add(lowered)
+                    explicit_tokens.append(cleaned)
+                continue
+
+        if cleaned.isdigit():
+            port = int(cleaned)
+            if 1 <= port <= 65535 and port not in seen_numeric:
+                seen_numeric.add(port)
+                numeric_ports.append(port)
+            continue
+
+        lowered = cleaned.lower()
+        if lowered not in seen_explicit:
+            seen_explicit.add(lowered)
+            explicit_tokens.append(cleaned)
+
+    if wildcard:
+        return [wildcard]
+
+    ordered: list[str] = []
+    if numeric_ports:
+        ordered.extend(str(port) for port in sorted(numeric_ports))
+    ordered.extend(explicit_tokens)
+    return ordered
 
 
 def load_yaml(path: Path) -> dict:
@@ -156,14 +259,63 @@ def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
         ],
     )
     if svc_port.strip():
-        parts = [p.strip() for p in str(svc_port).splitlines() if p.strip()]
-        return ("any", ",".join(parts))
+        tokens = _tokenise_service_values(str(svc_port))
+        normalised = _prepare_port_tokens(tokens)
+        if normalised:
+            return ("any", ",".join(normalised))
 
-    for _, v in row.items():
-        s = str(v or "").strip().upper()
-        if (s.startswith("TCP/") or s.startswith("UDP/")) and any(ch.isdigit() for ch in s):
-            parts = [p.strip() for p in s.splitlines() if p.strip()]
-            return ("any", ",".join(parts))
+    service_hint_normalised = str(service_hint or "").strip()
+
+    for key, value in row.items():
+        norm_key = normalize_header(str(key)) if key is not None else ""
+        if not norm_key:
+            continue
+        if norm_key == "service":
+            continue
+        if (
+            service_hint_normalised
+            and str(value or "").strip() == service_hint_normalised
+        ):
+            continue
+        if not any(
+            part in norm_key
+            for part in (
+                "service",
+                "port",
+                "svc",
+                "sport",
+                "dport",
+            )
+        ):
+            continue
+        tokens = _tokenise_service_values(str(value or ""))
+        normalised = _prepare_port_tokens(tokens)
+        if normalised:
+            return ("any", ",".join(normalised))
+
+    for value in row.values():
+        tokens = list(_tokenise_service_values(str(value or "")))
+        if not tokens:
+            continue
+        filtered: list[str] = []
+        for token in tokens:
+            cleaned = token.strip()
+            if not cleaned:
+                continue
+            if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
+                head = cleaned.split("/", 1)[0]
+                if any(ch.isalpha() for ch in head):
+                    filtered.append(cleaned)
+                continue
+            if "-" in cleaned:
+                range_parts = cleaned.split("-", 1)
+                if all(part.isdigit() for part in range_parts):
+                    filtered.append(cleaned)
+        if not filtered:
+            continue
+        normalised = _prepare_port_tokens(filtered)
+        if normalised:
+            return ("any", ",".join(normalised))
 
     svc_name = service_hint or pick_first_present(row, ["Service"])
     if svc_name.strip():
@@ -171,34 +323,98 @@ def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
         if not tokens:
             return ("any", str(svc_name).strip())
 
-        ports: list[int] = []
+        numeric_ports: set[int] = set()
         explicit_values: list[str] = []
+        seen_explicit: set[str] = set()
         for token in tokens:
-            upper = token.upper()
+            cleaned = token.strip()
+            if not cleaned:
+                continue
+            upper = cleaned.upper()
             if upper in {"ALL", "ANY", "*"}:
                 return ("any", "ALL")
 
-            if any(ch.isdigit() for ch in token) and "/" in token:
-                explicit_values.append(token)
+            if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
+                normalised = cleaned.replace(" ", "")
+                lowered = normalised.lower()
+                if lowered not in seen_explicit:
+                    seen_explicit.add(lowered)
+                    explicit_values.append(normalised)
+                continue
+
+            if "-" in cleaned:
+                range_parts = cleaned.split("-", 1)
+                if all(part.isdigit() for part in range_parts):
+                    lowered = cleaned.lower()
+                    if lowered not in seen_explicit:
+                        seen_explicit.add(lowered)
+                        explicit_values.append(cleaned)
+                    continue
+
+            if cleaned.isdigit():
+                port = int(cleaned)
+                if 1 <= port <= 65535:
+                    numeric_ports.add(port)
                 continue
 
             mapped = SERVICE_NAME_PORTS.get(upper)
             if mapped is not None:
-                ports.extend(mapped)
-            else:
-                explicit_values.append(token)
+                for port in mapped:
+                    if 1 <= port <= 65535:
+                        numeric_ports.add(port)
+                continue
 
-        if ports:
-            unique = sorted({p for p in ports if 1 <= p <= 65535})
-            if unique:
-                return ("any", ",".join(str(p) for p in unique))
+            lowered = cleaned.lower()
+            if lowered not in seen_explicit:
+                seen_explicit.add(lowered)
+                explicit_values.append(cleaned)
 
-        if explicit_values:
-            return ("any", ",".join(explicit_values))
+        combined: list[str] = []
+        if numeric_ports:
+            combined.extend(str(port) for port in sorted(numeric_ports))
+        combined.extend(explicit_values)
+        if combined:
+            return ("any", ",".join(combined))
 
         return ("any", str(svc_name).strip())
 
     return ("any", "any")
+
+
+def normalize_risk_rating(value: str) -> str:
+    """Return a canonical severity label from vendor risk rating text."""
+
+    if value is None:
+        return ""
+
+    cleaned = str(value).strip()
+    if not cleaned:
+        return ""
+
+    normalized = cleaned.lower()
+    normalized = normalized.replace("risk", "")
+    for sep in ("-", "_", "\u2013", "\u2014"):
+        normalized = normalized.replace(sep, " ")
+    normalized = " ".join(part for part in normalized.split() if part)
+    collapsed = normalized.replace(" ", "")
+
+    if not collapsed:
+        return ""
+
+    if collapsed.startswith("crit"):
+        return "Critical"
+    if collapsed.startswith("high"):
+        return "High"
+    if collapsed.startswith("med"):
+        return "Medium"
+    if collapsed.startswith("low"):
+        return "Low"
+    if collapsed.startswith("info"):
+        return "Info"
+    if collapsed.startswith("caut") or collapsed.endswith("tionary"):
+        return "Cautionary"
+
+    return cleaned.capitalize()
 
 
 def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | None:
@@ -219,6 +435,13 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
     srcintf = pick_first_present(normalized_row, mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
     dstintf = pick_first_present(normalized_row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
     source_file = str(normalized_row.get("_source_file", ""))
+    risk_rating_fields = mapping.get("risk_rating", [])
+    risk_rating_raw = (
+        pick_first_present(normalized_row, risk_rating_fields)
+        if risk_rating_fields
+        else ""
+    )
+    risk_rating = normalize_risk_rating(risk_rating_raw)
 
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None
@@ -235,4 +458,5 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
         dst_interface=dstintf,
         service=service,
         source_file=source_file,
+        risk_rating=risk_rating,
     )

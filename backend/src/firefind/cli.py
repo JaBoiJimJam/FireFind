@@ -9,13 +9,10 @@ import typer
 from . import __version__
 
 from .loaders.csv_xlsx_loader import load_table
-from .model import Rule, Finding
-from .rules_engine import run_checks
+from .model import Finding
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
-from .service import deduplicate_findings
-from .config import load_rules_config
-from .utils import load_yaml, pick_mapping, to_rule
+from .service import run_analysis
 
 app = typer.Typer(help="Ingest, normalize, analyze, and output reports.")
 
@@ -77,13 +74,8 @@ def save_csv(findings: List[Finding], path: Path) -> None:
 def save_pdf(findings: List[Finding], path: Path) -> None:
     p = Path(path)
     os.makedirs(p.parent, exist_ok=True)
-    # Change from title= to client_name= to match your PDF function
     generate_pdf(str(p), findings, client_name="FireFind Analysis")
     
-# ------------------------
-# CLI command
-# ------------------------
-
 def parse(
     input: str,
     vendor: str,
@@ -98,12 +90,6 @@ def parse(
     if not input_path.exists():
         raise typer.BadParameter(f"{input_path} does not exist")
 
-    # Load configs
-    rules_cfg = load_rules_config(Path(rules))
-    vendor_mappings = load_yaml(Path(mappings))
-    mapping = pick_mapping(vendor_mappings, vendor)
-
-    # Collect rows from one or many files
     raw_rows = []
     if input_path.is_dir():
         typer.echo(f"Input is a directory → scanning for CSV/XLSX in {input_path}")
@@ -113,7 +99,6 @@ def parse(
             if f.is_file() and f.suffix.lower() in {".csv", ".xlsx"}
         ]
 
-        # Filter out temporary Excel files (starting with ~$)
         files = [f for f in files if not f.name.startswith("~$")]
         
         if not files:
@@ -130,25 +115,14 @@ def parse(
             raw_rows.append(row)
 
     typer.echo(f"Loaded {len(raw_rows)} rows")
+    analysis = run_analysis(
+        input_path,
+        vendor=vendor,
+        rules_path=Path(rules),
+        mappings_path=Path(mappings),
+    )
+    findings_unique = analysis.findings
 
-    # Normalize rules with de-duplication
-    rules_norm: List[Rule] = []
-    seen_rules = set()
-    for row in raw_rows:
-        r = to_rule(row, mapping, vendor=vendor)
-        if not r:
-            continue
-        key = (r.rule_id, r.src, r.dst, r.proto, r.port, r.action)
-        if key in seen_rules:
-            continue
-        seen_rules.add(key)
-        rules_norm.append(r)
-
-    # Analyze
-    findings = run_checks(vendor, rules_norm, rules_cfg)
-    findings_unique = deduplicate_findings(findings)
-
-    # Save reports
     save_csv(findings_unique, Path(out_csv))
     typer.echo(f"Saved CSV → {out_csv}")
     save_pdf(findings_unique, Path(out_pdf))

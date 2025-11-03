@@ -54,10 +54,55 @@ def test_admin_port_risk_rating_varies_with_port():
     )
     ratings = {f.rule_id: f.severity for f in findings if f.finding_type == "admin_port_exposed"}
 
-    assert ratings["1"] == "Critical"
-    assert ratings["2"] == "High"
-    assert ratings["3"] == "Medium"
+    assert ratings["1"] == "Low"
+    assert ratings["2"] == "Cautionary"
+    assert ratings["3"] == "Low"
     assert ratings["4"] == "Low"
+
+
+def test_mixed_critical_ports_stay_critical():
+    rule = Rule(
+        "mixed-critical",
+        "10.0.0.0/24",
+        "10.1.0.0/24",
+        "any",
+        "135,137,138,139,445",
+        "allow",
+    )
+
+    cfg = {
+        "admin_ports": [135, 137, 138, 139, 445],
+        "critical_risk_admin_ports": [135, 137, 138, 139],
+        "high_risk_admin_ports": [],
+        "medium_risk_admin_ports": [445],
+        "low_risk_admin_ports": [],
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["Critical"]
+
+
+def test_http_admin_port_finding_is_cautionary():
+    rule = Rule("web", "10.0.0.0/24", "0.0.0.0/0", "tcp", "80", "allow")
+    findings = run_checks(
+        "vendor",
+        [rule],
+        {
+            "admin_ports": [80],
+            "critical_risk_admin_ports": [],
+            "high_risk_admin_ports": [],
+            "medium_risk_admin_ports": [],
+            "low_risk_admin_ports": [],
+        },
+    )
+
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["Cautionary"]
 
 
 def test_run_checks_broad_cidr():
@@ -227,15 +272,15 @@ def test_run_analysis_directory_and_dedup(tmp_path):
     rules_path = BACKEND_DIR / "rules" / "rules.yaml"
     mappings_path = BACKEND_DIR / "rules" / "vendor_mappings.yaml"
 
-    findings = run_analysis(
+    analysis = run_analysis(
         input_path=data_dir,
         vendor="generic",
         rules_path=rules_path,
         mappings_path=mappings_path,
     )
 
-    assert len(findings) == 3
-    types = {f.finding_type for f in findings}
+    assert len(analysis.findings) == 3
+    types = {f.finding_type for f in analysis.findings}
     assert {"allow_any", "admin_port_exposed", "broad_cidr"} <= types
     assert "admin_port_exposed" in types
 
@@ -258,15 +303,15 @@ def test_run_analysis_custom_config_loading(tmp_path):
         "  action: ['act_col']\n"
     )
 
-    findings = run_analysis(
+    analysis = run_analysis(
         input_path=data_dir,
         vendor="custom",
         rules_path=rules_yaml,
         mappings_path=mapping_yaml,
     )
 
-    assert len(findings) == 1
-    f = findings[0]
+    assert len(analysis.findings) == 1
+    f = analysis.findings[0]
     assert f.finding_type == "admin_port_exposed"
     assert f.rule_id == "1"
     assert f.src == "1.1.1.1"
@@ -291,15 +336,15 @@ def test_run_analysis_no_seq_column(tmp_path):
         "  action: ['act_col']\n"
     )
 
-    findings = run_analysis(
+    analysis = run_analysis(
         input_path=data_dir,
         vendor="noseq",
         rules_path=rules_yaml,
         mappings_path=mapping_yaml,
     )
 
-    assert len(findings) == 1
-    f = findings[0]
+    assert len(analysis.findings) == 1
+    f = analysis.findings[0]
     assert f.finding_type == "admin_port_exposed"
     assert f.rule_id == "1"
     assert f.src == "1.1.1.1"

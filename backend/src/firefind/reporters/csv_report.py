@@ -7,7 +7,6 @@ def write_findings_csv(path: str, findings: List[Finding]) -> None:
     """Write findings to a CSV file."""
     with open(path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        # Swap risk_code and rationale positions: risk_code in column J, rationale in column K
         writer.writerow([
             'vendor', 'rule_id', 'src', 'dst', 'proto', 'port', 'action',
             'finding_type', 'severity', 'risk_code', 'rationale'

@@ -98,12 +98,12 @@ def test_run_analysis_processes_csv_without_seq(tmp_path):
         "  action: ['Action']\n"
     )
 
-    findings = run_analysis(
+    analysis = run_analysis(
         input_path=csv_path,
         vendor="custom",
         rules_path=rules_yaml,
         mappings_path=mapping_yaml,
     )
 
-    assert len(findings) == 1
-    assert {f.finding_type for f in findings} == {"admin_port_exposed"}
+    assert len(analysis.findings) == 1
+    assert {f.finding_type for f in analysis.findings} == {"admin_port_exposed"}

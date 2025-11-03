@@ -35,6 +35,14 @@ DEFAULT_LOW_RISK_ADMIN_PORTS: Set[int] = set(
 )
 DEFAULT_ADMIN_PORTS = sorted(DEFAULT_RULES_CONFIG.admin_ports)
 
+_SEVERITY_LADDER = ["Critical", "High", "Medium", "Cautionary", "Low", "Info"]
+_SEVERITY_INDEX = {label: idx for idx, label in enumerate(_SEVERITY_LADDER)}
+_LOWEST_ADMIN_SEVERITY = _SEVERITY_INDEX["Low"]
+
+_WEB_PORTS = {80, 443}
+_SSH_PORTS = {22}
+_RDP_PORTS = {3389}
+
 Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
 
@@ -204,7 +212,7 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
         "port_lists": [],
     },
     "admin_port_exposed": {
-        "risk_levels": ["critical", "high", "medium", "low"],
+        "risk_levels": ["critical", "high", "medium", "cautionary", "low"],
         "network_scope": [],
         "port_lists": [
             "admin_ports",
@@ -473,6 +481,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                         severity=severity,
                         rationale=" ".join(rationale_bits),
                         source_file=candidate.source_file,
+                        risk_rating=candidate.risk_rating,
                     )
                 )
                 break
@@ -501,6 +510,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                     severity=severity,
                     rationale=" ".join(rationale_bits),
                     source_file=candidate.source_file,
+                    risk_rating=candidate.risk_rating,
                 )
             )
             break
@@ -517,6 +527,7 @@ def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
         'Critical': 'CRGEN',
         'High': 'HIGEN',
         'Medium': 'MEDGEN',
+        'Cautionary': 'CAUGEN',
         'Low': 'LOWGEN'
     }.get(severity, 'GEN')
 
@@ -629,7 +640,7 @@ def classify_admin_port_severity(
     if len(exposed_ports) >= 2:
         return "Medium"
 
-    return "Low"
+    return "Cautionary"
 
 
 def action_allows_traffic(action: str) -> bool:
@@ -643,6 +654,150 @@ def looks_internet_facing(value: str) -> bool:
         return False
     candidates = {"wan", "internet", "virtual-wan-link", "public"}
     return any(token in v for token in candidates)
+
+
+def _downgrade_severity(severity: str, steps: int) -> str:
+    if steps <= 0:
+        return severity
+    start = _SEVERITY_INDEX.get(severity, 0)
+    target = min(start + steps, _LOWEST_ADMIN_SEVERITY)
+    return _SEVERITY_LADDER[target]
+
+
+def _is_scope_broad(value: str) -> bool:
+    text = (value or "").strip()
+    if not text:
+        return True
+
+    lowered = text.lower()
+    if lowered in {"*", "any", "all"}:
+        return True
+
+    keyword_matches = [
+        "0.0.0.0/0",
+        "::/0",
+        "internet",
+        "wan",
+        "dmz",
+        "external",
+        "outside",
+        "public",
+        "anywhere",
+        "untrust",
+    ]
+    if any(keyword in lowered for keyword in keyword_matches):
+        return True
+
+    try:
+        network = ipaddress.ip_network(text, strict=False)
+    except Exception:
+        return False
+
+    if network.version == 4 and network.prefixlen <= 16:
+        return True
+    if network.version == 6 and network.prefixlen <= 32:
+        return True
+    return False
+
+
+def _port_profile(ports: Set[int]) -> str:
+    if not ports:
+        return "none"
+    if ports <= _WEB_PORTS:
+        return "web"
+    if ports <= _SSH_PORTS:
+        return "ssh"
+    if ports <= _RDP_PORTS:
+        return "rdp"
+    return "mixed"
+
+
+def _max_admin_port_downgrade(
+    exposed_ports: Set[int],
+    profile: str,
+    critical_ports: Set[int],
+    high_ports: Set[int],
+    medium_ports: Set[int],
+) -> int:
+    """Return the maximum downgrade allowed based on the ports in scope."""
+
+    if exposed_ports & critical_ports:
+        # Allow legacy SSH-specific tuning to continue downgrading when
+        # organisations categorise SSH as a critical service, but retain a
+        # strict floor for other critical protocols (e.g. SMB, NetBIOS).
+        return 4 if profile == "ssh" else 0
+
+    if exposed_ports & high_ports:
+        if profile == "ssh":
+            return 4
+        if profile == "rdp":
+            return 2
+        return 2
+
+    if exposed_ports & medium_ports:
+        return 3
+
+    # Low-risk and informational ports can still fall to "Low" severity when
+    # scope justifies it.
+    return 4
+
+
+def _adjust_admin_port_severity(
+    rule: Rule,
+    severity: str,
+    exposed_ports: Set[int],
+    *,
+    critical_ports: Set[int],
+    high_ports: Set[int],
+    medium_ports: Set[int],
+) -> str:
+    service_all = is_all_ports(rule.port)
+    src_any = is_any(rule.src)
+    dst_any = is_any(rule.dst)
+    src_broad = _is_scope_broad(rule.src)
+    dst_broad = _is_scope_broad(rule.dst)
+    profile = _port_profile(exposed_ports)
+
+    downgrade = 0
+
+    if service_all:
+        if src_any or dst_any:
+            downgrade = max(downgrade, 2)
+        elif not src_broad and not dst_broad:
+            downgrade = max(downgrade, 4)
+        else:
+            downgrade = max(downgrade, 1)
+    else:
+        if profile == "web":
+            downgrade = max(downgrade, 4)
+        if not src_broad and not dst_broad:
+            if profile in {"ssh", "web"}:
+                downgrade = max(downgrade, 4)
+            elif profile == "rdp":
+                downgrade = max(downgrade, 2)
+            else:
+                downgrade = max(downgrade, 2)
+
+    if not service_all and (src_broad ^ dst_broad) and not dst_any:
+        downgrade = max(downgrade, 1)
+
+    if downgrade:
+        allowed = _max_admin_port_downgrade(
+            exposed_ports, profile, critical_ports, high_ports, medium_ports
+        )
+        downgrade = min(downgrade, allowed)
+
+    if downgrade:
+        if profile == "web":
+            start = _SEVERITY_INDEX.get(severity, 0)
+            web_floor = _SEVERITY_INDEX["Cautionary"]
+            target = min(start + downgrade, web_floor)
+            target = max(target, start)
+            return _SEVERITY_LADDER[target]
+        start = _SEVERITY_INDEX.get(severity, 0)
+        target = min(start + downgrade, _LOWEST_ADMIN_SEVERITY)
+        return _SEVERITY_LADDER[target]
+    return severity
 
 
 def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
@@ -711,6 +866,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity="High",
                     rationale="Rule allows any-to-any access",
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 
@@ -726,6 +882,14 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 critical_risk_admin_ports,
                 high_risk_admin_ports,
                 medium_risk_admin_ports,
+            )
+            severity = _adjust_admin_port_severity(
+                r,
+                severity,
+                exposed_admin_ports,
+                critical_ports=critical_risk_admin_ports,
+                high_ports=high_risk_admin_ports,
+                medium_ports=medium_risk_admin_ports,
             )
             risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
@@ -744,6 +908,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
                     risk_code=risk_code,
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 
@@ -786,6 +951,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity=cidr_severity,
                     rationale="; ".join(cidr_messages),
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 
@@ -812,6 +978,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     severity=severity,
                     rationale="; ".join(rationale_bits),
                     source_file=r.source_file,
+                    risk_rating=r.risk_rating,
                 )
             )
 

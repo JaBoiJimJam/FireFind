@@ -1,33 +1,28 @@
 from __future__ import annotations
 
-"""Core analysis service for FireFind.
+"""Core analysis service for FireFind."""
 
-This module exposes :func:`run_analysis` which mirrors the logic of the
-CLI ``parse`` command but returns findings in-memory instead of writing
-reports directly to disk.  It can be used by other interfaces (e.g.
-APIs) that need programmatic access to the analysis results.
-"""
-
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple, TypedDict
 
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
 from .rules_engine import run_checks, generate_risk_code
-from .config import load_rules_config
+from .config import load_rules_config, RulesConfig
 from .utils import load_yaml, pick_mapping, to_rule
 
 
-# ------------------------
-# Public service function
-# ------------------------
+@dataclass
+class AnalysisResult:
+    findings: List[Finding]
+    rules: List[Rule]
 
-# Severity ranking used to compare and retain the most critical finding when
-# duplicates are encountered. Higher numbers represent higher risk.
 _SEVERITY_PRIORITY: Dict[str, int] = {
-    "Critical": 4,
-    "High": 3,
-    "Medium": 2,
+    "Critical": 5,
+    "High": 4,
+    "Medium": 3,
+    "Cautionary": 2,
     "Low": 1,
     "Info": 0,
 }
@@ -45,8 +40,6 @@ def _resequence_risk_codes(findings: List[Finding]) -> None:
     counters: Dict[str, int] = {}
 
     for finding in findings:
-        # Only specific finding types receive risk codes for now. For any other
-        # finding we keep the field empty to avoid implying a tracked risk.
         if finding.finding_type != "admin_port_exposed":
             finding.risk_code = finding.risk_code or ""
             continue
@@ -66,9 +59,6 @@ class _GroupedEntry(TypedDict):
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     """De-duplicate findings keeping the highest severity entry for each key."""
 
-    # We intentionally omit the severity from the key so that we can compare and
-    # retain the highest severity when the same underlying issue is reported
-    # more than once.
     key_fields: Tuple[str, ...]
     grouped: Dict[Tuple[str, ...], _GroupedEntry] = {}
     ordered_keys: List[Tuple[str, ...]] = []
@@ -108,8 +98,6 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             entry["primary"] = finding
             continue
 
-        # Prefer admin_port_exposed as the representative issue when severities
-        # match so that risk codes remain visible for the most critical cases.
         if (
             finding_rank == primary_rank
             and primary.finding_type != "admin_port_exposed"
@@ -123,7 +111,6 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         entry = grouped[key]
         primary = entry["primary"]
 
-        # Build a combined rationale that preserves all contributing messages.
         rationale_parts: List[str] = []
         seen_pairs = set()
         contributing_severities: List[str] = []
@@ -147,6 +134,14 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 + " | ".join(rationale_parts)
             )
 
+        risk_rating = getattr(primary, "risk_rating", "") or ""
+        if not risk_rating:
+            for detail in details:
+                rating = getattr(detail, "risk_rating", "")
+                if rating:
+                    risk_rating = rating
+                    break
+
         findings_unique.append(
             Finding(
                 vendor=primary.vendor,
@@ -162,6 +157,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 risk_code=primary.risk_code,
                 source_file=primary.source_file,
                 contributing_severities=tuple(contributing_severities),
+                risk_rating=risk_rating,
             )
         )
 
@@ -170,59 +166,66 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     return findings_unique
 
 
-def run_analysis(
+def _resolve_config_path(path: Path) -> Path:
+    if path.exists():
+        return path
+    if path.is_absolute():
+        return path
+    base = Path(__file__).resolve().parents[2]
+    candidate = base / path
+    return candidate if candidate.exists() else path
+
+
+def _collect_rules(
     input_path: Path,
-    vendor: str = "generic",
-    rules_path: Path = Path("rules/rules.yaml"),
-    mappings_path: Path = Path("rules/vendor_mappings.yaml"),
-) -> List[Finding]:
-    """Run the FireFind analysis and return a list of findings.
+    vendor: str,
+    rules_path: Path,
+    mappings_path: Path,
+) -> Tuple[List[Rule], RulesConfig]:
+    rules_path = _resolve_config_path(Path(rules_path))
+    mappings_path = _resolve_config_path(Path(mappings_path))
 
-    Parameters
-    ----------
-    input_path:
-        Path to a CSV/XLSX file or a directory containing such files.
-    vendor:
-        Vendor name used for column mappings.
-    rules_path:
-        Path to the YAML rules configuration.
-    mappings_path:
-        Path to the vendor mappings YAML file.
-    """
-
-    # Load configs
-    rules_cfg = load_rules_config(Path(rules_path))
-    vendor_mappings = load_yaml(Path(mappings_path))
+    rules_cfg = load_rules_config(rules_path)
+    vendor_mappings = load_yaml(mappings_path)
     mapping = pick_mapping(vendor_mappings, vendor)
 
-    # Collect rows from one or many files
     raw_rows = []
-    p = Path(input_path)
-    if p.is_dir():
-        files = list(sorted(p.glob("*.csv"))) + list(sorted(p.glob("*.xlsx")))
+    if input_path.is_dir():
+        files = list(sorted(input_path.glob("*.csv"))) + list(
+            sorted(input_path.glob("*.xlsx"))
+        )
         for f in files:
             for row in load_table(f):
                 row["_source_file"] = f.name
                 raw_rows.append(row)
     else:
-        for row in load_table(p):
-            row["_source_file"] = p.name
+        for row in load_table(input_path):
+            row["_source_file"] = input_path.name
             raw_rows.append(row)
 
-    # Normalize rules with de-duplication
     rules_norm: List[Rule] = []
     seen_rules = set()
     for row in raw_rows:
-        r = to_rule(row, mapping, vendor=vendor)
-        if not r:
+        rule = to_rule(row, mapping, vendor=vendor)
+        if not rule:
             continue
-        key = (r.rule_id, r.src, r.dst, r.proto, r.port, r.action)
+        key = (rule.rule_id, rule.src, rule.dst, rule.proto, rule.port, rule.action)
         if key in seen_rules:
             continue
         seen_rules.add(key)
-        rules_norm.append(r)
+        rules_norm.append(rule)
 
-    # Analyze
-    findings = run_checks(vendor, rules_norm, rules_cfg)
+    return rules_norm, rules_cfg
 
-    return deduplicate_findings(findings)
+
+def run_analysis(
+    input_path: Path,
+    vendor: str = "generic",
+    rules_path: Path = Path("rules/rules.yaml"),
+    mappings_path: Path = Path("rules/vendor_mappings.yaml"),
+) -> AnalysisResult:
+    input_path = Path(input_path)
+    rules, rules_cfg = _collect_rules(input_path, vendor, rules_path, mappings_path)
+    findings = run_checks(vendor, rules, rules_cfg)
+    unique = deduplicate_findings(findings)
+    return AnalysisResult(findings=unique, rules=rules)

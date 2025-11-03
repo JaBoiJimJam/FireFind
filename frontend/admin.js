@@ -1,10 +1,8 @@
 (function () {
-    // Safe sanitization helper
     const sanitize = (str) => {
         if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
             return DOMPurify.sanitize(str);
         }
-        // Basic HTML escaping as fallback
         return String(str).replace(/[&<>"']/g, (s) => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         })[s]);
@@ -14,6 +12,7 @@
         { value: 'critical', label: 'Critical' },
         { value: 'high', label: 'High' },
         { value: 'medium', label: 'Medium' },
+        { value: 'cautionary', label: 'Cautionary' },
         { value: 'low', label: 'Low' },
         { value: 'informational', label: 'Informational' },
     ];
@@ -65,10 +64,6 @@
     let validationOptions = { ...defaultValidationOptions };
     let ruleListView = null;
     let ruleEditor = null;
-
-    // ---------------------------------------------------------------------
-    // Rule logic helpers
-    // ---------------------------------------------------------------------
 
     function createConditionGroup(logic = 'all') {
         return {
@@ -4146,22 +4141,19 @@
     }
 
     function showToast(message, isError = false) {
-        // Use the unified toast system instead of admin-specific toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
-        
+
         const toast = document.createElement('div');
         toast.className = isError ? 'toast toast-error' : 'toast toast-success';
         toast.innerHTML = sanitize(message);
-        
+
         document.body.appendChild(toast);
-        
-        // Trigger animation
+
         setTimeout(() => {
             toast.classList.add('show');
         }, 10);
-        
-        // Auto-remove after appropriate duration (longer for errors)
+
         const duration = isError ? 5000 : 3000;
         setTimeout(() => {
             toast.classList.remove('show');

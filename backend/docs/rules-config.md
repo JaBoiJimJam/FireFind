@@ -24,7 +24,7 @@ modification.
 | `critical_risk_admin_ports` | Subset of ports treated as "Critical" if exposed. |
 | `high_risk_admin_ports`     | Ports escalated as "High" severity. |
 | `medium_risk_admin_ports`   | Ports escalated as "Medium" severity. |
-| `low_risk_admin_ports`      | Ports escalated as "Low" severity when no stricter tier applies. |
+| `low_risk_admin_ports`      | Ports escalated as "Cautionary" severity when no stricter tier applies. |
 
 Values can be integers or strings. The loader validates ranges and merges each
 subset into the overall `admin_ports` list to preserve backwards compatibility
@@ -36,7 +36,7 @@ The `risk_levels` map introduces structured metadata for each qualitative risk
 category. Every entry supports the following fields:
 
 - `label`: Human-friendly display name used in reports.
-- `severity`: One of `critical`, `high`, `medium`, `low`, or `informational`.
+- `severity`: One of `critical`, `high`, `medium`, `cautionary`, `low`, or `informational`.
 - `thresholds`: Numeric guardrails represented by
   [`NumericThresholds`](../src/firefind/config/schema.py). Supported keys include
   `min_score`, `max_score`, `min_findings`, and `max_findings`. Validation ensures

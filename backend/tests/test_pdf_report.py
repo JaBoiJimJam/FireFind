@@ -30,3 +30,12 @@ def test_safe_text_truncates_after_normalization():
     result = report.safe_text(text)
     assert result == "a" * 57 + "..."
     assert len(result) == 60
+
+
+def test_pick_display_severity_prefers_higher_rating():
+    report = PDFReport()
+
+    assert report.pick_display_severity("Low", "Critical") == "Critical"
+    assert report.pick_display_severity("critical risk", "Medium") == "Critical"
+    assert report.pick_display_severity("Informational", "") == "Info"
+    assert report.pick_display_severity("", "Cautionary") == "Cautionary"
