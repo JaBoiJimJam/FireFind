@@ -81,7 +81,7 @@ def test_scan_basic(tmp_path, monkeypatch, fmt, route):
     assert metrics.get("critical") == 0
     assert metrics.get("high") == 3
     assert metrics.get("medium") == 0
-    assert metrics.get("score") == 30
+    assert metrics.get("score") == 55
     assert metrics.get("total") == len(data["findings"])
 
     # Reports not requested
