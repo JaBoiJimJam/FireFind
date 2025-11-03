@@ -377,8 +377,8 @@ class PDFReport(FPDF):
         details.append(f"Rule ID: {rule_id}")
         
         # Network details
-        src = self.safe_text(getattr(finding, 'src', 'N/A'), 40)
-        dst = self.safe_text(getattr(finding, 'dst', 'N/A'), 40)
+        src = self.safe_text(getattr(finding, 'src', 'N/A'), 80)
+        dst = self.safe_text(getattr(finding, 'dst', 'N/A'), 80)
         details.append(f"Source: {src}")
         details.append(f"Destination: {dst}")
 
@@ -436,14 +436,14 @@ class PDFReport(FPDF):
             self.set_font('Arial', '', 9)
             technical_details = self.format_technical_details(finding)
             for detail in technical_details:
-                safe_detail = self.safe_text(detail)
+                safe_detail = self.safe_text(detail, max_chars=160)
                 self.cell(0, 5, f'  - {safe_detail}', 0, 1, 'L')  # Changed from • to -
-            
+
             # Rationale if available
             rationale = getattr(finding, 'rationale', None)
             if rationale:
                 self.set_font('Arial', 'I', 9)
-                rationale_text = self.safe_text(rationale, 80)
+                rationale_text = self.safe_text(rationale, 160)
                 self.cell(0, 5, f'Analysis: {rationale_text}', 0, 1, 'L')
             
             self.ln(3)
