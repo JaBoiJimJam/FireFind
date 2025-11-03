@@ -1,15 +1,12 @@
-// Global sanitize function
 function sanitize(str) {
     if (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) {
         return DOMPurify.sanitize(str);
     }
-    // Basic HTML escaping as fallback
     return String(str).replace(/[&<>"']/g, (s) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     })[s]);
 }
 
-// Smooth scroll function
 function smoothScroll(event, targetId) {
     if (event && typeof event.preventDefault === 'function') {
         event.preventDefault();
@@ -23,7 +20,6 @@ function smoothScroll(event, targetId) {
     }
 }
 
-// Header scroll effect
 window.addEventListener('scroll', () => {
     const header = document.getElementById('header');
     if (window.scrollY > 50) {
@@ -33,16 +29,12 @@ window.addEventListener('scroll', () => {
     }
 });
 
-// File handling
 let uploadedFiles = [];
 
-// Only set up these elements if they exist on the page
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 
-// Only add event listeners if elements exist
 if (dropZone) {
-    // Drag and drop
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         dropZone.classList.add('drag-over');
@@ -62,12 +54,10 @@ if (dropZone) {
 if (fileInput) {
     fileInput.addEventListener('change', (e) => {
         handleFiles(e.target.files);
-        // Clear the input so the same file can be selected again if needed
         e.target.value = '';
     });
 }
 
-// Load files from localStorage on page load
 function loadStoredFiles() {
     try {
         const storedFiles = localStorage.getItem('firefind_uploaded_files');
@@ -87,7 +77,6 @@ function loadStoredFiles() {
     }
 }
 
-// Save files to localStorage
 function saveFilesToStorage() {
     try {
         const filePromises = uploadedFiles.map(async (fileObj) => {
@@ -111,7 +100,6 @@ function saveFilesToStorage() {
     }
 }
 
-// Convert file to base64 for storage
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -121,7 +109,6 @@ function fileToBase64(file) {
     });
 }
 
-// Clear stored files
 function clearStoredFiles() {
     localStorage.removeItem('firefind_uploaded_files');
     uploadedFiles = [];
@@ -129,12 +116,11 @@ function clearStoredFiles() {
     showToast('All files cleared');
 }
 
-// File type validation
 const ALLOWED_FILE_TYPES = {
     'text/csv': ['.csv'],
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
     'application/vnd.ms-excel': ['.xls'],
-    'text/plain': ['.txt'] // In case CSV files are detected as plain text
+    'text/plain': ['.txt']
 };
 
 const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
@@ -143,7 +129,6 @@ function validateFileType(file) {
     const fileName = file.name.toLowerCase();
     const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
     
-    // Check file extension
     if (!ALLOWED_EXTENSIONS.includes(fileExtension)) {
         return {
             valid: false,
@@ -151,10 +136,8 @@ function validateFileType(file) {
         };
     }
     
-    // Check MIME type (additional validation)
     const mimeType = file.type;
     if (mimeType && !Object.keys(ALLOWED_FILE_TYPES).includes(mimeType)) {
-        // Some browsers might not detect CSV MIME type correctly, so we allow empty MIME type for CSV files
         if (!(fileExtension === '.csv' && (mimeType === '' || mimeType === 'application/octet-stream'))) {
             return {
                 valid: false,
@@ -167,7 +150,7 @@ function validateFileType(file) {
 }
 
 function validateFileSize(file) {
-    const maxSize = 50 * 1024 * 1024; // 50MB limit
+    const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
         return {
             valid: false,
@@ -177,7 +160,6 @@ function validateFileSize(file) {
     return { valid: true };
 }
 
-// File ID creation
 function createFileId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
         return crypto.randomUUID();
@@ -185,36 +167,31 @@ function createFileId() {
     return String(Date.now() + Math.random());
 }
 
-// File handling
 function handleFiles(files) {
     let validFiles = [];
     let errors = [];
-    
+
     for (let file of files) {
-        // Check if file already exists
         if (uploadedFiles.find(f => f.name === file.name)) {
             errors.push(`File "${file.name}" is already uploaded.`);
             continue;
         }
-        
-        // Validate file type
+
         const typeValidation = validateFileType(file);
         if (!typeValidation.valid) {
             errors.push(typeValidation.error);
             continue;
         }
-        
-        // Validate file size
+
         const sizeValidation = validateFileSize(file);
         if (!sizeValidation.valid) {
             errors.push(sizeValidation.error);
             continue;
         }
-        
+
         validFiles.push(file);
     }
-    
-    // Add valid files
+
     validFiles.forEach(file => {
         uploadedFiles.push({
             id: createFileId(),
@@ -224,14 +201,12 @@ function handleFiles(files) {
         });
     });
     
-    // Show errors if any
     if (errors.length > 0) {
         errors.forEach(error => showToast(error, 'error'));
     }
-    
-    // Show success message for valid files
+
     if (validFiles.length > 0) {
-        const message = validFiles.length === 1 
+        const message = validFiles.length === 1
             ? `File "${validFiles[0].name}" uploaded successfully!`
             : `${validFiles.length} files uploaded successfully!`;
         showToast(message, 'success');
@@ -239,7 +214,7 @@ function handleFiles(files) {
     
     if (validFiles.length > 0) {
         displayFiles();
-        saveFilesToStorage(); // Save to localStorage after adding files
+        saveFilesToStorage();
     }
 }
 
@@ -269,8 +244,7 @@ function displayFiles() {
                 </div>
             </div>
         `).join('');
-        
-        // Add a clear all button
+
         filesGrid.innerHTML += `
             <div class="file-card" style="text-align: center; border: 2px dashed var(--border-color);">
                 <button class="btn btn-secondary" onclick="clearStoredFiles()" style="margin: 1rem;">
@@ -278,8 +252,7 @@ function displayFiles() {
                 </button>
             </div>
         `;
-        
-        // Smooth scroll to files section only if there are new files
+
         if (uploadedFiles.length > 0) {
             filesSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -293,11 +266,10 @@ function removeFile(fileId) {
     const normalizedId = String(fileId);
     uploadedFiles = uploadedFiles.filter(f => String(f.id) !== normalizedId);
     displayFiles();
-    saveFilesToStorage(); // Update localStorage after removing file
+    saveFilesToStorage();
     showToast('File removed successfully', 'success');
 }
 
-// Add this helper function to generate date-formatted filename
 function generateDateFilename(baseFilename, extension) {
     const now = new Date();
     const year = now.getFullYear();
@@ -307,13 +279,11 @@ function generateDateFilename(baseFilename, extension) {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const seconds = String(now.getSeconds()).padStart(2, '0');
     
-    // Optionally add client name if provided
     let clientName = '';
     const clientInput = document.getElementById('client-name');
     if (clientInput && clientInput.value.trim() !== '') {
         clientName = '-' + clientInput.value.trim().replace(/\s+/g, '-');
     }
-    // Use baseFilename for flexibility (report for PDF, findings for CSV)
     return `${baseFilename}${clientName}_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.${extension}`;
 }
 
@@ -327,11 +297,11 @@ async function startScan(e) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = 'SCANNING...';
-        showToast('Scanning firewall configurations...', 'info');    const formData = new FormData();
+    showToast('Scanning firewall configurations...', 'info');
+    const formData = new FormData();
     uploadedFiles.forEach(f => {
         if (f.file) formData.append('files', f.file);
     });
-    // Add client name to form data
     const clientInput = document.getElementById('client-name');
     if (clientInput && clientInput.value.trim() !== '') {
         formData.append('client_name', clientInput.value.trim());
@@ -357,7 +327,6 @@ async function startScan(e) {
         
         if (data.pdf) {
             pdfLink.href = data.pdf;
-            // Generate date-formatted filename for PDF with client name
             const pdfFileName = generateDateFilename('report', 'pdf');
             pdfLink.setAttribute('download', pdfFileName);
             pdfLink.style.pointerEvents = 'auto';
@@ -368,10 +337,9 @@ async function startScan(e) {
             pdfLink.style.pointerEvents = 'none';
             pdfLink.style.opacity = '0.5';
         }
-        
+
         if (data.csv) {
             csvLink.href = data.csv;
-            // Generate date-formatted filename for CSV with client name
             const csvFileName = generateDateFilename('findings', 'csv');
             csvLink.setAttribute('download', csvFileName);
             csvLink.style.pointerEvents = 'auto';
@@ -419,22 +387,19 @@ function animateMetrics() {
 }
 
 function showToast(message, type = 'info') {
-    // Remove any existing toasts
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
-    
+
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.innerHTML = sanitize(message);
-    
+
     document.body.appendChild(toast);
-    
-    // Trigger animation
+
     setTimeout(() => {
         toast.classList.add('show');
     }, 10);
-    
-    // Auto-remove after appropriate duration (longer for errors)
+
     const duration = type === 'error' ? 5000 : 3000;
     setTimeout(() => {
         toast.classList.remove('show');
@@ -446,7 +411,6 @@ function showToast(message, type = 'info') {
     }, duration);
 }
 
-// Add floating particles effect
 function createParticle() {
     const particle = document.createElement('div');
     particle.style.cssText = `
@@ -477,88 +441,63 @@ function createParticle() {
     animation.onfinish = () => particle.remove();
 }
 
-// Create particles periodically
 setInterval(createParticle, 300);
 
-// Initialize - Load stored files on page load
 window.addEventListener('load', () => {
-    loadStoredFiles(); // Load files from localStorage
-    
+    loadStoredFiles();
+
     const isDevelopment =
         typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
 
     if (isDevelopment) {
         console.log('%cFireFind v1.0.0', 'color: #4ECCA3; font-size: 24px; font-weight: bold;');
-        console.log('%cDeveloped by Triskele Labs', 'color: #a0a0a0; font-size: 12px;');
+        console.log('%cDeveloped by Triskele Labs | By team Five guys', 'color: #a0a0a0; font-size: 12px;');
         console.log('%cOpen-Source Firewall Security Scanner', 'color: #00ff88; font-size: 14px;');
     }
 });
 
 function handleAboutClick(event) {
-    // Check if we're already on the index page
     const currentPage = window.location.pathname;
-    const isIndexPage = currentPage === '/' || 
-                       currentPage.endsWith('/index.html') || 
+    const isIndexPage = currentPage === '/' ||
+                       currentPage.endsWith('/index.html') ||
                        currentPage === '/index.html' ||
                        currentPage === '';
-    
+
     if (isIndexPage) {
-        // If on index page, prevent default link behavior and scroll to top
         event.preventDefault();
         window.scrollTo({
             top: 0,
             behavior: 'smooth'
         });
-        // Update active navigation state
         if (typeof setActiveNavigation === 'function') {
             setActiveNavigation();
         }
     }
-    // If not on index page, let the default link behavior work (go to index.html)
-    // The active state will be set automatically when the new page loads
 }
 
-// URL Management - Add this to your app.js file
 function initializeRouting() {
-    // Define route mappings
-    const routes = {
-        '/': 'index.html',
-        '/about': 'index.html',
-        '/scan': 'scan.html',
-        '/reports': 'reports.html',
-        '/admin': 'admin.html'
-    };
-
-    // Handle navigation
     function navigateTo(path, actualFile) {
-        // Update URL without page reload
         history.pushState({ file: actualFile }, '', path);
-        
-        // Update active navigation state
+
         setActiveNavigation();
-        
-        // Load the actual file if it's different from current
+
         const currentFile = window.location.pathname.split('/').pop();
         if (actualFile && actualFile !== currentFile && !window.location.pathname.includes(actualFile)) {
             window.location.href = actualFile;
         }
     }
 
-    // Set active navigation state
     function setActiveNavigation() {
         const navLinks = document.querySelectorAll('.nav-links a');
         const currentPath = window.location.pathname;
         const currentFile = currentPath.split('/').pop() || 'index.html';
-        
-        // Remove active class from all links
+
         navLinks.forEach(link => link.classList.remove('active'));
-        
-        // Add active class to current page link
+
         navLinks.forEach(link => {
             const href = link.getAttribute('href');
             let isActive = false;
-            
-            // Check if this link corresponds to the current page
+
             switch(href) {
                 case 'index.html':
                     isActive = currentFile === 'index.html' || currentFile === '' || currentPath === '/about' || currentPath === '/';
@@ -573,21 +512,19 @@ function initializeRouting() {
                     isActive = currentFile === 'admin.html' || currentPath === '/admin';
                     break;
             }
-            
+
             if (isActive) {
                 link.classList.add('active');
             }
         });
     }
 
-    // Update all navigation links
     function updateNavLinks() {
         const navLinks = document.querySelectorAll('.nav-links a');
         navLinks.forEach(link => {
             const href = link.getAttribute('href');
             let cleanPath = '';
-            
-            // Map file names to clean paths
+
             switch(href) {
                 case 'index.html':
                     cleanPath = '/about';
@@ -604,28 +541,23 @@ function initializeRouting() {
                 default:
                     cleanPath = href;
             }
-            
-            // Only modify non-About links, let handleAboutClick handle the About link
+
             if (href !== 'index.html') {
-                // Remove existing click handlers and add new ones for non-About links
                 link.removeAttribute('onclick');
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
                     navigateTo(cleanPath, href);
                 });
             }
-            // For index.html (About), keep the existing onclick="handleAboutClick(event)" behavior
         });
-        
-        // Set active navigation state after updating links
+
         setActiveNavigation();
     }
 
-    // Clean current URL on page load
     function cleanCurrentUrl() {
         const currentFile = window.location.pathname.split('/').pop();
         let cleanPath = window.location.pathname;
-        
+
         switch(currentFile) {
             case 'index.html':
                 cleanPath = '/about';
@@ -640,21 +572,18 @@ function initializeRouting() {
                 cleanPath = '/admin';
                 break;
         }
-        
-        // Update URL without reload if it needs cleaning
+
         if (cleanPath !== window.location.pathname) {
             history.replaceState({ file: currentFile }, document.title, cleanPath);
         }
     }
 
-    // Handle browser back/forward buttons
     window.addEventListener('popstate', function(e) {
         if (e.state && e.state.file) {
             window.location.href = e.state.file;
         }
     });
 
-    // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         cleanCurrentUrl();
         updateNavLinks();
@@ -662,5 +591,4 @@ function initializeRouting() {
     });
 }
 
-// Initialize routing
 initializeRouting();

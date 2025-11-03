@@ -74,13 +74,8 @@ def save_csv(findings: List[Finding], path: Path) -> None:
 def save_pdf(findings: List[Finding], path: Path) -> None:
     p = Path(path)
     os.makedirs(p.parent, exist_ok=True)
-    # Change from title= to client_name= to match your PDF function
     generate_pdf(str(p), findings, client_name="FireFind Analysis")
     
-# ------------------------
-# CLI command
-# ------------------------
-
 def parse(
     input: str,
     vendor: str,
@@ -95,7 +90,6 @@ def parse(
     if not input_path.exists():
         raise typer.BadParameter(f"{input_path} does not exist")
 
-    # Collect rows from one or many files
     raw_rows = []
     if input_path.is_dir():
         typer.echo(f"Input is a directory → scanning for CSV/XLSX in {input_path}")
@@ -105,7 +99,6 @@ def parse(
             if f.is_file() and f.suffix.lower() in {".csv", ".xlsx"}
         ]
 
-        # Filter out temporary Excel files (starting with ~$)
         files = [f for f in files if not f.name.startswith("~$")]
         
         if not files:
@@ -130,7 +123,6 @@ def parse(
     )
     findings_unique = analysis.findings
 
-    # Save reports
     save_csv(findings_unique, Path(out_csv))
     typer.echo(f"Saved CSV → {out_csv}")
     save_pdf(findings_unique, Path(out_pdf))

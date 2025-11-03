@@ -32,15 +32,13 @@ class PDFReport(FPDF):
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
-        self.set_margins(15, 15, 15)  # More generous margins
+        self.set_margins(15, 15, 15)
         
     def header(self):
-        # Logo placeholder (if logo file exists)
         logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
         if os.path.exists(logo_path):
             self.image(logo_path, 10, 8, 33)
         
-        # Title
         self.set_font('Arial', 'B', 16)
         self.cell(0, 10, 'FireFind - Firewall Risk Assessment Report', 0, 1, 'C')
         self.ln(10)
@@ -60,15 +58,15 @@ class PDFReport(FPDF):
         text = str(text)
 
         translation_table = str.maketrans({
-            "•": "-",  # bullet
-            "·": "-",  # alternate bullet / middle dot
+            "•": "-",
+            "·": "-",
             "“": '"',
             "”": '"',
             "‘": "'",
             "’": "'",
-            "—": "-",  # em dash
-            "–": "-",  # en dash
-            "…": "...",  # ellipsis
+            "—": "-",
+            "–": "-",
+            "…": "...",
         })
 
         text = text.translate(translation_table)
@@ -82,10 +80,8 @@ class PDFReport(FPDF):
         self.add_page()
         
         if report_date is None:
-            # Include both date and time
             report_date = datetime.now().strftime("%B %d, %Y at %I:%M %p")
             
-        # Main title
         self.set_font('Arial', 'B', 24)
         self.ln(40)
         self.cell(0, 15, 'Firewall Risk Assessment', 0, 1, 'C')
@@ -93,22 +89,25 @@ class PDFReport(FPDF):
         
         self.ln(20)
         
-        # Client and date info
         self.set_font('Arial', '', 14)
         self.cell(0, 10, f'Client: {client_name}', 0, 1, 'C')
         self.cell(0, 10, f'Report Date: {report_date}', 0, 1, 'C')
+
+        self.ln(10)
+        self.set_font('Arial', 'I', 12)
+        self.cell(0, 10, 'By team Five guys', 0, 1, 'C')
         
     def get_severity_color(self, severity):
         """Return RGB color based on severity level"""
         colors = {
-            'Critical': (220, 50, 50),    # Red
-            'High': (255, 165, 0),        # Orange
-            'Medium': (255, 215, 0),      # Yellow
-            'Cautionary': (255, 239, 153),  # Light Amber
-            'Low': (144, 238, 144),       # Light Green
-            'Info': (173, 216, 230)       # Light Blue
+            'Critical': (220, 50, 50),
+            'High': (255, 165, 0),
+            'Medium': (255, 215, 0),
+            'Cautionary': (255, 239, 153),
+            'Low': (144, 238, 144),
+            'Info': (173, 216, 230)
         }
-        return colors.get(severity, (200, 200, 200))  # Default gray
+        return colors.get(severity, (200, 200, 200))
         
     def add_risk_bar_chart(
         self,
@@ -123,9 +122,8 @@ class PDFReport(FPDF):
         severities = ['Critical', 'High', 'Medium', 'Cautionary', 'Low', 'Info']
         max_count = max([severity_counts.get(severity, 0) for severity in severities] + [0])
         if max_count == 0:
-            max_count = 1  # Avoid divide-by-zero when there are no findings
+            max_count = 1
 
-        # Chart title
         self.set_font('Arial', 'B', 11)
         self.set_text_color(0, 0, 0)
         self.text(
@@ -134,17 +132,14 @@ class PDFReport(FPDF):
             'Risk Distribution',
         )
 
-        # Draw axes
         self.set_draw_color(0, 0, 0)
-        self.line(origin_x, origin_y, origin_x + chart_width, origin_y)  # X-axis
-        self.line(origin_x, origin_y, origin_x, origin_y - chart_height)  # Y-axis
+        self.line(origin_x, origin_y, origin_x + chart_width, origin_y)
+        self.line(origin_x, origin_y, origin_x, origin_y - chart_height)
 
-        # Axis labels
         self.set_font('Arial', '', 9)
         self.set_text_color(0, 0, 0)
         self.text(origin_x + chart_width / 2 - self.get_string_width('Risk Level') / 2, origin_y + 8, 'Risk Level')
 
-        # Keep the Y-axis label within the page margins even if the chart is centered
         label_width = 30
         label_margin = 5
         label_x = max(self.l_margin, origin_x - label_width - label_margin)
@@ -165,19 +160,15 @@ class PDFReport(FPDF):
             self.rect(bar_x, bar_y, bar_width, bar_height, 'F')
             self.rect(bar_x, bar_y, bar_width, bar_height, 'D')
 
-            # Count label above the bar
             self.set_font('Arial', '', 8)
             self.set_text_color(0, 0, 0)
             self.text(bar_x + bar_width / 2 - self.get_string_width(str(count)) / 2, bar_y - 2, str(count))
 
-            # Severity label on X-axis
             label_width = self.get_string_width(severity)
             self.text(bar_x + bar_width / 2 - label_width / 2, origin_y + 5, severity)
 
-        # Reset drawing color to default black
         self.set_draw_color(0, 0, 0)
 
-        # Return bottom Y position (including some space for labels)
         return origin_y + 12
 
     def add_risk_summary(self, findings: List[Finding]):
@@ -186,15 +177,12 @@ class PDFReport(FPDF):
         self.cell(0, 10, 'Risk Summary Dashboard', 0, 1, 'L')
         self.ln(5)
 
-        # Count findings by severity, favouring the highest severity between
-        # calculated findings and any vendor-supplied risk rating.
         severity_counts = {}
         for finding in findings:
             rating = getattr(finding, "risk_rating", "")
             chosen = self.pick_display_severity(rating, finding.severity)
             severity_counts[chosen] = severity_counts.get(chosen, 0) + 1
             
-        # Risk level boxes - stack vertically for better fit
         y_start = self.get_y()
         box_width = 40
         box_height = 20
@@ -207,14 +195,11 @@ class PDFReport(FPDF):
 
             y_pos = y_start + (i * 25)
             
-            # Draw colored box
             self.set_fill_color(*color)
             self.rect(20, y_pos, box_width, box_height, 'F')
             
-            # Add border
             self.rect(20, y_pos, box_width, box_height, 'D')
             
-            # Add count and label
             self.set_xy(20, y_pos + 2)
             self.set_font('Arial', 'B', 10)
             self.cell(box_width, 8, str(count), 0, 0, 'C')
@@ -223,15 +208,12 @@ class PDFReport(FPDF):
             self.set_font('Arial', '', 8)
             self.cell(box_width, 6, severity, 0, 0, 'C')
             
-            # Add description next to box
             self.set_xy(65, y_pos + 6)
             self.set_font('Arial', '', 10)
             self.cell(0, 8, f'{severity} Risk Issues: {count}', 0, 1, 'L')
             
         boxes_bottom = y_start + ((len(severities) - 1) * 25) + box_height
 
-        # Position the bar chart just below the summary boxes and move it a bit
-        # higher so it clears the footer.
         chart_height = 70
         chart_spacing = 10
         chart_origin_y = boxes_bottom + chart_height + chart_spacing
@@ -248,7 +230,6 @@ class PDFReport(FPDF):
         self.set_y(final_bottom + 10)
         self.ln(5)
         
-        # Key metrics
         self.set_font('Arial', 'B', 12)
         self.cell(0, 8, 'Key Metrics:', 0, 1, 'L')
         self.set_font('Arial', '', 10)
@@ -256,10 +237,9 @@ class PDFReport(FPDF):
         total_findings = len(findings)
         critical_high = severity_counts.get('Critical', 0) + severity_counts.get('High', 0)
         
-        # Calculate total rules analyzed from findings
         total_rules = len(set([f.rule_id for f in findings if hasattr(f, 'rule_id') and f.rule_id]))
         if total_rules == 0:
-            total_rules = len(findings)  # Fallback if no rule_id available
+            total_rules = len(findings)
         
         metrics = [
             f"Total Rules Analyzed: {total_rules}",
@@ -315,7 +295,6 @@ class PDFReport(FPDF):
         finding_type = getattr(finding, 'finding_type', 'unknown')
         severity = getattr(finding, 'severity', 'Info')
         
-        # Create a short code from finding type
         type_codes = {
             'broad_source_range': 'BSR',
             'broad_destination_range': 'BDR',
@@ -372,21 +351,17 @@ class PDFReport(FPDF):
         """Format technical details for the PDF"""
         details = []
 
-        # Rule information
         rule_id = getattr(finding, 'rule_id', 'N/A')
         details.append(f"Rule ID: {rule_id}")
         
-        # Network details
         src = self.safe_text(getattr(finding, 'src', 'N/A'), 80)
         dst = self.safe_text(getattr(finding, 'dst', 'N/A'), 80)
         details.append(f"Source: {src}")
         details.append(f"Destination: {dst}")
 
-        # Service details - removed protocol line
         port = getattr(finding, 'port', 'N/A')
         details.append(f"Port/Service: {port}")
 
-        # Source file / client information
         source_file = getattr(finding, 'source_file', '')
         if source_file:
             safe_source = self.safe_text(source_file, max_chars=80)
@@ -396,7 +371,6 @@ class PDFReport(FPDF):
                 safe_client = self.safe_text(client_identifier, max_chars=40)
                 details.append(f"Client Identifier: {safe_client}")
 
-        # Action
         action = getattr(finding, 'action', 'N/A')
         details.append(f"Action: {action}")
 
@@ -412,34 +386,27 @@ class PDFReport(FPDF):
         self.ln(5)
         
         for i, finding in enumerate(findings, 1):
-            # Generate risk ID
             risk_id = self.generate_risk_id(finding, i)
             
-            # Severity color
             severity = getattr(finding, 'severity', 'Info')
             color = self.get_severity_color(severity)
             
-            # Risk ID and Severity header
             self.set_fill_color(*color)
             self.set_font('Arial', 'B', 12)
             self.cell(0, 8, f'{risk_id} - {severity} Risk', 1, 1, 'L', True)
             
-            # Reset background
             self.set_fill_color(255, 255, 255)
             
-            # User-friendly title
             self.set_font('Arial', 'B', 11)
             title = self.get_user_friendly_description(finding)
             self.cell(0, 6, title, 0, 1, 'L')
             
-            # Technical details - using safe bullet alternative
             self.set_font('Arial', '', 9)
             technical_details = self.format_technical_details(finding)
             for detail in technical_details:
                 safe_detail = self.safe_text(detail, max_chars=160)
-                self.cell(0, 5, f'  - {safe_detail}', 0, 1, 'L')  # Changed from • to -
+                self.cell(0, 5, f'  - {safe_detail}', 0, 1, 'L')
 
-            # Rationale if available
             rationale = getattr(finding, 'rationale', None)
             if rationale:
                 self.set_font('Arial', 'I', 9)
@@ -448,7 +415,6 @@ class PDFReport(FPDF):
             
             self.ln(3)
             
-            # Check if we need a new page
             if self.get_y() > 250:
                 self.add_page()
                 
@@ -476,7 +442,6 @@ class PDFReport(FPDF):
         self.cell(0, 10, 'Prioritized Recommendations', 0, 1, 'L')
         self.ln(5)
         
-        # Group by severity
         severity_groups = {}
         for finding in findings:
             severity = getattr(finding, 'severity', 'Info')
@@ -484,14 +449,12 @@ class PDFReport(FPDF):
                 severity_groups[severity] = []
             severity_groups[severity].append(finding)
         
-        # Display recommendations by priority
         priority_order = ['Critical', 'High', 'Medium', 'Cautionary', 'Low', 'Info']
         
         for severity in priority_order:
             if severity in severity_groups and severity_groups[severity]:
                 color = self.get_severity_color(severity)
                 
-                # Section header
                 self.set_fill_color(*color)
                 self.set_font('Arial', 'B', 12)
                 
@@ -505,14 +468,13 @@ class PDFReport(FPDF):
                     section_title = f'{severity} Priority - Long-term Improvement'
                     
                 self.cell(0, 8, section_title, 1, 1, 'L', True)
-                self.set_fill_color(255, 255, 255)  # Reset
+                self.set_fill_color(255, 255, 255)
                 
-                # List recommendations - using safe bullet alternative
                 self.set_font('Arial', '', 10)
                 for finding in severity_groups[severity]:
                     summary = self.get_summary_description(finding)
                     safe_summary = self.safe_text(summary)
-                    self.cell(0, 6, f'  - {safe_summary}', 0, 1, 'L')  # Changed from • to -
+                    self.cell(0, 6, f'  - {safe_summary}', 0, 1, 'L')
                 
                 self.ln(3)
 
@@ -520,18 +482,13 @@ def generate_pdf(output_path: str, findings: List[Finding], client_name="Triskel
     """Generate a comprehensive PDF report"""
     pdf = PDFReport()
     
-    # Title page with updated client name
     pdf.add_title_page(client_name)
     
-    # Risk summary dashboard
     pdf.add_risk_summary(findings)
     
-    # Detailed findings
     pdf.add_detailed_findings(findings)
     
-    # Recommendations summary
     pdf.add_recommendations_summary(findings)
     
-    # Save the PDF
     pdf.output(output_path)
     logger.info("PDF report generated: %s", output_path)
