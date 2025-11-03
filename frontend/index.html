@@ -8,15 +8,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="show-scan-line">
-    <!-- Background -->
     <div class="bg-animation">
         <div class="cyber-grid"></div>
     </div>
 
-    <!-- Scanning Line -->
     <div class="scan-line"></div>
 
-    <!-- Header -->
     <header id="header">
         <nav>
             <div class="logo">
@@ -31,35 +28,28 @@
         </nav>
     </header>
 
-    <!-- Hero -->
     <section class="hero">
         <div class="hero-content">
             <h1>Welcome to FireFind</h1>
             <p class="hero-description">
-                FireFind is a firewall risk identification tool developed by Team Five Guys. 
-                It analyses firewall configurations from multiple vendors to identify high-risk rules, 
-                security vulnerabilities, and compliance issues. FireFind instantly detects exposed admin ports, 
-                overly permissive rules, and potential attack vectors across your entire firewall infrastructure.
+                FireFind analyses firewall configurations across multiple vendors to highlight risky rules,
+                exposed admin services, and compliance issues before they become incidents.
             </p>
         </div>
     </section>
 
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.7/dist/purify.min.js"></script>
 
-    <!-- Footer -->
     <footer>
-        <p>&copy; 2025 FireFind by Team Five Guys | Triskele Labs</p>
+        <p>&copy; 2025 FireFind | Triskele Labs | By team Five guys</p>
     </footer>
     <script src="app.js"></script>
     <script>
-        // Page-specific initialization
         document.addEventListener('DOMContentLoaded', function() {
-            // Clean URL on page load
             if (window.location.pathname.includes('index.html') || window.location.pathname === '/') {
                 history.replaceState({ file: 'index.html' }, 'About - FireFind', '/about');
             }
-            
-            // Set active navigation state for about page
+
             setTimeout(function() {
                 const navLinks = document.querySelectorAll('.nav-links a');
                 navLinks.forEach(link => link.classList.remove('active'));

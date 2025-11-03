@@ -13,18 +13,11 @@ from .config import load_rules_config, RulesConfig
 from .utils import load_yaml, pick_mapping, to_rule
 
 
-# ------------------------
-# Public service function
-# ------------------------
-
-
 @dataclass
 class AnalysisResult:
     findings: List[Finding]
     rules: List[Rule]
 
-# Severity ranking used to compare and retain the most critical finding when
-# duplicates are encountered. Higher numbers represent higher risk.
 _SEVERITY_PRIORITY: Dict[str, int] = {
     "Critical": 5,
     "High": 4,
@@ -47,8 +40,6 @@ def _resequence_risk_codes(findings: List[Finding]) -> None:
     counters: Dict[str, int] = {}
 
     for finding in findings:
-        # Only specific finding types receive risk codes for now. For any other
-        # finding we keep the field empty to avoid implying a tracked risk.
         if finding.finding_type != "admin_port_exposed":
             finding.risk_code = finding.risk_code or ""
             continue
@@ -68,9 +59,6 @@ class _GroupedEntry(TypedDict):
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     """De-duplicate findings keeping the highest severity entry for each key."""
 
-    # We intentionally omit the severity from the key so that we can compare and
-    # retain the highest severity when the same underlying issue is reported
-    # more than once.
     key_fields: Tuple[str, ...]
     grouped: Dict[Tuple[str, ...], _GroupedEntry] = {}
     ordered_keys: List[Tuple[str, ...]] = []
@@ -110,8 +98,6 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             entry["primary"] = finding
             continue
 
-        # Prefer admin_port_exposed as the representative issue when severities
-        # match so that risk codes remain visible for the most critical cases.
         if (
             finding_rank == primary_rank
             and primary.finding_type != "admin_port_exposed"
@@ -125,7 +111,6 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         entry = grouped[key]
         primary = entry["primary"]
 
-        # Build a combined rationale that preserves all contributing messages.
         rationale_parts: List[str] = []
         seen_pairs = set()
         contributing_severities: List[str] = []
