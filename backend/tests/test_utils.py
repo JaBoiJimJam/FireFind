@@ -171,3 +171,24 @@ def test_to_rule_invalid_port_detection():
         to_rule(row, mapping, vendor="generic")
 
     assert any(issue.code == "invalid_port" for issue in excinfo.value.issues)
+
+
+@pytest.mark.parametrize("service_name", ["PING", "ICMP"])
+def test_to_rule_icmp_like_service_uses_wildcard_port(service_name):
+    mapping = {
+        "rule_id": ["Seq #"],
+        "src": ["Source"],
+        "dst": ["Destination"],
+        "service": ["Service"],
+    }
+
+    row = {
+        "Seq #": "12",
+        "Source": "10.0.0.0/24",
+        "Destination": "10.0.0.10",
+        "Service": service_name,
+    }
+
+    rule = to_rule(row, mapping, vendor="generic")
+
+    assert rule.port == "ALL"

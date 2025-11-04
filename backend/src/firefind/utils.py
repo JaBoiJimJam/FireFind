@@ -493,6 +493,13 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
                     added = True
             if added:
                 continue
+            if any(
+                isinstance(port, int) and 1 <= port <= 65535
+                for port in mapped_ports
+            ):
+                continue
+            wildcard = "ALL"
+            break
 
         if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
             normalised = cleaned.replace(" ", "")
@@ -698,59 +705,9 @@ def sniff_proto_port(row: dict, service_hint: str = "") -> Tuple[str, str]:
         tokens = list(_tokenise_service_values(str(svc_name)))
         if not tokens:
             return ("any", str(svc_name).strip())
-
-        numeric_ports: set[int] = set()
-        explicit_values: list[str] = []
-        seen_explicit: set[str] = set()
-        for token in tokens:
-            cleaned = token.strip()
-            if not cleaned:
-                continue
-            upper = cleaned.upper()
-            if upper in {"ALL", "ANY", "*"}:
-                return ("any", "ALL")
-
-            if "/" in cleaned and any(ch.isdigit() for ch in cleaned):
-                normalised = cleaned.replace(" ", "")
-                lowered = normalised.lower()
-                if lowered not in seen_explicit:
-                    seen_explicit.add(lowered)
-                    explicit_values.append(normalised)
-                continue
-
-            if "-" in cleaned:
-                range_parts = cleaned.split("-", 1)
-                if all(part.isdigit() for part in range_parts):
-                    lowered = cleaned.lower()
-                    if lowered not in seen_explicit:
-                        seen_explicit.add(lowered)
-                        explicit_values.append(cleaned)
-                    continue
-
-            if cleaned.isdigit():
-                port = int(cleaned)
-                if 1 <= port <= 65535:
-                    numeric_ports.add(port)
-                continue
-
-            mapped = SERVICE_NAME_PORTS.get(upper)
-            if mapped is not None:
-                for port in mapped:
-                    if 1 <= port <= 65535:
-                        numeric_ports.add(port)
-                continue
-
-            lowered = cleaned.lower()
-            if lowered not in seen_explicit:
-                seen_explicit.add(lowered)
-                explicit_values.append(cleaned)
-
-        combined: list[str] = []
-        if numeric_ports:
-            combined.extend(str(port) for port in sorted(numeric_ports))
-        combined.extend(explicit_values)
-        if combined:
-            return ("any", ",".join(combined))
+        normalised = _prepare_port_tokens(tokens)
+        if normalised:
+            return ("any", ",".join(normalised))
 
         return ("any", str(svc_name).strip())
 
