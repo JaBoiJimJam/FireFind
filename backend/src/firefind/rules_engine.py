@@ -911,14 +911,25 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             normalized_risk_rating in _SEVERITY_INDEX
         )
         if not rating_known:
+            has_source_file = bool(str(getattr(r, "source_file", "")).strip())
+            if not has_source_file:
+                logger.debug(
+                    "Skipping analyzers for rule without normalised risk rating",
+                    extra={
+                        "rule_id": getattr(r, "rule_id", ""),
+                        "raw_risk_rating": getattr(r, "risk_rating", ""),
+                    },
+                )
+                continue
+
             logger.debug(
-                "Skipping analyzers for rule without normalised risk rating",
+                "Proceeding with analyzers despite missing normalised risk rating",
                 extra={
                     "rule_id": getattr(r, "rule_id", ""),
                     "raw_risk_rating": getattr(r, "risk_rating", ""),
+                    "source_file": getattr(r, "source_file", ""),
                 },
             )
-            continue
 
         # Allow-any
         if (
