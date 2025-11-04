@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 import ipaddress
-from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, Tuple, List
+from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, Tuple, List, Optional
 import yaml
 
 from ruamel.yaml import YAML
@@ -225,6 +225,52 @@ def _validate_port_value(value: str) -> List[RuleValidationIssue]:
             message=f"Invalid port value(s): {joined}",
         )
     ]
+
+
+def _coerce_optional_int(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    cleaned = text.replace(",", "")
+    try:
+        if "." in cleaned:
+            return int(float(cleaned))
+        return int(cleaned)
+    except (TypeError, ValueError):
+        return None
+
+
+_TRUE_TOKENS = {"1", "true", "yes", "enabled", "enable", "on", "active"}
+_FALSE_TOKENS = {"0", "false", "no", "disabled", "disable", "off", "inactive"}
+
+
+def _coerce_optional_bool(value: object) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    if text in _TRUE_TOKENS:
+        return True
+    if text in _FALSE_TOKENS:
+        return False
+    return None
 
 
 def _validate_rule_inputs(
@@ -791,6 +837,10 @@ def to_rule(
     )
     risk_rating = normalize_risk_rating(risk_rating_raw)
 
+    hit_count = _coerce_optional_int(_pick_value(mapping.get("hit_count", [])))
+    byte_count = _coerce_optional_int(_pick_value(mapping.get("byte_count", [])))
+    enabled = _coerce_optional_bool(_pick_value(mapping.get("enabled", [])))
+
     _validate_rule_inputs(
         normalized_row,
         raw_values={
@@ -822,4 +872,7 @@ def to_rule(
         source_file=source_file,
         risk_rating=risk_rating,
         tags=tags,
+        hit_count=hit_count,
+        byte_count=byte_count,
+        enabled=enabled,
     )

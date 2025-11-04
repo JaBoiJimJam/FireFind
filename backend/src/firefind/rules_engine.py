@@ -40,6 +40,25 @@ _SEVERITY_LADDER = ["Critical", "High", "Medium", "Cautionary", "Low", "Info"]
 _SEVERITY_INDEX = {label: idx for idx, label in enumerate(_SEVERITY_LADDER)}
 _LOWEST_ADMIN_SEVERITY = _SEVERITY_INDEX["Low"]
 
+
+def _canonical_severity_label(value: str) -> str:
+    """Normalise a severity string to the engine's display vocabulary."""
+
+    mapping = {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "cautionary": "Cautionary",
+        "low": "Low",
+        "info": "Info",
+        "informational": "Info",
+    }
+    lowered = (value or "").strip().lower()
+    if not lowered:
+        return "Info"
+    return mapping.get(lowered, value.title() or "Info")
+
+
 _WEB_PORTS = {80, 443}
 _SSH_PORTS = {22}
 _RDP_PORTS = {3389}
@@ -236,6 +255,11 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
     "rule_overlap": {
         "risk_levels": [],
         "network_scope": ["rule_overlap"],
+        "port_lists": [],
+    },
+    "unused_rule": {
+        "risk_levels": [],
+        "network_scope": [],
         "port_lists": [],
     },
 }
@@ -601,6 +625,12 @@ def _log_active_thresholds(cfg: RulesConfig, *, vendor: str) -> None:
             "redundant_severity": cfg.rule_overlap.redundant_severity.value,
             "shadowed_severity": cfg.rule_overlap.shadowed_severity.value,
         },
+        "unused_rule": {
+            "hit_count_threshold": int(cfg.unused_rule.hit_count_threshold),
+            "include_disabled": bool(cfg.unused_rule.include_disabled),
+            "hit_count_severity": cfg.unused_rule.hit_count_severity.value,
+            "disabled_severity": cfg.unused_rule.disabled_severity.value,
+        },
     }
 
     logger.info(
@@ -807,6 +837,12 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     rules_cfg = _coerce_rules_config(cfg)
     rules_list = list(rules)
 
+    unused_cfg = rules_cfg.unused_rule
+    hit_threshold = max(0, int(unused_cfg.hit_count_threshold))
+    include_disabled = bool(unused_cfg.include_disabled)
+    hit_severity = _canonical_severity_label(unused_cfg.hit_count_severity.value)
+    disabled_severity = _canonical_severity_label(unused_cfg.disabled_severity.value)
+
     critical_risk_admin_ports = set(rules_cfg.critical_risk_admin_ports)
     if not critical_risk_admin_ports:
         critical_risk_admin_ports = set(DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
@@ -871,6 +907,64 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
                     tags=merge_tags(r.tags, ["any-to-any", "excessive-access"]),
+                )
+            )
+
+        # Unused/disabled rule detection
+        unused_reasons: List[str] = []
+        unused_tags = ["unused-rule"]
+        unused_severity = ""
+        severity_rank = len(_SEVERITY_LADDER)
+
+        if r.hit_count is not None and r.hit_count <= hit_threshold:
+            threshold_clause = (
+                f" (threshold ≤ {hit_threshold})" if hit_threshold else ""
+            )
+            volume_clause = (
+                f" with {r.byte_count} byte(s) logged" if r.byte_count is not None else ""
+            )
+            unused_reasons.append(
+                f"Rule has {r.hit_count} recorded hit(s){volume_clause}{threshold_clause}"
+            )
+            unused_tags.append("zero-hit")
+            candidate_rank = _SEVERITY_INDEX.get(hit_severity, len(_SEVERITY_LADDER))
+            if candidate_rank < severity_rank:
+                severity_rank = candidate_rank
+                unused_severity = hit_severity
+
+        if include_disabled and r.enabled is not None and not r.enabled:
+            unused_reasons.append("Rule is disabled in the firewall configuration")
+            unused_tags.append("disabled-rule")
+            candidate_rank = _SEVERITY_INDEX.get(disabled_severity, len(_SEVERITY_LADDER))
+            if candidate_rank < severity_rank:
+                severity_rank = candidate_rank
+                unused_severity = disabled_severity
+
+        if unused_reasons:
+            if not unused_severity:
+                unused_severity = "Low"
+            risk_code = generate_risk_code("unused_rule", unused_severity, risk_code_counter)
+            risk_code_counter += 1
+
+            findings.append(
+                Finding(
+                    vendor,
+                    r.rule_id,
+                    r.src,
+                    r.dst,
+                    r.proto,
+                    r.port,
+                    r.action,
+                    finding_type="unused_rule",
+                    severity=unused_severity,
+                    rationale="; ".join(unused_reasons),
+                    risk_code=risk_code,
+                    source_file=r.source_file,
+                    risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, unused_tags),
+                    hit_count=r.hit_count,
+                    byte_count=r.byte_count,
+                    rule_enabled=r.enabled,
                 )
             )
 
