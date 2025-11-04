@@ -28,6 +28,15 @@ low_risk_admin_ports: &low_admin_ports
   - 25
 
 # ---------------------------------------------------------------------------
+# Analyzer tuning for unused or disabled rules.
+# ---------------------------------------------------------------------------
+unused_rule:
+  hit_count_threshold: 0  # Flag rules with zero hits by default
+  include_disabled: true  # Surface rules explicitly marked as disabled
+  hit_count_severity: cautionary
+  disabled_severity: low
+
+# ---------------------------------------------------------------------------
 # Functional tagging metadata standardises analyser output labels.
 # ---------------------------------------------------------------------------
 default_rule_tags:

@@ -73,7 +73,13 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
         "redundant_severity": Severity.LOW.value,
         "shadowed_severity": Severity.MEDIUM.value,
     },
-        "default_rule_tags": ["firewall-rule"],
+    "unused_rule": {
+        "hit_count_threshold": 0,
+        "include_disabled": True,
+        "hit_count_severity": Severity.CAUTIONARY.value,
+        "disabled_severity": Severity.LOW.value,
+    },
+    "default_rule_tags": ["firewall-rule"],
     "functional_tag_aliases": {
         "remote access": ["remote-access"],
         "vpn": ["remote-access", "vpn"],

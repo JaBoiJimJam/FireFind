@@ -164,11 +164,11 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                     risk_rating = rating
                     break
 
-        findings_unique.append(
-            Finding(
-                vendor=primary.vendor,
-                rule_id=primary.rule_id,
-                src=primary.src,
+            findings_unique.append(
+                Finding(
+                    vendor=primary.vendor,
+                    rule_id=primary.rule_id,
+                    src=primary.src,
                 dst=primary.dst,
                 proto=primary.proto,
                 port=primary.port,
@@ -176,13 +176,16 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 finding_type=primary.finding_type,
                 severity=primary.severity,
                 rationale=combined_rationale,
-                risk_code=primary.risk_code,
-                source_file=primary.source_file,
-                contributing_severities=tuple(contributing_severities),
-                risk_rating=risk_rating,
-                tags=combined_tags,
+                    risk_code=primary.risk_code,
+                    source_file=primary.source_file,
+                    contributing_severities=tuple(contributing_severities),
+                    risk_rating=risk_rating,
+                    tags=combined_tags,
+                    hit_count=primary.hit_count,
+                    byte_count=primary.byte_count,
+                    rule_enabled=primary.rule_enabled,
+                )
             )
-        )
 
     _resequence_risk_codes(findings_unique)
 

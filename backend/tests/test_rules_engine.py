@@ -374,6 +374,70 @@ def test_run_checks_logs_thresholds(caplog):
     assert record.inventory == ANALYZER_INVENTORY
 
 
+def test_unused_rule_analyzer():
+    zero_hit_rule = Rule(
+        "zero-hit",
+        "10.0.0.0/24",
+        "10.1.0.0/24",
+        "tcp",
+        "443",
+        "deny",
+        hit_count=0,
+        byte_count=0,
+        enabled=True,
+    )
+    disabled_rule = Rule(
+        "disabled",
+        "10.0.1.0/24",
+        "10.1.1.0/24",
+        "tcp",
+        "8443",
+        "deny",
+        hit_count=5,
+        byte_count=128,
+        enabled=False,
+    )
+    active_rule = Rule(
+        "active",
+        "10.0.2.0/24",
+        "10.1.2.0/24",
+        "tcp",
+        "22",
+        "deny",
+        hit_count=12,
+        byte_count=2048,
+        enabled=True,
+    )
+
+    cfg = {
+        "unused_rule": {
+            "hit_count_threshold": 0,
+            "include_disabled": True,
+            "hit_count_severity": "cautionary",
+            "disabled_severity": "low",
+        }
+    }
+
+    findings = run_checks("generic", [zero_hit_rule, disabled_rule, active_rule], cfg)
+    unused_findings = [f for f in findings if f.finding_type == "unused_rule"]
+
+    assert len(unused_findings) == 2
+
+    zero_hit_finding = next(f for f in unused_findings if f.rule_id == "zero-hit")
+    assert zero_hit_finding.severity == "Cautionary"
+    assert zero_hit_finding.hit_count == 0
+    assert "recorded hit" in zero_hit_finding.rationale
+
+    disabled_finding = next(f for f in unused_findings if f.rule_id == "disabled")
+    assert disabled_finding.severity == "Low"
+    assert disabled_finding.rule_enabled is False
+    assert "disabled" in disabled_finding.rationale.lower()
+
+    assert not any(
+        f.rule_id == "active" and f.finding_type == "unused_rule" for f in findings
+    )
+
+
 def test_deduplicate_findings_merges_tags():
     finding_primary = Finding(
         vendor="generic",

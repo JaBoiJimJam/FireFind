@@ -301,6 +301,7 @@ class PDFReport(FPDF):
             'any_destination': 'ANY',
             'admin_port_exposure': 'APE',
             'permissive_rule': 'PER',
+            'unused_rule': 'UNU',
             'default': 'GEN'
         }
         
@@ -317,6 +318,7 @@ class PDFReport(FPDF):
             'any_destination': 'Rule Allows Traffic to Any Destination',
             'admin_port_exposed': 'Administrative Port Exposed',
             'permissive_rule': 'Overly Permissive Rule Configuration',
+            'unused_rule': 'Unused or Disabled Firewall Rule',
         }
 
         finding_type = getattr(finding, 'finding_type', 'unknown')
@@ -361,6 +363,23 @@ class PDFReport(FPDF):
 
         port = getattr(finding, 'port', 'N/A')
         details.append(f"Port/Service: {port}")
+
+        hit_count = getattr(finding, 'hit_count', None)
+        byte_count = getattr(finding, 'byte_count', None)
+        if hit_count is not None:
+            if byte_count is not None:
+                details.append(
+                    f"Recorded hits: {hit_count} (traffic {byte_count} bytes)"
+                )
+            else:
+                details.append(f"Recorded hits: {hit_count}")
+        elif byte_count is not None:
+            details.append(f"Recorded traffic volume: {byte_count} bytes")
+
+        enabled = getattr(finding, 'rule_enabled', None)
+        if enabled is not None:
+            status = 'yes' if enabled else 'no'
+            details.append(f"Rule enabled: {status}")
 
         tags = getattr(finding, 'tags', ())
         if tags:
@@ -433,6 +452,14 @@ class PDFReport(FPDF):
             return f"Rule {rule_id}: Restrict administrative access on port {port}"
         elif finding_type == 'any_destination':
             return f"Rule {rule_id}: Narrow destination scope from 'any'"
+        elif finding_type == 'unused_rule':
+            hits = getattr(finding, 'hit_count', None)
+            enabled = getattr(finding, 'rule_enabled', None)
+            if enabled is False:
+                return f"Rule {rule_id}: Retire or justify disabled rule"
+            if hits is not None:
+                return f"Rule {rule_id}: Review rule with {hits} recorded hit(s)"
+            return f"Rule {rule_id}: Review unused or redundant rule"
         elif 'broad' in finding_type:
             return f"Rule {rule_id}: Reduce overly broad network ranges"
         else:
