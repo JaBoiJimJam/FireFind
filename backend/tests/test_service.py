@@ -58,6 +58,20 @@ def test_risk_codes_are_resequenced() -> None:
     ]
 
 
+def test_risk_codes_use_info_prefix() -> None:
+    first = _make_finding("Info")
+    first.rule_id = "1"
+    second = _make_finding("Info")
+    second.rule_id = "2"
+
+    deduped = deduplicate_findings([first, second])
+
+    assert [f.risk_code for f in deduped] == [
+        "FR-admin_port_exposed-INFGEN-001",
+        "FR-admin_port_exposed-INFGEN-002",
+    ]
+
+
 def test_run_analysis_tracks_rejections(tmp_path: Path) -> None:
     csv_path = tmp_path / "sample.csv"
     csv_path.write_text(
