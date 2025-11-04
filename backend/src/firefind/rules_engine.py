@@ -16,7 +16,7 @@ from typing import (
 
 from .config import DEFAULT_RULES_CONFIG, RulesConfig, CIDRLimitPolicy
 from .model import Rule, Finding
-from .utils import merge_tags
+from .utils import merge_tags, normalize_risk_rating
 
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,20 @@ def _canonical_severity_label(value: str) -> str:
     if not lowered:
         return "Info"
     return mapping.get(lowered, value.title() or "Info")
+
+
+def override_with_risk_rating(rule: Rule, severity: str) -> str:
+    """Prefer a rule's explicit risk rating when present."""
+    
+    rating_raw = getattr(rule, "risk_rating", "")
+    if not rating_raw:
+        return severity
+
+    rating = normalize_risk_rating(rating_raw)
+    if not rating:
+        return severity
+
+    return _canonical_severity_label(rating)
 
 
 _WEB_PORTS = {80, 443}
@@ -485,6 +499,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
 
             if _actions_conflict(covering.action, candidate.action):
                 severity = _resolve_overlap_severity(settings.shadowed_severity, "Medium")
+                severity = override_with_risk_rating(candidate, severity)
                 rationale_bits = [
                     (
                         f"Rule {candidate.rule_id} is shadowed by earlier rule "
@@ -518,6 +533,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                 continue
 
             severity = _resolve_overlap_severity(settings.redundant_severity, "Low")
+            severity = override_with_risk_rating(candidate, severity)
             rationale_bits = [
                 f"Rule {candidate.rule_id} is redundant because earlier rule {covering.rule_id} already applies."
             ]
@@ -892,6 +908,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             and (is_any(r.src) or is_broad_cidr(r.src, 0))
             and (is_any(r.dst) or is_broad_cidr(r.dst, 0))
         ):
+            severity = override_with_risk_rating(r, "High")
             findings.append(
                 Finding(
                     vendor,
@@ -902,7 +919,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     r.port,
                     r.action,
                     finding_type="allow_any",
-                    severity="High",
+                    severity=severity,
                     rationale="Rule allows any-to-any access",
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
@@ -943,6 +960,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
         if unused_reasons:
             if not unused_severity:
                 unused_severity = "Low"
+            unused_severity = override_with_risk_rating(r, unused_severity)
             risk_code = generate_risk_code("unused_rule", unused_severity, risk_code_counter)
             risk_code_counter += 1
 
@@ -989,6 +1007,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 high_ports=high_risk_admin_ports,
                 medium_ports=medium_risk_admin_ports,
             )
+            severity = override_with_risk_rating(r, severity)
             risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
 
@@ -1037,6 +1056,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
 
         if cidr_messages:
             cidr_severity = "High" if cidr_severity_rank == 2 else "Medium"
+            cidr_severity = override_with_risk_rating(r, cidr_severity)
             findings.append(
                 Finding(
                     vendor,
@@ -1057,6 +1077,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
 
         if action_allows_traffic(r.action) and is_all_ports(r.port):
             severity = "High" if looks_internet_facing(r.dst_interface) else "Medium"
+            severity = override_with_risk_rating(r, severity)
             rationale_bits = [
                 "Service column permits all ports",
             ]
