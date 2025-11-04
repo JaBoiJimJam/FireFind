@@ -36,14 +36,18 @@ cd backend && python run_backend.py
 Or invoke the CLI directly:
 
 ```bash
-python -m firefind.cli --vendor generic --input samples \
-  --out-csv ../out/findings.csv --out-pdf ../out/report.pdf \
-  --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
+python -m firefind.cli --vendor generic --input "samples" \
+  --out-csv "../out/findings.csv" --out-pdf "../out/report.pdf" \
+  --rules "../rules/rules.yaml" --mappings "../rules/vendor_mappings.yaml"
 ```
 
-The `--input` flag accepts individual files or directories containing CSV or XLSX
+Always wrap CLI paths in quotes—especially when working with directories or
+filenames that contain spaces, parentheses, or other special characters. The
+`--input` flag accepts individual files or directories containing CSV or XLSX
 exports. File extensions are matched case-insensitively, so variants such as
-`.CSV` or `.XLSX` are processed without additional configuration.
+`.CSV` or `.XLSX` are processed without additional configuration. When
+generating reports, choose unique output filenames because the CLI will
+overwrite existing files.
 
 To view the current application version:
 

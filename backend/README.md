@@ -83,6 +83,10 @@ python -m firefind.cli `
   --mappings ..\rules\vendor_mappings.yaml
   ```
 
+> **Tip:** Quote every CLI path to guard against spaces or parentheses in
+> directory and file names. The Windows backtick line continuations above keep
+> the example concise while ensuring each argument is quoted.
+
 To display the application's version:
 
 ```bash

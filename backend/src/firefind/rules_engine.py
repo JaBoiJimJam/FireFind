@@ -573,7 +573,7 @@ def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
         "Medium": "MEDGEN",
         "Cautionary": "CAUGEN",
         "Low": "LOWGEN",
-        "Info": "INFGEN",
+        "Info": "INFGEN",  # Give informational findings a dedicated prefix
     }.get(severity, "GEN")
 
     type_prefix = (finding_type or "generic").strip().lower().replace(" ", "_")

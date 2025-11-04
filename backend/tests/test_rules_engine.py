@@ -5,7 +5,12 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
 from firefind.model import Finding, Rule
-from firefind.rules_engine import ANALYZER_INVENTORY, parse_ports, run_checks
+from firefind.rules_engine import (
+    ANALYZER_INVENTORY,
+    generate_risk_code,
+    parse_ports,
+    run_checks,
+)
 from firefind.service import deduplicate_findings, run_analysis
 
 
@@ -19,6 +24,11 @@ def test_parse_ports_range():
 
 def test_parse_ports_malformed():
     assert parse_ports("abc") == []
+
+
+def test_generate_risk_code_info_prefix():
+    code = generate_risk_code("allow_any", "Info", 1)
+    assert code == "FR-allow_any-INFGEN-001"
 
 
 def test_run_checks_allow_any():
