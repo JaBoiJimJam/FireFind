@@ -565,16 +565,19 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
 
 
 def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
-    """Generate a risk code in the format FR-[SEVERITY]-[NUMBER]"""
-    severity_short = {
-        'Critical': 'CRGEN',
-        'High': 'HIGEN',
-        'Medium': 'MEDGEN',
-        'Cautionary': 'CAUGEN',
-        'Low': 'LOWGEN'
-    }.get(severity, 'GEN')
+    """Generate a risk code in the format ``FR-[TYPE]-[SEVERITY]-[NUMBER]``."""
 
-    return f"FR-{severity_short}-{index:03d}"
+    severity_short = {
+        "Critical": "CRGEN",
+        "High": "HIGEN",
+        "Medium": "MEDGEN",
+        "Cautionary": "CAUGEN",
+        "Low": "LOWGEN",
+    }.get(severity, "GEN")
+
+    type_prefix = (finding_type or "generic").strip().lower().replace(" ", "_")
+
+    return f"FR-{type_prefix}-{severity_short}-{index:03d}"
 
 
 def _deep_merge_dicts(
@@ -909,6 +912,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             and (is_any(r.dst) or is_broad_cidr(r.dst, 0))
         ):
             severity = override_with_risk_rating(r, "High")
+            risk_code = generate_risk_code("allow_any", severity, risk_code_counter)
+            risk_code_counter += 1
             findings.append(
                 Finding(
                     vendor,
@@ -921,6 +926,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     finding_type="allow_any",
                     severity=severity,
                     rationale="Rule allows any-to-any access",
+                    risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
                     tags=merge_tags(r.tags, ["any-to-any", "excessive-access"]),
@@ -1057,6 +1063,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
         if cidr_messages:
             cidr_severity = "High" if cidr_severity_rank == 2 else "Medium"
             cidr_severity = override_with_risk_rating(r, cidr_severity)
+            risk_code = generate_risk_code("broad_cidr", cidr_severity, risk_code_counter)
+            risk_code_counter += 1
             findings.append(
                 Finding(
                     vendor,
@@ -1069,6 +1077,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     finding_type="broad_cidr",
                     severity=cidr_severity,
                     rationale="; ".join(cidr_messages),
+                    risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
                     tags=merge_tags(r.tags, ["broad-scope", "cidr-policy"]),
@@ -1086,6 +1095,10 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             if is_any(r.src) and is_any(r.dst):
                 rationale_bits.append("rule is scoped to all sources and destinations")
 
+            risk_code = generate_risk_code(
+                "all_ports_service", severity, risk_code_counter
+            )
+            risk_code_counter += 1
             findings.append(
                 Finding(
                     vendor,
@@ -1098,6 +1111,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     finding_type="all_ports_service",
                     severity=severity,
                     rationale="; ".join(rationale_bits),
+                    risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
                     tags=merge_tags(r.tags, ["all-ports", "service-any"]),

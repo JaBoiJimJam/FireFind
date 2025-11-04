@@ -24,35 +24,38 @@ def _make_finding(severity: str, risk_code: str = "") -> Finding:
 
 
 def test_deduplicate_prefers_higher_severity() -> None:
-    medium = _make_finding("Medium", risk_code="FR-MEDGEN-001")
-    high = _make_finding("High", risk_code="FR-HIGEN-002")
+    medium = _make_finding("Medium", risk_code="FR-admin_port_exposed-MEDGEN-001")
+    high = _make_finding("High", risk_code="FR-admin_port_exposed-HIGEN-002")
 
     deduped = deduplicate_findings([medium, high])
 
     assert len(deduped) == 1
     assert deduped[0].severity == "High"
-    assert deduped[0].risk_code == "FR-HIGEN-001"
+    assert deduped[0].risk_code == "FR-admin_port_exposed-HIGEN-001"
 
 
 def test_deduplicate_retains_existing_higher_severity() -> None:
-    high = _make_finding("High", risk_code="FR-HIGEN-010")
-    medium = _make_finding("Medium", risk_code="FR-MEDGEN-011")
+    high = _make_finding("High", risk_code="FR-admin_port_exposed-HIGEN-010")
+    medium = _make_finding("Medium", risk_code="FR-admin_port_exposed-MEDGEN-011")
 
     deduped = deduplicate_findings([high, medium])
 
     assert len(deduped) == 1
     assert deduped[0].severity == "High"
-    assert deduped[0].risk_code == "FR-HIGEN-001"
+    assert deduped[0].risk_code == "FR-admin_port_exposed-HIGEN-001"
 
 
 def test_risk_codes_are_resequenced() -> None:
-    first = _make_finding("High", risk_code="FR-HIGEN-010")
-    second = _make_finding("High", risk_code="FR-HIGEN-011")
+    first = _make_finding("High", risk_code="FR-admin_port_exposed-HIGEN-010")
+    second = _make_finding("High", risk_code="FR-admin_port_exposed-HIGEN-011")
     second.rule_id = "2"
 
     deduped = deduplicate_findings([first, second])
 
-    assert [f.risk_code for f in deduped] == ["FR-HIGEN-001", "FR-HIGEN-002"]
+    assert [f.risk_code for f in deduped] == [
+        "FR-admin_port_exposed-HIGEN-001",
+        "FR-admin_port_exposed-HIGEN-002",
+    ]
 
 
 def test_run_analysis_tracks_rejections(tmp_path: Path) -> None:

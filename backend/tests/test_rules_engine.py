@@ -22,11 +22,25 @@ def test_parse_ports_malformed():
 
 
 def test_run_checks_allow_any():
-    rule = Rule("1", "any", "any", "any", "any", "allow")
+    rule = Rule("1", "any", "any", "any", "all", "allow")
     findings = run_checks("v", [rule], {})
     types = {f.finding_type for f in findings}
     assert "allow_any" in types
     assert "broad_cidr" in types
+    assert "all_ports_service" in types
+
+    codes = {f.finding_type: f.risk_code for f in findings}
+    assert codes["allow_any"] == "FR-allow_any-HIGEN-001"
+    assert codes["broad_cidr"].startswith("FR-broad_cidr-")
+    assert codes["all_ports_service"].startswith("FR-all_ports_service-")
+
+    sequence = [
+        int(codes["allow_any"].split("-")[-1]),
+        int(codes["broad_cidr"].split("-")[-1]),
+        int(codes["all_ports_service"].split("-")[-1]),
+    ]
+    assert sequence == sorted(sequence)
+    assert len(set(sequence)) == 3
 
 
 def test_rule_tags_propagate_to_findings():
