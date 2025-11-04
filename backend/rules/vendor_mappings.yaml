@@ -16,6 +16,7 @@ generic:
   hit_count: ["Hit Count", "Hits", "Log Count", "HitCount"]
   byte_count: ["Bytes", "Byte Count", "Traffic (Bytes)", "ByteCount"]
   enabled: ["Enabled", "State", "Status", "Active", "Rule Status"]
+  risk_rating: ["Risk Feedback", "Risk Rating", "Risk"]
   tags:
     columns:
       - ["Functional Category", "Function", "Category"]
