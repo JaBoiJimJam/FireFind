@@ -4,9 +4,9 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
+from firefind.model import Finding, Rule
 from firefind.rules_engine import ANALYZER_INVENTORY, parse_ports, run_checks
-from firefind.service import run_analysis
-from firefind.model import Rule
+from firefind.service import deduplicate_findings, run_analysis
 
 
 def test_parse_ports_single():
@@ -27,6 +27,14 @@ def test_run_checks_allow_any():
     types = {f.finding_type for f in findings}
     assert "allow_any" in types
     assert "broad_cidr" in types
+
+
+def test_rule_tags_propagate_to_findings():
+    rule = Rule("tagged", "any", "any", "any", "any", "allow", tags=("custom-tag",))
+    findings = run_checks("vendor", [rule], {})
+    allow_any = next(f for f in findings if f.finding_type == "allow_any")
+    assert "custom-tag" in allow_any.tags
+    assert "excessive-access" in allow_any.tags
 
 
 def test_run_checks_admin_port_exposure():
@@ -364,3 +372,36 @@ def test_run_checks_logs_thresholds(caplog):
     assert "admin_port_exposed" in record.analyzers
     assert record.vendor == "generic"
     assert record.inventory == ANALYZER_INVENTORY
+
+
+def test_deduplicate_findings_merges_tags():
+    finding_primary = Finding(
+        vendor="generic",
+        rule_id="1",
+        src="any",
+        dst="any",
+        proto="any",
+        port="any",
+        action="allow",
+        finding_type="allow_any",
+        severity="High",
+        rationale="primary",
+        tags=("alpha", "beta"),
+    )
+    finding_secondary = Finding(
+        vendor="generic",
+        rule_id="1",
+        src="any",
+        dst="any",
+        proto="any",
+        port="any",
+        action="allow",
+        finding_type="allow_any",
+        severity="Medium",
+        rationale="primary",
+        tags=("beta", "gamma"),
+    )
+
+    deduped = deduplicate_findings([finding_primary, finding_secondary])
+    assert len(deduped) == 1
+    assert deduped[0].tags == ("alpha", "beta", "gamma")

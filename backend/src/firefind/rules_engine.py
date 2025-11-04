@@ -16,6 +16,7 @@ from typing import (
 
 from .config import DEFAULT_RULES_CONFIG, RulesConfig, CIDRLimitPolicy
 from .model import Rule, Finding
+from .utils import merge_tags
 
 
 logger = logging.getLogger(__name__)
@@ -482,6 +483,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                         rationale=" ".join(rationale_bits),
                         source_file=candidate.source_file,
                         risk_rating=candidate.risk_rating,
+                        tags=merge_tags(candidate.tags, ["rule-overlap", "shadowed"]),
                     )
                 )
                 break
@@ -511,6 +513,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                     rationale=" ".join(rationale_bits),
                     source_file=candidate.source_file,
                     risk_rating=candidate.risk_rating,
+                    tags=merge_tags(candidate.tags, ["rule-overlap", "redundant"]),
                 )
             )
             break
@@ -867,6 +870,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     rationale="Rule allows any-to-any access",
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["any-to-any", "excessive-access"]),
                 )
             )
 
@@ -909,6 +913,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
                 )
             )
 
@@ -952,6 +957,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     rationale="; ".join(cidr_messages),
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["broad-scope", "cidr-policy"]),
                 )
             )
 
@@ -979,6 +985,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     rationale="; ".join(rationale_bits),
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["all-ports", "service-any"]),
                 )
             )
 

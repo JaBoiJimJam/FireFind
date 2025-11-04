@@ -4,6 +4,7 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
+from firefind.config.schema import RulesConfig
 from firefind.utils import load_yaml, pick_mapping, sniff_proto_port, to_rule
 from firefind.model import Rule
 
@@ -71,6 +72,38 @@ def test_to_rule_and_noise():
     assert rule.service == "HTTP"
     assert rule.src_interface == "internal"
     assert rule.dst_interface == "virtual-wan-link"
+    assert rule.tags == ()
 
     noise_row = {"Seq #": "", "Source": "", "Dest": "", "Service": ""}
     assert to_rule(noise_row, mapping, vendor="generic") is None
+
+
+def test_to_rule_extracts_tags_from_mapping_and_config():
+    mapping = {
+        "rule_id": ["ID"],
+        "action": ["Action"],
+        "src": ["Source"],
+        "dst": ["Destination"],
+        "tags": {
+            "columns": [["Category"]],
+            "defaults": ["vendor-default"],
+        },
+    }
+
+    row = {
+        "ID": "10",
+        "Action": "allow",
+        "Source": "0.0.0.0/0",
+        "Destination": "10.0.0.10",
+        "Category": "Secure Remote",
+    }
+
+    cfg = RulesConfig.from_dict(
+        {
+            "default_rule_tags": ["baseline"],
+            "functional_tag_aliases": {"secure remote": ["remote-access", "vpn"]},
+        }
+    )
+
+    rule = to_rule(row, mapping, vendor="generic", config=cfg)
+    assert rule.tags == ("baseline", "vendor-default", "remote-access", "vpn")

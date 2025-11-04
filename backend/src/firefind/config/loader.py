@@ -73,6 +73,13 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
         "redundant_severity": Severity.LOW.value,
         "shadowed_severity": Severity.MEDIUM.value,
     },
+        "default_rule_tags": ["firewall-rule"],
+    "functional_tag_aliases": {
+        "remote access": ["remote-access"],
+        "vpn": ["remote-access", "vpn"],
+        "web management": ["web-management"],
+        "admin": ["administration"],
+    },
     "risk_levels": {
         "critical": {
             "label": "Critical Risk",

@@ -4,7 +4,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import ipaddress
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence
+import re
+from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence, Tuple
+
+
+_TAG_SANITIZE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalise_tag_label(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return _TAG_SANITIZE_RE.sub("-", text.lower()).strip("-")
 
 
 class Severity(str, Enum):
@@ -460,6 +471,8 @@ class RulesConfig:
     port_groups: PortGroupCollection = field(default_factory=PortGroupCollection)
     rule_definitions: Dict[str, RuleDefinition] = field(default_factory=dict)
     rule_overlap: RuleOverlapSettings = field(default_factory=RuleOverlapSettings)
+    default_rule_tags: Tuple[str, ...] = field(default_factory=tuple)
+    functional_tag_aliases: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -474,6 +487,10 @@ class RulesConfig:
             "port_groups": self.port_groups.to_dict(),
             "rules": {name: definition.to_dict() for name, definition in self.rule_definitions.items()},
             "rule_overlap": self.rule_overlap.to_dict(),
+            "default_rule_tags": list(self.default_rule_tags),
+            "functional_tag_aliases": {
+                key: list(values) for key, values in self.functional_tag_aliases.items()
+            },
         }
 
     def get_legacy_mapping(self) -> MutableMapping[str, object]:
@@ -487,6 +504,11 @@ class RulesConfig:
                 "high_risk_admin_ports": sorted(self.high_risk_admin_ports),
                 "medium_risk_admin_ports": sorted(self.medium_risk_admin_ports),
                 "low_risk_admin_ports": sorted(self.low_risk_admin_ports),
+                "default_rule_tags": list(self.default_rule_tags),
+                "functional_tag_aliases": {
+                    key: list(values)
+                    for key, values in self.functional_tag_aliases.items()
+                },
             }
         )
         return data
@@ -513,6 +535,13 @@ class RulesConfig:
             else:
                 iterable = [value]
             return cls._normalize_ports(iterable)
+
+        def _iter_values(value: object) -> Iterable[object]:
+            if isinstance(value, (str, bytes)):
+                return [value]
+            if isinstance(value, Iterable):
+                return value
+            return [value]
 
         admin_ports = cls._normalize_ports(data.get("admin_ports", []))
         critical_ports = cls._normalize_ports(data.get("critical_risk_admin_ports", []))
@@ -687,6 +716,33 @@ class RulesConfig:
                     analyzers=analyzers,
                 )
 
+        default_rule_tags_raw = data.get("default_rule_tags", []) or []
+        default_rule_tags_list: list[str] = []
+        seen_default_tags: set[str] = set()
+        for raw in _iter_values(default_rule_tags_raw):
+            slug = _normalise_tag_label(raw)
+            if slug and slug not in seen_default_tags:
+                seen_default_tags.add(slug)
+                default_rule_tags_list.append(slug)
+        default_rule_tags = tuple(default_rule_tags_list)
+
+        functional_aliases_raw = data.get("functional_tag_aliases", {}) or {}
+        functional_tag_aliases: Dict[str, Tuple[str, ...]] = {}
+        if isinstance(functional_aliases_raw, Mapping):
+            for key, values in functional_aliases_raw.items():
+                slug_key = _normalise_tag_label(key)
+                if not slug_key:
+                    continue
+                resolved: list[str] = []
+                seen_slug: set[str] = set()
+                for candidate in _iter_values(values):
+                    slug_value = _normalise_tag_label(candidate)
+                    if slug_value and slug_value not in seen_slug:
+                        seen_slug.add(slug_value)
+                        resolved.append(slug_value)
+                if resolved:
+                    functional_tag_aliases[slug_key] = tuple(resolved)
+
         return cls(
             admin_ports=admin_ports,
             critical_risk_admin_ports=critical_ports,
@@ -699,6 +755,8 @@ class RulesConfig:
             port_groups=port_groups,
             rule_definitions=rule_definitions,
             rule_overlap=overlap_settings,
+            default_rule_tags=default_rule_tags,
+            functional_tag_aliases=functional_tag_aliases,
         )
 
 

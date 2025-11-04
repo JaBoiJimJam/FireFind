@@ -362,6 +362,11 @@ class PDFReport(FPDF):
         port = getattr(finding, 'port', 'N/A')
         details.append(f"Port/Service: {port}")
 
+        tags = getattr(finding, 'tags', ())
+        if tags:
+            formatted_tags = ", ".join(str(tag) for tag in tags)
+            details.append(f"Tags: {formatted_tags}")
+
         source_file = getattr(finding, 'source_file', '')
         if source_file:
             safe_source = self.safe_text(source_file, max_chars=80)

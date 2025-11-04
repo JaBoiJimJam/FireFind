@@ -10,7 +10,7 @@ from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
 from .rules_engine import run_checks, generate_risk_code
 from .config import load_rules_config, RulesConfig
-from .utils import load_yaml, pick_mapping, to_rule
+from .utils import load_yaml, merge_tags, pick_mapping, to_rule
 
 
 @dataclass
@@ -134,6 +134,9 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 + " | ".join(rationale_parts)
             )
 
+        additional_tag_sources = [detail.tags for detail in details if detail is not primary]
+        combined_tags = merge_tags(primary.tags, *additional_tag_sources)
+
         risk_rating = getattr(primary, "risk_rating", "") or ""
         if not risk_rating:
             for detail in details:
@@ -158,6 +161,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 source_file=primary.source_file,
                 contributing_severities=tuple(contributing_severities),
                 risk_rating=risk_rating,
+                tags=combined_tags,
             )
         )
 
@@ -206,7 +210,7 @@ def _collect_rules(
     rules_norm: List[Rule] = []
     seen_rules = set()
     for row in raw_rows:
-        rule = to_rule(row, mapping, vendor=vendor)
+        rule = to_rule(row, mapping, vendor=vendor, config=rules_cfg)
         if not rule:
             continue
         key = (rule.rule_id, rule.src, rule.dst, rule.proto, rule.port, rule.action)

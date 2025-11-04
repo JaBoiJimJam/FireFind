@@ -3,13 +3,17 @@ from __future__ import annotations
 """Shared utility functions for FireFind modules."""
 
 from pathlib import Path
-from typing import Iterable, Mapping, Tuple
+import re
+from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, Tuple
 import yaml
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .model import Rule
+
+if TYPE_CHECKING:
+    from .config import RulesConfig
 from .vendors import apply_vendor_normalizer
 from .vendors.utils import normalize_header, pick_first_present, normalize_action
 
@@ -74,6 +78,155 @@ SERVICE_NAME_PORTS = {
     "PING": [],
     "ICMP": [],
 }
+
+
+_TAG_SANITIZE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalise_tag_label(value: object) -> str:
+    """Return a lowercase slug suitable for tag identifiers."""
+
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    slug = _TAG_SANITIZE_RE.sub("-", text.lower()).strip("-")
+    return slug
+
+
+def merge_tags(*sources: Iterable[object]) -> Tuple[str, ...]:
+    """Combine tag sources into a de-duplicated tuple of slugified tags."""
+
+    seen: set[str] = set()
+    merged: list[str] = []
+    for source in sources or ():
+        if not source:
+            continue
+        for candidate in source:
+            slug = _normalise_tag_label(candidate)
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            merged.append(slug)
+    return tuple(merged)
+
+
+def _split_tag_candidates(value: str, separators: Sequence[str]) -> Iterable[str]:
+    """Split a raw string into candidate tag tokens."""
+
+    if not value:
+        return []
+    cleaned = str(value).replace("\n", " ")
+    if not separators:
+        stripped = cleaned.strip()
+        return [stripped] if stripped else []
+    pattern = "[" + re.escape("".join(separators)) + "]"
+    tokens = re.split(pattern, cleaned)
+    return [token.strip() for token in tokens if token.strip()]
+
+
+def _ensure_iterable(value: object) -> Iterable[object]:
+    if isinstance(value, (str, bytes)):
+        return [value]
+    if isinstance(value, Iterable):
+        return value
+    return [value]
+
+
+def _extract_rule_tags(
+    row: Mapping[str, object],
+    mapping: Mapping[str, object],
+    *,
+    config: "RulesConfig" | Mapping[str, object] | None = None,
+) -> Tuple[str, ...]:
+    """Derive tags for a rule using vendor mapping metadata and config aliases."""
+
+    tags_spec = mapping.get("tags") if isinstance(mapping, Mapping) else None
+
+    config_defaults: Iterable[str] = ()
+    config_aliases: Mapping[str, Tuple[str, ...]] = {}
+    if config is not None:
+        if isinstance(config, Mapping):
+            config_defaults = config.get("default_rule_tags", ()) or ()
+            raw_aliases = config.get("functional_tag_aliases", {}) or {}
+        else:
+            config_defaults = getattr(config, "default_rule_tags", ()) or ()
+            raw_aliases = getattr(config, "functional_tag_aliases", {}) or {}
+        if isinstance(raw_aliases, Mapping):
+            config_aliases = {
+                _normalise_tag_label(key): tuple(
+                    merge_tags(_ensure_iterable(value))
+                )
+                for key, value in raw_aliases.items()
+                if _normalise_tag_label(key)
+            }
+
+    vendor_defaults: Iterable[str] = ()
+    vendor_aliases: Mapping[str, Tuple[str, ...]] = {}
+    separators: Sequence[str] = [",", ";", "|"]
+    raw_values: list[str] = []
+
+    if isinstance(tags_spec, Mapping):
+        columns = tags_spec.get("columns") or tags_spec.get("fields") or []
+        if isinstance(columns, (str, bytes)):
+            columns = [columns]
+        for column in columns:
+            names: Iterable[str]
+            if isinstance(column, Iterable) and not isinstance(column, (str, bytes)):
+                names = column
+            else:
+                names = [column]
+            value = pick_first_present(row, list(names))
+            if value:
+                raw_values.append(str(value))
+        vendor_defaults = tags_spec.get("defaults") or tags_spec.get("static") or ()
+        mapping_spec = tags_spec.get("mapping") or {}
+        if isinstance(mapping_spec, Mapping):
+            vendor_aliases = {
+                _normalise_tag_label(key): tuple(
+                    merge_tags(_ensure_iterable(values))
+                )
+                for key, values in mapping_spec.items()
+                if _normalise_tag_label(key)
+            }
+        separator_spec = tags_spec.get("separators") or tags_spec.get("separator")
+        if isinstance(separator_spec, (str, bytes)):
+            separators = [str(separator_spec)]
+        elif isinstance(separator_spec, Iterable):
+            separators = [str(sep) for sep in separator_spec if str(sep)] or separators
+    elif isinstance(tags_spec, (list, tuple, set)):
+        for column in tags_spec:
+            value = pick_first_present(row, [column])
+            if value:
+                raw_values.append(str(value))
+    elif isinstance(tags_spec, (str, bytes)):
+        value = pick_first_present(row, [tags_spec])
+        if value:
+            raw_values.append(str(value))
+
+    tags: list[str] = []
+    seen: set[str] = set()
+
+    def _add(values: Iterable[object]) -> None:
+        for slug in merge_tags(values):
+            if slug and slug not in seen:
+                seen.add(slug)
+                tags.append(slug)
+
+    _add(config_defaults)
+    _add(vendor_defaults)
+
+    for raw_value in raw_values:
+        for token in _split_tag_candidates(raw_value, separators):
+            key = _normalise_tag_label(token)
+            if not key:
+                continue
+            alias_values = vendor_aliases.get(key) or config_aliases.get(key)
+            if alias_values:
+                _add(alias_values)
+            else:
+                _add([key])
+
+    return tuple(tags)
 
 
 def _tokenise_service_values(text: str) -> Iterable[str]:
@@ -417,7 +570,13 @@ def normalize_risk_rating(value: str) -> str:
     return cleaned.capitalize()
 
 
-def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | None:
+def to_rule(
+    row: dict,
+    mapping: dict,
+    *,
+    vendor: str | None = None,
+    config: "RulesConfig" | Mapping[str, object] | None = None,
+) -> Rule | None:
     """Map a raw row into a :class:`Rule` or return ``None`` for noise."""
     vendor_name = vendor or mapping.get("__vendor__", "")
     normalized_row = apply_vendor_normalizer(vendor_name, row, mapping)
@@ -446,6 +605,8 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
     if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
         return None
 
+    tags = _extract_rule_tags(normalized_row, mapping, config=config)
+
     return Rule(
         rule_id=rid,
         src=src,
@@ -459,4 +620,5 @@ def to_rule(row: dict, mapping: dict, *, vendor: str | None = None) -> Rule | No
         service=service,
         source_file=source_file,
         risk_rating=risk_rating,
+        tags=tags,
     )

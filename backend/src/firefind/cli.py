@@ -123,6 +123,12 @@ def parse(
     )
     findings_unique = analysis.findings
 
+    tag_set = {tag for finding in findings_unique for tag in getattr(finding, "tags", ()) if tag}
+    if tag_set:
+        typer.echo(f"Observed tags → {', '.join(sorted(tag_set))}")
+    else:
+        typer.echo("Observed tags → (none)")
+
     save_csv(findings_unique, Path(out_csv))
     typer.echo(f"Saved CSV → {out_csv}")
     save_pdf(findings_unique, Path(out_pdf))
