@@ -435,6 +435,28 @@ class RuleOverlapSettings:
 
 
 @dataclass
+class UnusedRuleSettings:
+    """Configuration for detecting unused or disabled firewall rules."""
+
+    hit_count_threshold: int = 0
+    include_disabled: bool = True
+    hit_count_severity: Severity = Severity.CAUTIONARY
+    disabled_severity: Severity = Severity.LOW
+
+    def __post_init__(self) -> None:
+        if int(self.hit_count_threshold) < 0:
+            raise ValueError("hit_count_threshold cannot be negative")
+
+    def to_dict(self) -> dict:
+        return {
+            "hit_count_threshold": int(self.hit_count_threshold),
+            "include_disabled": bool(self.include_disabled),
+            "hit_count_severity": self.hit_count_severity.value,
+            "disabled_severity": self.disabled_severity.value,
+        }
+
+
+@dataclass
 class RuleDefinition:
     """Description of an analyzer rule and its activation criteria."""
 
@@ -471,6 +493,7 @@ class RulesConfig:
     port_groups: PortGroupCollection = field(default_factory=PortGroupCollection)
     rule_definitions: Dict[str, RuleDefinition] = field(default_factory=dict)
     rule_overlap: RuleOverlapSettings = field(default_factory=RuleOverlapSettings)
+    unused_rule: UnusedRuleSettings = field(default_factory=UnusedRuleSettings)
     default_rule_tags: Tuple[str, ...] = field(default_factory=tuple)
     functional_tag_aliases: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
 
@@ -487,6 +510,7 @@ class RulesConfig:
             "port_groups": self.port_groups.to_dict(),
             "rules": {name: definition.to_dict() for name, definition in self.rule_definitions.items()},
             "rule_overlap": self.rule_overlap.to_dict(),
+            "unused_rule": self.unused_rule.to_dict(),
             "default_rule_tags": list(self.default_rule_tags),
             "functional_tag_aliases": {
                 key: list(values) for key, values in self.functional_tag_aliases.items()
@@ -660,6 +684,39 @@ class RulesConfig:
                 shadowed_severity=shadowed_severity,
             )
 
+        unused_settings = UnusedRuleSettings()
+        unused_raw = data.get("unused_rule", {}) or {}
+        if isinstance(unused_raw, Mapping):
+            threshold_value = unused_raw.get(
+                "hit_count_threshold", unused_settings.hit_count_threshold
+            )
+            include_disabled_value = unused_raw.get(
+                "include_disabled", unused_settings.include_disabled
+            )
+            hit_severity_value = unused_raw.get(
+                "hit_count_severity", unused_settings.hit_count_severity.value
+            )
+            disabled_severity_value = unused_raw.get(
+                "disabled_severity", unused_settings.disabled_severity.value
+            )
+
+            try:
+                hit_severity = Severity(str(hit_severity_value).lower())
+            except ValueError:
+                hit_severity = unused_settings.hit_count_severity
+
+            try:
+                disabled_severity = Severity(str(disabled_severity_value).lower())
+            except ValueError:
+                disabled_severity = unused_settings.disabled_severity
+
+            unused_settings = UnusedRuleSettings(
+                hit_count_threshold=int(threshold_value),
+                include_disabled=bool(include_disabled_value),
+                hit_count_severity=hit_severity,
+                disabled_severity=disabled_severity,
+            )
+
         rules_raw = data.get("rules", {}) or {}
         rule_definitions: Dict[str, RuleDefinition] = {}
         if isinstance(rules_raw, Mapping):
@@ -755,6 +812,7 @@ class RulesConfig:
             port_groups=port_groups,
             rule_definitions=rule_definitions,
             rule_overlap=overlap_settings,
+            unused_rule=unused_settings,
             default_rule_tags=default_rule_tags,
             functional_tag_aliases=functional_tag_aliases,
         )
