@@ -4,8 +4,16 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
+import pytest
+
 from firefind.config.schema import RulesConfig
-from firefind.utils import load_yaml, pick_mapping, sniff_proto_port, to_rule
+from firefind.utils import (
+    RuleValidationError,
+    load_yaml,
+    pick_mapping,
+    sniff_proto_port,
+    to_rule,
+)
 from firefind.model import Rule
 
 
@@ -75,7 +83,8 @@ def test_to_rule_and_noise():
     assert rule.tags == ()
 
     noise_row = {"Seq #": "", "Source": "", "Dest": "", "Service": ""}
-    assert to_rule(noise_row, mapping, vendor="generic") is None
+    with pytest.raises(RuleValidationError):
+        to_rule(noise_row, mapping, vendor="generic")
 
 
 def test_to_rule_extracts_tags_from_mapping_and_config():
@@ -107,3 +116,58 @@ def test_to_rule_extracts_tags_from_mapping_and_config():
 
     rule = to_rule(row, mapping, vendor="generic", config=cfg)
     assert rule.tags == ("baseline", "vendor-default", "remote-access", "vpn")
+
+
+def test_to_rule_missing_required_field_raises():
+    mapping = {
+        "rule_id": ["Seq #"],
+        "src": ["Source"],
+        "dst": ["Destination"],
+    }
+
+    row = {"Seq #": "", "Source": "10.0.0.0/24", "Destination": ""}
+
+    with pytest.raises(RuleValidationError) as excinfo:
+        to_rule(row, mapping, vendor="generic")
+
+    assert any(issue.code == "missing_required" for issue in excinfo.value.issues)
+
+
+def test_to_rule_invalid_ip_detection():
+    mapping = {
+        "rule_id": ["Seq #"],
+        "src": ["Source"],
+        "dst": ["Destination"],
+    }
+
+    row = {
+        "Seq #": "10",
+        "Source": "999.999.999.999",
+        "Destination": "10.0.0.0/24",
+    }
+
+    with pytest.raises(RuleValidationError) as excinfo:
+        to_rule(row, mapping, vendor="generic")
+
+    assert any(issue.code == "invalid_address" and issue.field == "src" for issue in excinfo.value.issues)
+
+
+def test_to_rule_invalid_port_detection():
+    mapping = {
+        "rule_id": ["Seq #"],
+        "src": ["Source"],
+        "dst": ["Destination"],
+        "service": ["Service"],
+    }
+
+    row = {
+        "Seq #": "11",
+        "Source": "10.0.0.0/24",
+        "Destination": "10.0.0.10",
+        "Service": "TCP/invalid",
+    }
+
+    with pytest.raises(RuleValidationError) as excinfo:
+        to_rule(row, mapping, vendor="generic")
+
+    assert any(issue.code == "invalid_port" for issue in excinfo.value.issues)

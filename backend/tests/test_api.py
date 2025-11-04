@@ -84,6 +84,10 @@ def test_scan_basic(tmp_path, monkeypatch, fmt, route):
     assert metrics.get("score") == 55
     assert metrics.get("total") == len(data["findings"])
 
+    rejections = data.get("rejections")
+    assert rejections is not None
+    assert rejections.get("total") == 0
+
     # Reports not requested
     assert "csv" not in data
     assert "pdf" not in data

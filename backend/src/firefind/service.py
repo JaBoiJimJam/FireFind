@@ -2,21 +2,40 @@ from __future__ import annotations
 
 """Core analysis service for FireFind."""
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Tuple, TypedDict
+from typing import Dict, List, Mapping, Tuple, TypedDict
+import logging
 
 from .loaders.csv_xlsx_loader import load_table
 from .model import Rule, Finding
 from .rules_engine import run_checks, generate_risk_code
 from .config import load_rules_config, RulesConfig
-from .utils import load_yaml, merge_tags, pick_mapping, to_rule
+from .utils import (
+    RuleValidationError,
+    RuleValidationIssue,
+    load_yaml,
+    merge_tags,
+    pick_mapping,
+    to_rule,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class AnalysisResult:
     findings: List[Finding]
     rules: List[Rule]
+    rejections: List["RuleRejection"] = field(default_factory=list)
+
+
+@dataclass
+class RuleRejection:
+    row: Mapping[str, object]
+    issues: Tuple[RuleValidationIssue, ...]
 
 _SEVERITY_PRIORITY: Dict[str, int] = {
     "Critical": 5,
@@ -185,7 +204,7 @@ def _collect_rules(
     vendor: str,
     rules_path: Path,
     mappings_path: Path,
-) -> Tuple[List[Rule], RulesConfig]:
+) -> Tuple[List[Rule], RulesConfig, List[RuleRejection]]:
     rules_path = _resolve_config_path(Path(rules_path))
     mappings_path = _resolve_config_path(Path(mappings_path))
 
@@ -208,9 +227,22 @@ def _collect_rules(
             raw_rows.append(row)
 
     rules_norm: List[Rule] = []
+    rejections: List[RuleRejection] = []
     seen_rules = set()
     for row in raw_rows:
-        rule = to_rule(row, mapping, vendor=vendor, config=rules_cfg)
+        try:
+            rule = to_rule(row, mapping, vendor=vendor, config=rules_cfg)
+        except RuleValidationError as exc:
+            rejection_row: Mapping[str, object] = (
+                exc.row if exc.row is not None else row
+            )
+            rejections.append(
+                RuleRejection(
+                    row=dict(rejection_row),
+                    issues=exc.issues,
+                )
+            )
+            continue
         if not rule:
             continue
         key = (rule.rule_id, rule.src, rule.dst, rule.proto, rule.port, rule.action)
@@ -219,7 +251,20 @@ def _collect_rules(
         seen_rules.add(key)
         rules_norm.append(rule)
 
-    return rules_norm, rules_cfg
+    if rejections:
+        counts = Counter(
+            issue.code for rejection in rejections for issue in rejection.issues
+        )
+        summary = ", ".join(
+            f"{code}={count}" for code, count in sorted(counts.items())
+        )
+        logger.warning(
+            "Rejected %d row(s) due to validation errors: %s",
+            len(rejections),
+            summary,
+        )
+
+    return rules_norm, rules_cfg, rejections
 
 
 def run_analysis(
@@ -229,7 +274,9 @@ def run_analysis(
     mappings_path: Path = Path("rules/vendor_mappings.yaml"),
 ) -> AnalysisResult:
     input_path = Path(input_path)
-    rules, rules_cfg = _collect_rules(input_path, vendor, rules_path, mappings_path)
+    rules, rules_cfg, rejections = _collect_rules(
+        input_path, vendor, rules_path, mappings_path
+    )
     findings = run_checks(vendor, rules, rules_cfg)
     unique = deduplicate_findings(findings)
-    return AnalysisResult(findings=unique, rules=rules)
+    return AnalysisResult(findings=unique, rules=rules, rejections=rejections)

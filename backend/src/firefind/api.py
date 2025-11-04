@@ -560,6 +560,12 @@ async def scan(
             mappings_path=rules_dir / "vendor_mappings.yaml",
         )
         findings = analysis.findings
+        rejection_counts = Counter(
+            issue.code
+            for rejection in analysis.rejections
+            for issue in rejection.issues
+        )
+        rejected_total = len(analysis.rejections)
         # Build metrics by severity
         metrics = _build_metrics(analysis)
 
@@ -587,6 +593,10 @@ async def scan(
     response: Dict[str, Any] = {
         "findings": [asdict(f) for f in findings],
         "metrics": metrics,
+    }
+    response["rejections"] = {
+        "total": rejected_total,
+        "by_code": {code: int(count) for code, count in sorted(rejection_counts.items())},
     }
     if csv_path:
         response["csv"] = f"/downloads/{csv_path.name}"

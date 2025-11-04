@@ -2,9 +2,11 @@ from __future__ import annotations
 
 """Shared utility functions for FireFind modules."""
 
+from dataclasses import dataclass
 from pathlib import Path
 import re
-from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, Tuple
+import ipaddress
+from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, Tuple, List
 import yaml
 
 from ruamel.yaml import YAML
@@ -16,6 +18,30 @@ if TYPE_CHECKING:
     from .config import RulesConfig
 from .vendors import apply_vendor_normalizer
 from .vendors.utils import normalize_header, pick_first_present, normalize_action
+
+
+@dataclass(frozen=True)
+class RuleValidationIssue:
+    """Structured description of a validation failure for a raw rule row."""
+
+    code: str
+    message: str
+    field: str | None = None
+
+
+class RuleValidationError(ValueError):
+    """Raised when a row cannot be converted into a :class:`Rule`."""
+
+    def __init__(
+        self,
+        issues: Sequence[RuleValidationIssue],
+        row: Mapping[str, object] | None = None,
+    ) -> None:
+        if not issues:
+            raise ValueError("RuleValidationError requires at least one issue")
+        self.issues: Tuple[RuleValidationIssue, ...] = tuple(issues)
+        self.row: Mapping[str, object] | None = row
+        super().__init__("; ".join(issue.message for issue in self.issues))
 
 
 # Mapping of common service object names to well-known ports.  These values are
@@ -81,6 +107,157 @@ SERVICE_NAME_PORTS = {
 
 
 _TAG_SANITIZE_RE = re.compile(r"[^a-z0-9]+")
+_IP_CANDIDATE_RE = re.compile(r"[0-9A-Fa-f:.]+(?:/[0-9]{1,3})?")
+_ADDRESS_WILDCARDS = {"any", "all", "*"}
+
+
+def _iter_ip_candidates(token: str) -> Iterable[str]:
+    for match in _IP_CANDIDATE_RE.finditer(token):
+        candidate = match.group(0)
+        if candidate and ("." in candidate or ":" in candidate):
+            yield candidate
+
+
+def _try_parse_ip(value: str) -> bool:
+    try:
+        if "/" in value:
+            ipaddress.ip_network(value, strict=False)
+        else:
+            ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _validate_address_value(value: str, field: str) -> List[RuleValidationIssue]:
+    trimmed = str(value or "").strip()
+    if not trimmed:
+        return []
+
+    segments = [
+        segment.strip()
+        for segment in re.split(r"[;,]", trimmed.replace("\n", " "))
+        if segment.strip()
+    ]
+    if not segments:
+        segments = [trimmed]
+
+    invalid: set[str] = set()
+    for segment in segments:
+        lowered = segment.lower()
+        if lowered in _ADDRESS_WILDCARDS:
+            continue
+        candidates = list(_iter_ip_candidates(segment))
+        if not candidates:
+            continue
+        for candidate in candidates:
+            if not _try_parse_ip(candidate):
+                invalid.add(candidate)
+
+    if not invalid:
+        return []
+
+    values = ", ".join(sorted(invalid))
+    return [
+        RuleValidationIssue(
+            code="invalid_address",
+            field=field,
+            message=f"Invalid {field} value(s): {values}",
+        )
+    ]
+
+
+def _is_valid_port_token(token: str) -> bool:
+    cleaned = token.strip()
+    if not cleaned:
+        return False
+    upper = cleaned.upper()
+    if upper in {"ANY", "ALL", "*"}:
+        return True
+    if "/" in cleaned:
+        proto, _, remainder = cleaned.partition("/")
+        if not proto or not remainder:
+            return False
+        return _is_valid_port_token(remainder)
+    if "-" in cleaned:
+        start, end = cleaned.split("-", 1)
+        if not (start.isdigit() and end.isdigit()):
+            return False
+        start_val = int(start)
+        end_val = int(end)
+        return 1 <= start_val <= end_val <= 65535
+    if cleaned.isdigit():
+        port_val = int(cleaned)
+        return 1 <= port_val <= 65535
+    return False
+
+
+def _validate_port_value(value: str) -> List[RuleValidationIssue]:
+    trimmed = str(value or "").strip()
+    if not trimmed:
+        return [
+            RuleValidationIssue(
+                code="missing_required",
+                field="port",
+                message="Missing port specification",
+            )
+        ]
+
+    tokens = [token.strip() for token in trimmed.split(",") if token.strip()]
+    if not tokens:
+        return [
+            RuleValidationIssue(
+                code="invalid_port",
+                field="port",
+                message="Port specification is empty",
+            )
+        ]
+
+    invalid = [token for token in tokens if not _is_valid_port_token(token)]
+    if not invalid:
+        return []
+
+    joined = ", ".join(sorted({token for token in invalid}))
+    return [
+        RuleValidationIssue(
+            code="invalid_port",
+            field="port",
+            message=f"Invalid port value(s): {joined}",
+        )
+    ]
+
+
+def _validate_rule_inputs(
+    row: Mapping[str, object],
+    *,
+    raw_values: Mapping[str, str],
+    normalized_values: Mapping[str, str],
+) -> None:
+    issues: List[RuleValidationIssue] = []
+
+    missing = [
+        field
+        for field in ("rule_id", "src", "dst")
+        if not (raw_values.get(field) or "").strip()
+    ]
+    if missing:
+        issues.append(
+            RuleValidationIssue(
+                code="missing_required",
+                field=",".join(sorted(missing)),
+                message=f"Missing required field(s): {', '.join(sorted(missing))}",
+            )
+        )
+
+    for field in ("src", "dst"):
+        issues.extend(
+            _validate_address_value(normalized_values.get(field, ""), field)
+        )
+
+    issues.extend(_validate_port_value(normalized_values.get("port", "")))
+
+    if issues:
+        raise RuleValidationError(issues, row=row)
 
 
 def _normalise_tag_label(value: object) -> str:
@@ -581,29 +758,53 @@ def to_rule(
     vendor_name = vendor or mapping.get("__vendor__", "")
     normalized_row = apply_vendor_normalizer(vendor_name, row, mapping)
 
-    rid = pick_first_present(normalized_row, mapping.get("rule_id", [])) or "(unknown)"
-    action_raw = pick_first_present(normalized_row, mapping.get("action", [])) or "allow"
+    def _pick_value(keys: object) -> str:
+        if isinstance(keys, (str, bytes)):
+            candidates = [keys]
+        elif isinstance(keys, Iterable):
+            candidates = [key for key in keys if isinstance(key, (str, bytes))]
+        else:
+            candidates = []
+        return pick_first_present(normalized_row, candidates) if candidates else ""
+
+    rid_raw = _pick_value(mapping.get("rule_id", []))
+    rid = rid_raw or "(unknown)"
+    action_raw = _pick_value(mapping.get("action", [])) or "allow"
     action = normalize_action(action_raw)
-    src = pick_first_present(normalized_row, mapping.get("src", [])) or "any"
-    dst = pick_first_present(normalized_row, mapping.get("dst", [])) or "any"
-    service = pick_first_present(normalized_row, mapping.get("service", ["Service"])) or ""
+    src_raw = _pick_value(mapping.get("src", []))
+    src = src_raw or "any"
+    dst_raw = _pick_value(mapping.get("dst", []))
+    dst = dst_raw or "any"
+    service = _pick_value(mapping.get("service", ["Service"])) or ""
     proto, port = sniff_proto_port(normalized_row, service_hint=service)
     if proto.strip().lower() in {"", "any"}:
-        proto = pick_first_present(normalized_row, mapping.get("proto", ["Protocol", "Proto"])) or "any"
-    comment = pick_first_present(normalized_row, mapping.get("comment", [])) or ""
-    srcintf = pick_first_present(normalized_row, mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
-    dstintf = pick_first_present(normalized_row, mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
+        proto = _pick_value(mapping.get("proto", ["Protocol", "Proto"])) or "any"
+    comment = _pick_value(mapping.get("comment", [])) or ""
+    srcintf = _pick_value(mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
+    dstintf = _pick_value(mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
     source_file = str(normalized_row.get("_source_file", ""))
     risk_rating_fields = mapping.get("risk_rating", [])
     risk_rating_raw = (
-        pick_first_present(normalized_row, risk_rating_fields)
+        _pick_value(risk_rating_fields)
         if risk_rating_fields
         else ""
     )
     risk_rating = normalize_risk_rating(risk_rating_raw)
 
-    if rid == "(unknown)" and src == "any" and dst == "any" and port == "any":
-        return None
+    _validate_rule_inputs(
+        normalized_row,
+        raw_values={
+            "rule_id": rid_raw,
+            "src": src_raw,
+            "dst": dst_raw,
+        },
+        normalized_values={
+            "rule_id": rid,
+            "src": src,
+            "dst": dst,
+            "port": port,
+        },
+    )
 
     tags = _extract_rule_tags(normalized_row, mapping, config=config)
 

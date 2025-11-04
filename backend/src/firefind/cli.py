@@ -1,6 +1,7 @@
 # backend/src/firefind/cli.py
 
 import os
+from collections import Counter
 from pathlib import Path
 from typing import List
 
@@ -122,6 +123,19 @@ def parse(
         mappings_path=Path(mappings),
     )
     findings_unique = analysis.findings
+    if analysis.rejections:
+        typer.echo(
+            f"Rejected {len(analysis.rejections)} row(s) due to validation errors"
+        )
+        counts = Counter(
+            issue.code
+            for rejection in analysis.rejections
+            for issue in rejection.issues
+        )
+        for code, count in sorted(counts.items()):
+            typer.echo(f"  {code}: {count}")
+    else:
+        typer.echo("Rejected rows → 0")
 
     tag_set = {tag for finding in findings_unique for tag in getattr(finding, "tags", ()) if tag}
     if tag_set:
