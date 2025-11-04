@@ -3,10 +3,9 @@ from __future__ import annotations
 """FastAPI application exposing FireFind analysis as an HTTP service."""
 
 import os
-import re
 from pathlib import Path
 import tempfile
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import asdict
 from typing import Any, Dict, List, Literal, Mapping, Optional, Set, Tuple
 from uuid import uuid4
@@ -19,6 +18,7 @@ from fastapi import (
     File,
     Header,
     HTTPException,
+    Query,
     UploadFile,
 )
 from fastapi import status
@@ -32,7 +32,8 @@ from pydantic import (
     model_validator,
 )
 
-from .model import Finding
+from .history import ScanHistoryStore, compute_trends
+from .metrics import build_metrics
 from .service import AnalysisResult, run_analysis
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
@@ -95,6 +96,10 @@ def get_actor(
 
 def get_rules_config_store() -> RulesConfigStore:
     return RulesConfigStore()
+
+
+def get_scan_history_store() -> ScanHistoryStore:
+    return ScanHistoryStore()
 
 
 class RulesConfigPatch(BaseModel):
@@ -394,142 +399,6 @@ def patch_rules_config(
     return {"config": config.to_dict(), "metadata": metadata}
 
 
-_SEVERITY_KEYS = ("critical", "high", "medium", "cautionary", "low", "info")
-
-
-def _calculate_score(metrics: Dict[str, int]) -> int:
-    """Return a 0-100 security score based on severity metrics."""
-
-    weights = {
-        "critical": 30,
-        "high": 15,
-        "medium": 5,
-        "cautionary": 3,
-        "low": 2,
-    }
-    penalty = sum(metrics.get(level, 0) * weight for level, weight in weights.items())
-    score = max(0, 100 - penalty)
-    return int(score)
-
-
-def _normalise_severity_key(value: str) -> str:
-    label = (value or "").strip().lower()
-    if not label:
-        return ""
-    if label in {"informational", "information", "inform"}:
-        return "info"
-    return label
-
-
-def _format_location_token(token: str) -> str:
-    upper = token.upper()
-    if upper == "FW":
-        return "FW"
-    if upper == "DAAS":
-        return "DaaS"
-    if upper in {"DMZ", "WAN"}:
-        return upper
-    return token.capitalize()
-
-
-def _derive_location_label(source_file: str) -> str:
-    if not source_file:
-        return "Unknown"
-
-    stem = Path(source_file).stem
-    segment = stem
-    marker = "Firewall Policy-"
-    if marker in stem:
-        segment = stem.split(marker, 1)[1]
-
-    segment = segment.split(" - ", 1)[0].strip()
-    if not segment:
-        segment = stem
-
-    tokens = [tok for tok in re.split(r"[-_]+", segment) if tok]
-    formatted: list[str] = []
-    for token in tokens:
-        cleaned = re.sub(r"\d+$", "", token).strip()
-        if not cleaned:
-            continue
-        formatted.append(_format_location_token(cleaned))
-        if len(formatted) == 2:
-            break
-
-    if not formatted and tokens:
-        formatted.append(_format_location_token(tokens[0]))
-
-    if not formatted:
-        return stem or "Unknown"
-
-    return " ".join(formatted)
-
-
-def _metrics_from_findings(findings: List[Finding]) -> Dict[str, Any]:
-    totals: Counter[str] = Counter()
-    locations: dict[str, Counter[str]] = defaultdict(Counter)
-
-    for finding in findings:
-        severity_key = _normalise_severity_key(getattr(finding, "severity", ""))
-        if not severity_key:
-            continue
-        location = _derive_location_label(getattr(finding, "source_file", ""))
-        totals[severity_key] += 1
-        locations[location][severity_key] += 1
-
-    metrics: Dict[str, Any] = {key: int(totals.get(key, 0)) for key in _SEVERITY_KEYS}
-    total_findings = sum(metrics[key] for key in _SEVERITY_KEYS)
-    metrics["total"] = total_findings
-    metrics["score"] = _calculate_score(metrics)
-    metrics["by_location"] = {
-        location: {key: int(counts.get(key, 0)) for key in _SEVERITY_KEYS}
-        for location, counts in sorted(locations.items())
-    }
-    return metrics
-
-
-def _build_metrics(result: AnalysisResult) -> Dict[str, Any]:
-    rated_totals: Counter[str] = Counter()
-    rated_locations: dict[str, Counter[str]] = defaultdict(Counter)
-    unrated_locations: dict[str, int] = defaultdict(int)
-
-    for rule in result.rules:
-        rating = _normalise_severity_key(getattr(rule, "risk_rating", ""))
-        location = _derive_location_label(getattr(rule, "source_file", ""))
-        if rating:
-            rated_totals[rating] += 1
-            rated_locations[location][rating] += 1
-        else:
-            unrated_locations[location] += 1
-
-    if rated_totals:
-        metrics: Dict[str, Any] = {
-            key: int(rated_totals.get(key, 0)) for key in _SEVERITY_KEYS
-        }
-        total_findings = sum(metrics[key] for key in _SEVERITY_KEYS)
-        metrics["total"] = total_findings
-        metrics["score"] = _calculate_score(metrics)
-        metrics["by_location"] = {
-            location: {key: int(counts.get(key, 0)) for key in _SEVERITY_KEYS}
-            for location, counts in sorted(rated_locations.items())
-        }
-
-        unrated_total = sum(unrated_locations.values())
-        if unrated_total:
-            metrics["unrated_rules"] = {
-                "total": int(unrated_total),
-                "by_location": {
-                    location: int(count)
-                    for location, count in sorted(unrated_locations.items())
-                    if count
-                },
-            }
-
-        return metrics
-
-    return _metrics_from_findings(result.findings)
-
-
 from fastapi import Form
 
 @app.post("/scan")
@@ -540,6 +409,7 @@ async def scan(
     save_csv: bool = False,
     save_pdf: bool = False,
     client_name: Optional[str] = Form(None),
+    store: ScanHistoryStore = Depends(get_scan_history_store),
 ):
     """Analyze uploaded CSV/XLSX files and return findings as JSON."""
     # Persist uploads to a temporary directory so our loader can read them
@@ -567,7 +437,7 @@ async def scan(
         )
         rejected_total = len(analysis.rejections)
         # Build metrics by severity
-        metrics = _build_metrics(analysis)
+        metrics = build_metrics(analysis)
 
         pdf_path: Path | None = None
         csv_path: Path | None = None
@@ -590,6 +460,12 @@ async def scan(
                     pdf_path, findings, client_name=name_for_pdf
                 )
 
+    store.record_scan(
+        vendor=vendor,
+        metrics=metrics,
+        metadata={"client_name": client_name} if client_name else None,
+    )
+
     response: Dict[str, Any] = {
         "findings": [asdict(f) for f in findings],
         "metrics": metrics,
@@ -604,6 +480,27 @@ async def scan(
         response["pdf"] = f"/downloads/{pdf_path.name}"
 
     return response
+
+
+@app.get("/api/scans/history")
+def get_scan_history(
+    limit: int = Query(default=50, ge=1, le=1000),
+    vendor: Optional[str] = Query(default=None),
+    store: ScanHistoryStore = Depends(get_scan_history_store),
+):
+    history = store.get_history(limit=limit, vendor=vendor)
+    return {"history": history}
+
+
+@app.get("/api/scans/trends")
+def get_scan_trends(
+    window: int = Query(default=5, ge=1, le=1000),
+    vendor: Optional[str] = Query(default=None),
+    store: ScanHistoryStore = Depends(get_scan_history_store),
+):
+    records = store.get_history(limit=None, vendor=vendor)
+    trends = compute_trends(records, window=window)
+    return {"trends": trends}
 
 
 # Maintain backward compatibility with front-end clients expecting the API

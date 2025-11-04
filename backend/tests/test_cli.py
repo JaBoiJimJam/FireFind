@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import sys
 
@@ -107,3 +108,35 @@ def test_version_option():
     result = runner.invoke(cli_app, ["--version"])
     assert result.exit_code == 0
     assert __version__ in result.output
+
+
+def test_trend_log_option(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "dummy.csv").write_text("Seq #,Service,Action\n1,TCP/80,allow\n")
+    log_path = tmp_path / "history.jsonl"
+    result = runner.invoke(
+        cli_app,
+        [
+            "--input",
+            str(data_dir),
+            "--rules",
+            str(RULES_PATH),
+            "--mappings",
+            str(MAPPINGS_PATH),
+            "--out-csv",
+            str(tmp_path / "out.csv"),
+            "--out-pdf",
+            str(tmp_path / "out.pdf"),
+            "--trend-log",
+            str(log_path),
+        ],
+    )
+    assert result.exit_code == 0
+    assert log_path.exists()
+    entries = [line for line in log_path.read_text().splitlines() if line.strip()]
+    assert entries
+    payload = json.loads(entries[-1])
+    assert payload["vendor"] == "generic"
+    assert "metrics" in payload and "score" in payload["metrics"]
+    assert "Logged trend metrics" in result.output

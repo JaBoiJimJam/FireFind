@@ -51,6 +51,32 @@ To view the current application version:
 python -m firefind.cli --version
 ```
 
+### Scan history and trends
+
+FireFind can maintain an append-only log of scan summaries for historical
+reporting. The FastAPI service persists each `/api/scan` request to a JSONL file
+(`data/scan_history.jsonl` by default) or to an SQLite database when the path
+ends in `.db`, `.sqlite`, or `.sqlite3`. Set `FIRE_FIND_SCAN_HISTORY` to override
+the location. Rotate the log by truncating or archiving the file during
+maintenance windows—the store is append-only and will recreate the file when
+missing.
+
+- The CLI can append metrics after every run with
+  `--trend-log /path/to/scan_history.jsonl`. The same path format rules apply as
+  the API store, so pointing to a `.sqlite` file enables automatic table
+  creation.
+- The backend exposes two endpoints for dashboards:
+  - `GET /api/scans/history` returns the persisted records with optional
+    `limit`/`vendor` filters.
+  - `GET /api/scans/trends` computes rolling averages, score deltas, and vendor
+    summaries. Use the `window` query parameter to adjust the rolling window
+    length.
+
+For long-term retention consider periodically compressing archived JSONL files
+or running `VACUUM` against SQLite logs. Both storage formats can be safely
+rotated while the service is offline; new scans will recreate the log on the
+next request.
+
 ### Integrated development server
 For a combined frontend and API during development, run:
 
