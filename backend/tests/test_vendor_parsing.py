@@ -1,4 +1,5 @@
 from pathlib import Path
+from collections import Counter
 import sys
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -6,6 +7,7 @@ sys.path.append(str(BACKEND_DIR / "src"))
 
 from firefind.loaders.csv_xlsx_loader import load_table
 from firefind.rules_engine import run_checks
+from firefind.service import _collect_rules
 from firefind.utils import load_yaml, pick_mapping, to_rule
 
 MAPPINGS_PATH = BACKEND_DIR / "rules" / "vendor_mappings.yaml"
@@ -36,3 +38,41 @@ def test_generic_sample_produces_finding():
     assert rule.action == "allow"
     assert rule.port in {"22", "TCP/22"}
     _assert_admin_port_finding("generic", rule)
+
+
+def test_client_samples_risk_ratings_match_expectations():
+    sample_expectations = {
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-EXTERNAL-FW-DC - WITH RISK FEEDBACK.xlsx": {
+            "High": 3,
+            "Cautionary": 1,
+            "Low": 1,
+        },
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-DaaS - WITH RISK FEEDBACK.xlsx": {
+            "Critical": 11,
+            "Medium": 1,
+            "Cautionary": 2,
+        },
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-FW01 - WITH RISK FEEDBACK.xlsx": {
+            "Critical": 8,
+            "High": 14,
+            "Cautionary": 11,
+            "Low": 1,
+        },
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-OUTSIDE-FW - WITH RISK FEEDBACK.xlsx": {
+            "High": 2,
+        },
+    }
+
+    for sample_name, expected in sample_expectations.items():
+        sample_path = BACKEND_DIR / "samples" / sample_name
+        rules, _, rejections = _collect_rules(
+            sample_path,
+            "generic",
+            BACKEND_DIR / "rules.config.sample.yaml",
+            BACKEND_DIR / "rules" / "vendor_mappings.yaml",
+        )
+
+        assert not rejections, f"Unexpected rejections for {sample_name}: {rejections}"
+
+        dist = Counter(rule.risk_rating for rule in rules if rule.risk_rating)
+        assert dist == expected

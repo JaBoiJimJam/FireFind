@@ -103,6 +103,9 @@ def _build_service_name_ports() -> dict[str, list[int]]:
         "LDPW0RM": [515],
         "PING": [],
         "ICMP": [],
+        "ICMP-COMMS": [],
+        "ECHO-REQUEST": [],
+        "ECHO-REPLY": [],
         "SMTP-TLS": [465],
         "SMTP SUBMISSION": [587],
         "SMTP_SUBMISSION": [587],
@@ -186,7 +189,12 @@ _ADDRESS_WILDCARDS = {"any", "all", "*"}
 def _iter_ip_candidates(token: str) -> Iterable[str]:
     for match in _IP_CANDIDATE_RE.finditer(token):
         candidate = match.group(0)
-        if candidate and ("." in candidate or ":" in candidate):
+        if not candidate:
+            continue
+        if ":" in candidate:
+            yield candidate
+            continue
+        if candidate.count(".") >= 3:
             yield candidate
 
 
@@ -525,7 +533,7 @@ def _extract_rule_tags(
 
 
 _SERVICE_VALUE_PREFIX_RE = re.compile(
-    r"^(?:group\s*member|member|service\s*member|service\s*name)\s*:\s*",
+   r"^(?:group\s*member|member|service\s*member|service\s*name)\s*(?:\(\d+\))?\s*:\s*",
     re.IGNORECASE,
 )
 
@@ -543,7 +551,9 @@ def _strip_service_prefix(value: str) -> str:
 def _tokenise_service_values(text: str) -> Iterable[str]:
     if not text:
         return []
-    interim = _strip_service_prefix(str(text))
+    raw = str(text)
+    segments = [_strip_service_prefix(segment) for segment in raw.split("\n")]
+    interim = " ".join(segments)
     cleaned = (
         interim.replace("\n", " ")
         .replace(",", " ")
@@ -569,13 +579,37 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
             continue
         upper = cleaned.upper()
 
+        if upper in {"IP/0", "IPV4/0", "IPV6/0"}:
+            wildcard = "ALL"
+            break
+
+        if "_" in cleaned and any(ch.isdigit() for ch in cleaned):
+            head, _, remainder = cleaned.partition("_")
+            remainder = remainder.strip()
+            if head and remainder and head.isalpha():
+                remainder_digits = remainder.replace("-", "")
+                if remainder_digits.isdigit():
+                    cleaned = f"{head}/{remainder}"
+                    upper = cleaned.upper()
+
+        if "/" in cleaned and ":" in cleaned:
+            head, _, remainder = cleaned.partition("/")
+            parts = [segment.strip() for segment in remainder.split(":") if segment.strip()]
+            if parts and all(segment.isdigit() for segment in parts):
+                numbers = sorted(int(segment) for segment in parts)
+                if len(numbers) == 1:
+                    cleaned = f"{head}/{numbers[0]}"
+                else:
+                    cleaned = f"{head}/{numbers[0]}-{numbers[-1]}"
+                upper = cleaned.upper()
+
         if upper in {"ALL", "ANY", "*"}:
             wildcard = "ALL"
             break
 
-        mapped_ports = _service_ports_from_alias(upper) or _service_ports_from_alias(
-            cleaned
-        )
+        mapped_ports = _service_ports_from_alias(upper)
+        if mapped_ports is None:
+            mapped_ports = _service_ports_from_alias(cleaned)
         if mapped_ports is not None:
             added = False
             for port in mapped_ports:
