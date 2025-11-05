@@ -807,16 +807,16 @@ def _max_admin_port_downgrade(
         # organisations categorise SSH as a critical service, but retain a
         # strict floor for other critical protocols (e.g. SMB, NetBIOS).
         if profile == "ssh":
-            return 4
+            return 2
         if profile == "web_infra" and exposed_ports <= _WEB_INFRA_PORTS:
             return 4
         return 0
 
     if exposed_ports & high_ports:
         if profile == "ssh":
-            return 4
+            return 1
         if profile == "rdp":
-            return 2
+            return 0
         return 2
 
     if exposed_ports & medium_ports:
@@ -902,15 +902,25 @@ def _adjust_admin_port_severity(
         downgrade = min(downgrade, allowed)
 
     if downgrade:
+        start = _SEVERITY_INDEX.get(severity, 0)
         if profile in {"web", "web_infra"}:
-            start = _SEVERITY_INDEX.get(severity, 0)
             web_floor = _SEVERITY_INDEX["Cautionary"]
             target = min(start + downgrade, web_floor)
             target = max(target, start)
-            return _SEVERITY_LADDER[target]
-        start = _SEVERITY_INDEX.get(severity, 0)
-        target = min(start + downgrade, _LOWEST_ADMIN_SEVERITY)
-        return _SEVERITY_LADDER[target]
+        else:
+            target = min(start + downgrade, _LOWEST_ADMIN_SEVERITY)
+        result = _SEVERITY_LADDER[target]
+        if profile == "ssh":
+            medium_index = _SEVERITY_INDEX["Medium"]
+            result_index = _SEVERITY_INDEX.get(result, medium_index)
+            if result_index > medium_index:
+                result = "Medium"
+        elif profile == "rdp":
+            high_index = _SEVERITY_INDEX["High"]
+            result_index = _SEVERITY_INDEX.get(result, high_index)
+            if result_index > high_index:
+                result = "High"
+        return result
     return severity
 
 

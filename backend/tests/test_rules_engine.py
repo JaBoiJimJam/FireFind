@@ -151,6 +151,58 @@ def test_classify_admin_port_severity_rdp_web_combos_cautionary():
         assert severity == "Cautionary"
 
 
+def test_scoped_ssh_admin_port_does_not_drop_below_medium():
+    rule = Rule(
+        "ssh-narrow",
+        "10.0.0.10",
+        "10.0.0.11",
+        "tcp",
+        "22",
+        "allow",
+        source_file="test.conf",
+    )
+
+    cfg = {
+        "admin_ports": [22],
+        "critical_risk_admin_ports": [],
+        "high_risk_admin_ports": [22],
+        "medium_risk_admin_ports": [],
+        "low_risk_admin_ports": [],
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["Medium"]
+
+
+def test_scoped_rdp_admin_port_remains_high():
+    rule = Rule(
+        "rdp-narrow",
+        "10.0.0.10",
+        "10.0.0.11",
+        "tcp",
+        "3389",
+        "allow",
+        source_file="test.conf",
+    )
+
+    cfg = {
+        "admin_ports": [3389],
+        "critical_risk_admin_ports": [],
+        "high_risk_admin_ports": [3389],
+        "medium_risk_admin_ports": [],
+        "low_risk_admin_ports": [],
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["High"]
+
+
 def test_mixed_critical_ports_stay_critical():
     rule = Rule(
         "mixed-critical",
