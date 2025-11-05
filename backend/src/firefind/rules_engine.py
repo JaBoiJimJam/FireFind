@@ -808,7 +808,11 @@ def _max_admin_port_downgrade(
         # strict floor for other critical protocols (e.g. SMB, NetBIOS).
         if profile == "ssh":
             return 2
-        if profile == "web_infra" and exposed_ports <= _WEB_INFRA_PORTS:
+        if (
+            profile == "web_infra"
+            and exposed_ports <= _WEB_INFRA_PORTS
+            and not (exposed_ports & critical_ports)
+        ):
             return 4
         return 0
 
@@ -862,6 +866,7 @@ def _adjust_admin_port_severity(
         and severity != "Info"
         and exposed_ports <= _WEB_INFRA_PORTS
         and not (exposed_ports & high_ports)
+        and not (exposed_ports & critical_ports)
     ):
         return "Cautionary"
 

@@ -203,6 +203,32 @@ def test_scoped_rdp_admin_port_remains_high():
     assert severities == ["High"]
 
 
+def test_critical_web_infra_port_remains_critical():
+    rule = Rule(
+        "kerberos-admin",
+        "10.0.0.10",
+        "10.0.0.11",
+        "tcp",
+        "464",
+        "allow",
+        source_file="test.conf",
+    )
+
+    cfg = {
+        "admin_ports": [464],
+        "critical_risk_admin_ports": [464],
+        "high_risk_admin_ports": [],
+        "medium_risk_admin_ports": [],
+        "low_risk_admin_ports": [],
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["Critical"]
+
+
 def test_mixed_critical_ports_stay_critical():
     rule = Rule(
         "mixed-critical",
