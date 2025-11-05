@@ -63,7 +63,7 @@ _CRITICAL_RISK_ADMIN_PORTS: set[int] = {
 }
 _CRITICAL_RISK_ADMIN_PORTS.update(range(49152, 65536))
 
-_HIGH_RISK_ADMIN_PORTS: set[int] = {22, 23, 234, 3389, 515, 8810, 8811}
+_HIGH_RISK_ADMIN_PORTS: set[int] = {22, 23, 234, 3389, 445, 515, 8810, 8811}
 
 _LOW_RISK_ADMIN_PORTS: set[int] = {25, 465, 587}
 
@@ -71,7 +71,7 @@ DEFAULT_RULES_CONFIG_DATA: MutableMapping[str, Any] = {
     "admin_ports": sorted(_ADMIN_PORTS),
     "critical_risk_admin_ports": sorted(_CRITICAL_RISK_ADMIN_PORTS),
     "high_risk_admin_ports": sorted(_HIGH_RISK_ADMIN_PORTS),
-    "medium_risk_admin_ports": [445],
+    "medium_risk_admin_ports": [],
     "low_risk_admin_ports": sorted(_LOW_RISK_ADMIN_PORTS),
     "broad_cidr_prefix_max": 8,
     "rule_overlap": {
