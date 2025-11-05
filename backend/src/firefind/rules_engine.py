@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+import re   
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -74,6 +75,8 @@ def override_with_risk_rating(rule: Rule, severity: str) -> str:
 
 
 _WEB_PORTS = {80, 443}
+_WEB_INFRA_PORTS = _WEB_PORTS | {53, 88, 123, 389, 464, 636, 1433, 3268, 3269}
+_SMTP_PORTS = {25, 465, 587}
 _SSH_PORTS = {22}
 _RDP_PORTS = {3389}
 
@@ -675,6 +678,24 @@ def classify_admin_port_severity(
     if not exposed_ports:
         return "Low"
 
+    ports = set(exposed_ports)
+
+    if ports == {22, 23}:
+        return "Info"
+
+    ftp_companion_ports = {22, 23, 80, 443}
+    if 21 in ports and len(ports) > 1 and ports - {21} <= ftp_companion_ports:
+        return "Info"
+
+    if ports == {443}:
+        return "Info"
+
+    if ports == {3389}:
+        return "Info"
+
+    if 3389 in ports and len(ports) > 1 and ports <= {3389, 80, 443}:
+        return "Cautionary"
+
     if exposed_ports & critical_risk_ports:
         return "Critical"
 
@@ -756,8 +777,12 @@ def _is_scope_broad(value: str) -> bool:
 def _port_profile(ports: Set[int]) -> str:
     if not ports:
         return "none"
+    if ports <= _SMTP_PORTS:
+        return "smtp"
     if ports <= _WEB_PORTS:
         return "web"
+    if ports <= _WEB_INFRA_PORTS:
+        return "web_infra"
     if ports <= _SSH_PORTS:
         return "ssh"
     if ports <= _RDP_PORTS:
@@ -778,7 +803,11 @@ def _max_admin_port_downgrade(
         # Allow legacy SSH-specific tuning to continue downgrading when
         # organisations categorise SSH as a critical service, but retain a
         # strict floor for other critical protocols (e.g. SMB, NetBIOS).
-        return 4 if profile == "ssh" else 0
+        if profile == "ssh":
+            return 4
+        if profile == "web_infra" and exposed_ports <= _WEB_INFRA_PORTS:
+            return 4
+        return 0
 
     if exposed_ports & high_ports:
         if profile == "ssh":
@@ -803,13 +832,35 @@ def _adjust_admin_port_severity(
     critical_ports: Set[int],
     high_ports: Set[int],
     medium_ports: Set[int],
+    low_ports: Set[int],
 ) -> str:
+    if not exposed_ports:
+        return severity
+
     service_all = is_all_ports(rule.port)
     src_any = is_any(rule.src)
     dst_any = is_any(rule.dst)
     src_broad = _is_scope_broad(rule.src)
     dst_broad = _is_scope_broad(rule.dst)
     profile = _port_profile(exposed_ports)
+
+    if exposed_ports <= low_ports:
+        return "Low"
+
+    if (
+        severity == "Cautionary"
+        and 3389 in exposed_ports
+        and exposed_ports <= {3389, 80, 443}
+    ):
+        return "Cautionary"
+
+    if (
+        not service_all
+        and severity != "Info"
+        and exposed_ports <= _WEB_INFRA_PORTS
+        and not (exposed_ports & high_ports)
+    ):
+        return "Cautionary"
 
     downgrade = 0
 
@@ -821,18 +872,25 @@ def _adjust_admin_port_severity(
         else:
             downgrade = max(downgrade, 1)
     else:
-        if profile == "web":
-            downgrade = max(downgrade, 4)
+        if profile in {"web", "web_infra"}:
+            downgrade = max(downgrade, 3)
         if not src_broad and not dst_broad:
-            if profile in {"ssh", "web"}:
+            if profile in {"ssh", "web", "web_infra"}:
                 downgrade = max(downgrade, 4)
             elif profile == "rdp":
                 downgrade = max(downgrade, 2)
+            elif profile == "smtp":
+                downgrade = max(downgrade, 4)
             else:
                 downgrade = max(downgrade, 2)
 
     if not service_all and (src_broad ^ dst_broad) and not dst_any:
         downgrade = max(downgrade, 1)
+
+    if downgrade:
+        baseline_index = _SEVERITY_INDEX.get(severity, 0)
+        if baseline_index >= _LOWEST_ADMIN_SEVERITY:
+            downgrade = 0
 
     if downgrade:
         allowed = _max_admin_port_downgrade(
@@ -841,7 +899,7 @@ def _adjust_admin_port_severity(
         downgrade = min(downgrade, allowed)
 
     if downgrade:
-        if profile == "web":
+        if profile in {"web", "web_infra"}:
             start = _SEVERITY_INDEX.get(severity, 0)
             web_floor = _SEVERITY_INDEX["Cautionary"]
             target = min(start + downgrade, web_floor)
@@ -1020,29 +1078,21 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
 
         # Admin ports exposure
         ports = set(parse_ports(r.port))
-        if is_all_ports(r.port):
-            ports.update(admin_ports)
-
-        exposed_admin_ports = admin_ports.intersection(ports)
-        if exposed_admin_ports:
-            severity = classify_admin_port_severity(
-                exposed_admin_ports,
-                critical_risk_admin_ports,
-                high_risk_admin_ports,
-                medium_risk_admin_ports,
+        service_label = (r.service or "").strip().lower()
+        service_all_via_name = False
+        port_is_all = is_all_ports(r.port)
+        if not ports and service_label:
+            service_all_via_name = bool(
+                re.search(r"(?<![a-z0-9])all(?![a-z0-9])", service_label)
             )
-            severity = _adjust_admin_port_severity(
-                r,
-                severity,
-                exposed_admin_ports,
-                critical_ports=critical_risk_admin_ports,
-                high_ports=high_risk_admin_ports,
-                medium_ports=medium_risk_admin_ports,
-            )
-            severity = override_with_risk_rating(r, severity)
-            risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
-            risk_code_counter += 1
 
+        handled_wildcard_service = False
+        if port_is_all or service_all_via_name:
+            severity = override_with_risk_rating(r, "High")
+            risk_code = generate_risk_code(
+                "admin_port_exposed", severity, risk_code_counter
+            )
+            risk_code_counter += 1  
             findings.append(
                 Finding(
                     vendor,
@@ -1054,14 +1104,59 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     r.action,
                     finding_type="admin_port_exposed",
                     severity=severity,
-                    rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
+                    rationale="Rule permits administrative service wildcard (ALL services)",
                     risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
-                    tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
+                    tags=merge_tags(
+                        r.tags, ["admin-surface", "admin-port", "all-services"]
+                    ),
                 )
             )
+            handled_wildcard_service = True
 
+        if not handled_wildcard_service:
+            exposed_admin_ports = admin_ports.intersection(ports)
+            if exposed_admin_ports:
+                if exposed_admin_ports == {22, 23}:
+                    continue
+                severity = classify_admin_port_severity(
+                    exposed_admin_ports,
+                    critical_risk_admin_ports,
+                    high_risk_admin_ports,
+                    medium_risk_admin_ports,
+                )
+                severity = _adjust_admin_port_severity(
+                    r,
+                    severity,
+                    exposed_admin_ports,
+                    critical_ports=critical_risk_admin_ports,
+                    high_ports=high_risk_admin_ports,
+                    medium_ports=medium_risk_admin_ports,
+                    low_ports=low_risk_admin_ports,
+                )
+                severity = override_with_risk_rating(r, severity)
+                risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
+                risk_code_counter += 1
+
+                findings.append(
+                    Finding(
+                        vendor,
+                        r.rule_id,
+                        r.src,
+                        r.dst,
+                        r.proto,
+                        r.port,
+                        r.action,
+                        finding_type="admin_port_exposed",
+                        severity=severity,
+                        rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
+                        risk_code=risk_code,
+                        source_file=r.source_file,
+                        risk_rating=r.risk_rating,
+                        tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
+                    )
+                )
         # Broad CIDR (src or dst)
         cidr_messages: List[str] = []
         cidr_severity_rank = 0
