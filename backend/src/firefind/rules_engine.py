@@ -40,6 +40,7 @@ DEFAULT_ADMIN_PORTS = sorted(DEFAULT_RULES_CONFIG.admin_ports)
 _SEVERITY_LADDER = ["Critical", "High", "Medium", "Cautionary", "Low", "Info"]
 _SEVERITY_INDEX = {label: idx for idx, label in enumerate(_SEVERITY_LADDER)}
 _LOWEST_ADMIN_SEVERITY = _SEVERITY_INDEX["Low"]
+_ALL_PORTS_SENTINEL = -1
 
 
 def _canonical_severity_label(value: str) -> str:
@@ -76,6 +77,7 @@ def override_with_risk_rating(rule: Rule, severity: str) -> str:
 
 _WEB_PORTS = {80, 443}
 _WEB_INFRA_PORTS = _WEB_PORTS | {53, 88, 123, 389, 464, 636, 1433, 3268, 3269}
+_INFO_ONLY_ADMIN_PORTS = _WEB_INFRA_PORTS | {1434}
 _SMTP_PORTS = {25, 465, 587}
 _SSH_PORTS = {22}
 _RDP_PORTS = {3389}
@@ -283,17 +285,27 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
 
 
 def parse_ports(port_str: str) -> List[int]:
+    if is_all_ports(port_str):
+        return [_ALL_PORTS_SENTINEL]
+
     s = (port_str or "").lower().replace("tcp/", "").replace("udp/", "").strip()
     # treat "any" as "unspecified" (empty list), not all ports
     if s in ("", "any", "*"):
         return []
+
+    if s in {"0", "ip/0"}:
+        return [_ALL_PORTS_SENTINEL]
+
     parts = [p.strip() for p in s.split(",") if p.strip()]
     out: List[int] = []
     for p in parts:
+        if p in {"0", "ip/0"}:
+            return [_ALL_PORTS_SENTINEL]
         if "-" in p:
             a, b = p.split("-", 1)
             try:
-                a_i, b_i = int(a), int(b)
+                a_i = int(a)
+                b_i = int(b)
                 out.extend(range(a_i, b_i + 1))
             except ValueError:
                 continue
@@ -302,7 +314,10 @@ def parse_ports(port_str: str) -> List[int]:
                 out.append(int(p))
             except ValueError:
                 continue
-    return sorted({x for x in out if 1 <= x <= 65535})
+    filtered = {x for x in out if 1 <= x <= 65535}
+    if filtered:
+        return sorted(filtered)
+    return []
 
 
 def is_any(value: str) -> bool:
@@ -310,9 +325,18 @@ def is_any(value: str) -> bool:
     return v in {"any", "all", "*", "0.0.0.0/0", "::/0"}
 
 
+_ALL_PORT_LABEL_RE = re.compile(r"^(?:tcp|udp|ip)\s*/\s*0$")
+
+
 def is_all_ports(value: str) -> bool:
     v = (value or "").strip().lower()
-    return v in {"all", "all_services", "all_tcp", "all_udp"}
+    if not v:
+        return False
+    if v in {"all", "all_services", "all_tcp", "all_udp", "0"}:
+        return True
+    if _ALL_PORT_LABEL_RE.match(v):
+        return True
+    return False
 
 
 def is_broad_cidr(value: str, max_prefixlen: int) -> bool:
@@ -354,6 +378,16 @@ def _ports_cover(covering: str, target: str) -> bool:
 
     covering_ports = set(parse_ports(covering))
     target_ports = set(parse_ports(target))
+    covering_all = _ALL_PORTS_SENTINEL in covering_ports
+    target_all = _ALL_PORTS_SENTINEL in target_ports
+    covering_ports.discard(_ALL_PORTS_SENTINEL)
+    target_ports.discard(_ALL_PORTS_SENTINEL)
+
+    if covering_all and not target_all:
+        return True
+
+    if target_all and not covering_all:
+        return False
 
     if covering_ports and target_ports:
         return target_ports.issubset(covering_ports)
@@ -406,6 +440,12 @@ def _describe_port_overlap(covering: str, target: str) -> Optional[str]:
         return f"ports {target or 'any'} are included in all-ports rule"
     covering_ports = set(parse_ports(covering))
     target_ports = set(parse_ports(target))
+    covering_all = _ALL_PORTS_SENTINEL in covering_ports
+    target_all = _ALL_PORTS_SENTINEL in target_ports
+    covering_ports.discard(_ALL_PORTS_SENTINEL)
+    target_ports.discard(_ALL_PORTS_SENTINEL)
+    if covering_all and not target_all:
+        return f"ports {target or 'any'} are included in all-ports rule"
     if covering_ports and target_ports and covering_ports != target_ports:
         return f"ports {sorted(target_ports)} are covered by {sorted(covering_ports)}"
     return None
@@ -690,6 +730,16 @@ def classify_admin_port_severity(
     if ports == {80, 443}:
         return "Cautionary"
 
+    if len(ports) == 1:
+        single_port = next(iter(ports))
+        if (
+            single_port in _INFO_ONLY_ADMIN_PORTS
+            and single_port not in critical_risk_ports
+            and single_port not in high_risk_ports
+            and single_port not in medium_risk_ports
+        ):
+            return "Info"
+
     if ports == {443}:
         return "Info"
 
@@ -838,6 +888,14 @@ def _adjust_admin_port_severity(
     if not exposed_ports:
         return severity
 
+    baseline_index = _SEVERITY_INDEX.get(severity, _LOWEST_ADMIN_SEVERITY)
+
+    def _respect_floor(candidate: str) -> str:
+        candidate_index = _SEVERITY_INDEX.get(candidate, _LOWEST_ADMIN_SEVERITY)
+        if candidate_index < baseline_index:
+            return severity
+        return candidate
+
     service_all = is_all_ports(rule.port)
     src_any = is_any(rule.src)
     dst_any = is_any(rule.dst)
@@ -846,14 +904,14 @@ def _adjust_admin_port_severity(
     profile = _port_profile(exposed_ports)
 
     if exposed_ports <= low_ports:
-        return "Low"
+        return _respect_floor("Low")
 
     if (
         severity == "Cautionary"
         and 3389 in exposed_ports
         and exposed_ports <= {3389, 80, 443}
     ):
-        return "Cautionary"
+        return _respect_floor("Cautionary")
 
     if (
         not service_all
@@ -862,7 +920,7 @@ def _adjust_admin_port_severity(
         and not (exposed_ports & high_ports)
         and not (exposed_ports & critical_ports)
     ):
-        return "Cautionary"
+        return _respect_floor("Cautionary")
 
     downgrade = 0
 
@@ -1089,10 +1147,14 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             )
 
         # Admin ports exposure
-        ports = set(parse_ports(r.port))
+        parsed_ports = set(parse_ports(r.port))
+        parsed_all = _ALL_PORTS_SENTINEL in parsed_ports
+        if parsed_all:
+            parsed_ports.discard(_ALL_PORTS_SENTINEL)
+        ports = parsed_ports
         service_label = (r.service or "").strip().lower()
         service_all_via_name = False
-        port_is_all = is_all_ports(r.port)
+        port_is_all = is_all_ports(r.port) or parsed_all
         if not ports and service_label:
             service_all_via_name = bool(
                 re.search(
