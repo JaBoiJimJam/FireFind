@@ -7,6 +7,7 @@ sys.path.append(str(BACKEND_DIR / "src"))
 from firefind.model import Finding, Rule
 from firefind.rules_engine import (
     ANALYZER_INVENTORY,
+    _adjust_admin_port_severity,
     classify_admin_port_severity,
     generate_risk_code,
     parse_ports,
@@ -227,6 +228,40 @@ def test_critical_web_infra_port_remains_critical():
         f.severity for f in findings if f.finding_type == "admin_port_exposed"
     ]
     assert severities == ["Critical"]
+
+
+def test_web_infra_critical_scope_downgrade_blocked():
+    rule = Rule(
+        "kerberos-admin",
+        "10.0.0.10",
+        "10.0.0.11",
+        "tcp",
+        "464",
+        "allow",
+        source_file="test.conf",
+    )
+
+    downgraded = _adjust_admin_port_severity(
+        rule,
+        "Critical",
+        {464},
+        critical_ports=set(),
+        high_ports=set(),
+        medium_ports=set(),
+        low_ports=set(),
+    )
+    assert downgraded == "Cautionary"
+
+    severity = _adjust_admin_port_severity(
+        rule,
+        "Critical",
+        {464},
+        critical_ports={464},
+        high_ports=set(),
+        medium_ports=set(),
+        low_ports=set(),
+    )
+    assert severity == "Critical"
 
 
 def test_mixed_critical_ports_stay_critical():
