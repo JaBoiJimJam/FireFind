@@ -7,6 +7,7 @@ sys.path.append(str(BACKEND_DIR / "src"))
 from firefind.model import Finding, Rule
 from firefind.rules_engine import (
     ANALYZER_INVENTORY,
+    classify_admin_port_severity,
     generate_risk_code,
     parse_ports,
     run_checks,
@@ -131,6 +132,23 @@ def test_admin_port_risk_rating_varies_with_port():
     assert ratings["2"] == "Cautionary"
     assert ratings["3"] == "Low"
     assert ratings["4"] == "Low"
+
+
+def test_classify_admin_port_severity_rdp_alone_high():
+    severity = classify_admin_port_severity({3389}, {22}, {3389}, set())
+    assert severity == "High"
+
+
+def test_classify_admin_port_severity_http_https_pair_cautionary():
+    severity = classify_admin_port_severity({80, 443}, set(), set(), set())
+    assert severity == "Cautionary"
+
+
+def test_classify_admin_port_severity_rdp_web_combos_cautionary():
+    high_risk_ports = {3389}
+    for ports in ({3389, 80}, {3389, 443}, {3389, 80, 443}):
+        severity = classify_admin_port_severity(ports, set(), high_risk_ports, set())
+        assert severity == "Cautionary"
 
 
 def test_mixed_critical_ports_stay_critical():

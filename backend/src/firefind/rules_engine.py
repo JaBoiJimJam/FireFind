@@ -687,11 +687,14 @@ def classify_admin_port_severity(
     if 21 in ports and len(ports) > 1 and ports - {21} <= ftp_companion_ports:
         return "Info"
 
+    if ports == {80, 443}:
+        return "Cautionary"
+
     if ports == {443}:
         return "Info"
 
     if ports == {3389}:
-        return "Info"
+        return "High"
 
     if 3389 in ports and len(ports) > 1 and ports <= {3389, 80, 443}:
         return "Cautionary"
