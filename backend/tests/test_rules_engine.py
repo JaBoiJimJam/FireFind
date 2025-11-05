@@ -4,11 +4,14 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
+import pytest
+
 from firefind.model import Finding, Rule
 from firefind.rules_engine import (
     ANALYZER_INVENTORY,
     _adjust_admin_port_severity,
     classify_admin_port_severity,
+    is_all_ports,
     generate_risk_code,
     parse_ports,
     run_checks,
@@ -26,6 +29,20 @@ def test_parse_ports_range():
 
 def test_parse_ports_malformed():
     assert parse_ports("abc") == []
+
+
+def test_parse_ports_all_tokens():
+    tcp_zero = parse_ports("tcp/0")
+    udp_zero = parse_ports("udp/0")
+    bare_zero = parse_ports("0")
+
+    assert tcp_zero
+    assert tcp_zero == udp_zero == bare_zero
+
+
+@pytest.mark.parametrize("value", ["0", "tcp/0", "udp/0", "IP/0"])
+def test_is_all_ports_extended_tokens(value):
+    assert is_all_ports(value)
 
 
 def test_generate_risk_code_info_prefix():
@@ -98,6 +115,82 @@ def test_run_checks_admin_port_wildcard_service_name():
         assert matching[0].severity == "High"
 
 
+@pytest.mark.parametrize("port_value", ["0", "tcp/0", "udp/0", "IP/0"])
+def test_admin_port_wildcard_tokens_escalate(port_value):
+    rule = Rule(
+        f"all-{port_value}",
+        "0.0.0.0/0",
+        "10.0.0.10",
+        "any",
+        port_value,
+        "allow",
+        source_file="test.conf",
+    )
+
+    findings = run_checks("vendor", [rule], {"admin_ports": [22]})
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities
+    assert all(sev in {"High", "Critical"} for sev in severities)
+
+
+@pytest.mark.parametrize(
+    "port_value",
+    ["80", "53", "88", "123", "389", "464", "636", "1433", "3268", "3269", "1434"],
+)
+def test_single_web_infra_admin_port_info(port_value):
+    rule = Rule(
+        f"info-{port_value}",
+        "10.0.0.0/24",
+        "10.0.0.10",
+        "tcp",
+        port_value,
+        "allow",
+        source_file="test.conf",
+    )
+
+    cfg = {
+        "admin_ports": [int(port_value)],
+        "critical_risk_admin_ports": [9999],
+        "high_risk_admin_ports": [9998],
+        "medium_risk_admin_ports": [9997],
+        "low_risk_admin_ports": [9996],
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities == ["Info"]
+
+
+def test_single_web_port_with_high_risk_companion_not_info():
+    rule = Rule(
+        "combo",
+        "10.0.0.0/24",
+        "10.0.0.10",
+        "tcp",
+        "80,22",
+        "allow",
+        source_file="test.conf",
+    )
+
+    cfg = {
+        "admin_ports": [22, 80],
+        "critical_risk_admin_ports": [22],
+        "high_risk_admin_ports": [22],
+        "medium_risk_admin_ports": [],
+        "low_risk_admin_ports": [],
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    severities = [
+        f.severity for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+    assert severities and severities[0] != "Info"
+
+
 def test_admin_port_risk_rating_varies_with_port():
     rule_critical = Rule(
         "1",
@@ -165,6 +258,12 @@ def test_classify_admin_port_severity_http_https_pair_cautionary():
     assert severity == "Cautionary"
 
 
+@pytest.mark.parametrize("port", [80, 53, 88, 123, 389, 464, 636, 1433, 3268, 3269, 1434])
+def test_classify_admin_port_severity_single_web_info(port):
+    severity = classify_admin_port_severity({port}, set(), set(), set())
+    assert severity == "Info"
+
+
 def test_classify_admin_port_severity_rdp_web_combos_cautionary():
     high_risk_ports = {3389}
     for ports in ({3389, 80}, {3389, 443}, {3389, 80, 443}):
@@ -196,6 +295,29 @@ def test_scoped_ssh_admin_port_does_not_drop_below_medium():
         f.severity for f in findings if f.finding_type == "admin_port_exposed"
     ]
     assert severities == ["Medium"]
+
+
+def test_adjust_admin_port_severity_respects_info_floor():
+    rule = Rule(
+        "info-floor",
+        "10.0.0.0/24",
+        "10.0.0.10",
+        "tcp",
+        "80",
+        "allow",
+    )
+
+    result = _adjust_admin_port_severity(
+        rule,
+        "Info",
+        {80},
+        critical_ports=set(),
+        high_ports=set(),
+        medium_ports=set(),
+        low_ports=set(),
+    )
+
+    assert result == "Info"
 
 
 def test_scoped_rdp_admin_port_remains_high():
