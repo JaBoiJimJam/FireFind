@@ -1095,7 +1095,10 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
         port_is_all = is_all_ports(r.port)
         if not ports and service_label:
             service_all_via_name = bool(
-                re.search(r"(?<![a-z0-9])all(?![a-z0-9])", service_label)
+                re.search(
+                    r"(?<![a-z0-9])(?:all|any)(?:\s*[-_]*\s*services?)?(?![a-z0-9])",
+                    service_label,
+                )
             )
 
         handled_wildcard_service = False

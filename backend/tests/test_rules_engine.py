@@ -78,6 +78,26 @@ def test_run_checks_admin_port_exposure():
     assert any(f.finding_type == "admin_port_exposed" for f in findings)
 
 
+def test_run_checks_admin_port_wildcard_service_name():
+    for service_label in ("Any", "Any Service"):
+        rule = Rule(
+            f"wild-{service_label.lower().replace(' ', '-')}",
+            "1.1.1.1",
+            "2.2.2.2",
+            "any",
+            "",
+            "allow",
+            service=service_label,
+            risk_rating="High",
+        )
+
+        findings = run_checks("v", [rule], {})
+        matching = [f for f in findings if f.finding_type == "admin_port_exposed"]
+
+        assert matching, f"Expected admin_port_exposed finding for {service_label}"
+        assert matching[0].severity == "High"
+
+
 def test_admin_port_risk_rating_varies_with_port():
     rule_critical = Rule(
         "1",
