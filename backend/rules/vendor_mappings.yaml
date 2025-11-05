@@ -13,3 +13,17 @@ generic:
   service: ["Service", "service"]
   srcintf: ["Srcintf", "Source Interface", "src_interface", "srcintf"]
   dstintf: ["Dstintf", "Destination Interface", "dst_interface", "dstintf"]
+  hit_count: ["Hit Count", "Hits", "Log Count", "HitCount"]
+  byte_count: ["Bytes", "Byte Count", "Traffic (Bytes)", "ByteCount"]
+  enabled: ["Enabled", "State", "Status", "Active", "Rule Status"]
+  risk_rating: ["Risk Feedback", "Risk Rating", "Risk"]
+  tags:
+    columns:
+      - ["Functional Category", "Function", "Category"]
+      - ["Tags", "Tag"]
+    separators: [",", ";", "|"]
+    defaults: ["firewall-rule"]
+    mapping:
+      remote access: ["remote-access"]
+      vpn: ["remote-access", "vpn"]
+      web management: ["web-management"]

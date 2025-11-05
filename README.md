@@ -36,20 +36,50 @@ cd backend && python run_backend.py
 Or invoke the CLI directly:
 
 ```bash
-python -m firefind.cli --vendor generic --input samples \
-  --out-csv ../out/findings.csv --out-pdf ../out/report.pdf \
-  --rules ../rules/rules.yaml --mappings ../rules/vendor_mappings.yaml
+python -m firefind.cli --vendor generic --input "samples" \
+  --out-csv "../out/findings.csv" --out-pdf "../out/report.pdf" \
+  --rules "../rules/rules.yaml" --mappings "../rules/vendor_mappings.yaml"
 ```
 
-The `--input` flag accepts individual files or directories containing CSV or XLSX
+Always wrap CLI paths in quotes—especially when working with directories or
+filenames that contain spaces, parentheses, or other special characters. The
+`--input` flag accepts individual files or directories containing CSV or XLSX
 exports. File extensions are matched case-insensitively, so variants such as
-`.CSV` or `.XLSX` are processed without additional configuration.
+`.CSV` or `.XLSX` are processed without additional configuration. When
+generating reports, choose unique output filenames because the CLI will
+overwrite existing files.
 
 To view the current application version:
 
 ```bash
 python -m firefind.cli --version
 ```
+
+### Scan history and trends
+
+FireFind can maintain an append-only log of scan summaries for historical
+reporting. The FastAPI service persists each `/api/scan` request to a JSONL file
+(`data/scan_history.jsonl` by default) or to an SQLite database when the path
+ends in `.db`, `.sqlite`, or `.sqlite3`. Set `FIRE_FIND_SCAN_HISTORY` to override
+the location. Rotate the log by truncating or archiving the file during
+maintenance windows—the store is append-only and will recreate the file when
+missing.
+
+- The CLI can append metrics after every run with
+  `--trend-log /path/to/scan_history.jsonl`. The same path format rules apply as
+  the API store, so pointing to a `.sqlite` file enables automatic table
+  creation.
+- The backend exposes two endpoints for dashboards:
+  - `GET /api/scans/history` returns the persisted records with optional
+    `limit`/`vendor` filters.
+  - `GET /api/scans/trends` computes rolling averages, score deltas, and vendor
+    summaries. Use the `window` query parameter to adjust the rolling window
+    length.
+
+For long-term retention consider periodically compressing archived JSONL files
+or running `VACUUM` against SQLite logs. Both storage formats can be safely
+rotated while the service is offline; new scans will recreate the log on the
+next request.
 
 ### Integrated development server
 For a combined frontend and API during development, run:

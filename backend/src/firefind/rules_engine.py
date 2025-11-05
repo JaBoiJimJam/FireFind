@@ -16,6 +16,7 @@ from typing import (
 
 from .config import DEFAULT_RULES_CONFIG, RulesConfig, CIDRLimitPolicy
 from .model import Rule, Finding
+from .utils import merge_tags, normalize_risk_rating
 
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,39 @@ DEFAULT_ADMIN_PORTS = sorted(DEFAULT_RULES_CONFIG.admin_ports)
 _SEVERITY_LADDER = ["Critical", "High", "Medium", "Cautionary", "Low", "Info"]
 _SEVERITY_INDEX = {label: idx for idx, label in enumerate(_SEVERITY_LADDER)}
 _LOWEST_ADMIN_SEVERITY = _SEVERITY_INDEX["Low"]
+
+
+def _canonical_severity_label(value: str) -> str:
+    """Normalise a severity string to the engine's display vocabulary."""
+
+    mapping = {
+        "critical": "Critical",
+        "high": "High",
+        "medium": "Medium",
+        "cautionary": "Cautionary",
+        "low": "Low",
+        "info": "Info",
+        "informational": "Info",
+    }
+    lowered = (value or "").strip().lower()
+    if not lowered:
+        return "Info"
+    return mapping.get(lowered, value.title() or "Info")
+
+
+def override_with_risk_rating(rule: Rule, severity: str) -> str:
+    """Prefer a rule's explicit risk rating when present."""
+    
+    rating_raw = getattr(rule, "risk_rating", "")
+    if not rating_raw:
+        return severity
+
+    rating = normalize_risk_rating(rating_raw)
+    if not rating:
+        return severity
+
+    return _canonical_severity_label(rating)
+
 
 _WEB_PORTS = {80, 443}
 _SSH_PORTS = {22}
@@ -235,6 +269,11 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
     "rule_overlap": {
         "risk_levels": [],
         "network_scope": ["rule_overlap"],
+        "port_lists": [],
+    },
+    "unused_rule": {
+        "risk_levels": [],
+        "network_scope": [],
         "port_lists": [],
     },
 }
@@ -460,6 +499,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
 
             if _actions_conflict(covering.action, candidate.action):
                 severity = _resolve_overlap_severity(settings.shadowed_severity, "Medium")
+                severity = override_with_risk_rating(candidate, severity)
                 rationale_bits = [
                     (
                         f"Rule {candidate.rule_id} is shadowed by earlier rule "
@@ -482,6 +522,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                         rationale=" ".join(rationale_bits),
                         source_file=candidate.source_file,
                         risk_rating=candidate.risk_rating,
+                        tags=merge_tags(candidate.tags, ["rule-overlap", "shadowed"]),
                     )
                 )
                 break
@@ -492,6 +533,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                 continue
 
             severity = _resolve_overlap_severity(settings.redundant_severity, "Low")
+            severity = override_with_risk_rating(candidate, severity)
             rationale_bits = [
                 f"Rule {candidate.rule_id} is redundant because earlier rule {covering.rule_id} already applies."
             ]
@@ -511,6 +553,7 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
                     rationale=" ".join(rationale_bits),
                     source_file=candidate.source_file,
                     risk_rating=candidate.risk_rating,
+                    tags=merge_tags(candidate.tags, ["rule-overlap", "redundant"]),
                 )
             )
             break
@@ -522,16 +565,20 @@ def _analyze_rule_overlap(rules: List[Rule], cfg: RulesConfig, vendor: str) -> L
 
 
 def generate_risk_code(finding_type: str, severity: str, index: int) -> str:
-    """Generate a risk code in the format FR-[SEVERITY]-[NUMBER]"""
-    severity_short = {
-        'Critical': 'CRGEN',
-        'High': 'HIGEN',
-        'Medium': 'MEDGEN',
-        'Cautionary': 'CAUGEN',
-        'Low': 'LOWGEN'
-    }.get(severity, 'GEN')
+    """Generate a risk code in the format ``FR-[TYPE]-[SEVERITY]-[NUMBER]``."""
 
-    return f"FR-{severity_short}-{index:03d}"
+    severity_short = {
+        "Critical": "CRGEN",
+        "High": "HIGEN",
+        "Medium": "MEDGEN",
+        "Cautionary": "CAUGEN",
+        "Low": "LOWGEN",
+        "Info": "INFGEN",  # Give informational findings a dedicated prefix
+    }.get(severity, "GEN")
+
+    type_prefix = (finding_type or "generic").strip().lower().replace(" ", "_")
+
+    return f"FR-{type_prefix}-{severity_short}-{index:03d}"
 
 
 def _deep_merge_dicts(
@@ -597,6 +644,12 @@ def _log_active_thresholds(cfg: RulesConfig, *, vendor: str) -> None:
             "max_rule_pairs": int(cfg.rule_overlap.max_rule_pairs),
             "redundant_severity": cfg.rule_overlap.redundant_severity.value,
             "shadowed_severity": cfg.rule_overlap.shadowed_severity.value,
+        },
+        "unused_rule": {
+            "hit_count_threshold": int(cfg.unused_rule.hit_count_threshold),
+            "include_disabled": bool(cfg.unused_rule.include_disabled),
+            "hit_count_severity": cfg.unused_rule.hit_count_severity.value,
+            "disabled_severity": cfg.unused_rule.disabled_severity.value,
         },
     }
 
@@ -804,6 +857,12 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     rules_cfg = _coerce_rules_config(cfg)
     rules_list = list(rules)
 
+    unused_cfg = rules_cfg.unused_rule
+    hit_threshold = max(0, int(unused_cfg.hit_count_threshold))
+    include_disabled = bool(unused_cfg.include_disabled)
+    hit_severity = _canonical_severity_label(unused_cfg.hit_count_severity.value)
+    disabled_severity = _canonical_severity_label(unused_cfg.disabled_severity.value)
+
     critical_risk_admin_ports = set(rules_cfg.critical_risk_admin_ports)
     if not critical_risk_admin_ports:
         critical_risk_admin_ports = set(DEFAULT_CRITICAL_RISK_ADMIN_PORTS)
@@ -847,12 +906,40 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     risk_code_counter = 1
 
     for r in rules_list:
+        normalized_risk_rating = normalize_risk_rating(getattr(r, "risk_rating", ""))
+        rating_known = bool(normalized_risk_rating) and (
+            normalized_risk_rating in _SEVERITY_INDEX
+        )
+        if not rating_known:
+            has_source_file = bool(str(getattr(r, "source_file", "")).strip())
+            if not has_source_file:
+                logger.debug(
+                    "Skipping analyzers for rule without normalised risk rating",
+                    extra={
+                        "rule_id": getattr(r, "rule_id", ""),
+                        "raw_risk_rating": getattr(r, "risk_rating", ""),
+                    },
+                )
+                continue
+
+            logger.debug(
+                "Proceeding with analyzers despite missing normalised risk rating",
+                extra={
+                    "rule_id": getattr(r, "rule_id", ""),
+                    "raw_risk_rating": getattr(r, "risk_rating", ""),
+                    "source_file": getattr(r, "source_file", ""),
+                },
+            )
+
         # Allow-any
         if (
             action_allows_traffic(r.action)
             and (is_any(r.src) or is_broad_cidr(r.src, 0))
             and (is_any(r.dst) or is_broad_cidr(r.dst, 0))
         ):
+            severity = override_with_risk_rating(r, "High")
+            risk_code = generate_risk_code("allow_any", severity, risk_code_counter)
+            risk_code_counter += 1
             findings.append(
                 Finding(
                     vendor,
@@ -863,10 +950,71 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     r.port,
                     r.action,
                     finding_type="allow_any",
-                    severity="High",
+                    severity=severity,
                     rationale="Rule allows any-to-any access",
+                    risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["any-to-any", "excessive-access"]),
+                )
+            )
+
+        # Unused/disabled rule detection
+        unused_reasons: List[str] = []
+        unused_tags = ["unused-rule"]
+        unused_severity = ""
+        severity_rank = len(_SEVERITY_LADDER)
+
+        if r.hit_count is not None and r.hit_count <= hit_threshold:
+            threshold_clause = (
+                f" (threshold ≤ {hit_threshold})" if hit_threshold else ""
+            )
+            volume_clause = (
+                f" with {r.byte_count} byte(s) logged" if r.byte_count is not None else ""
+            )
+            unused_reasons.append(
+                f"Rule has {r.hit_count} recorded hit(s){volume_clause}{threshold_clause}"
+            )
+            unused_tags.append("zero-hit")
+            candidate_rank = _SEVERITY_INDEX.get(hit_severity, len(_SEVERITY_LADDER))
+            if candidate_rank < severity_rank:
+                severity_rank = candidate_rank
+                unused_severity = hit_severity
+
+        if include_disabled and r.enabled is not None and not r.enabled:
+            unused_reasons.append("Rule is disabled in the firewall configuration")
+            unused_tags.append("disabled-rule")
+            candidate_rank = _SEVERITY_INDEX.get(disabled_severity, len(_SEVERITY_LADDER))
+            if candidate_rank < severity_rank:
+                severity_rank = candidate_rank
+                unused_severity = disabled_severity
+
+        if unused_reasons:
+            if not unused_severity:
+                unused_severity = "Low"
+            unused_severity = override_with_risk_rating(r, unused_severity)
+            risk_code = generate_risk_code("unused_rule", unused_severity, risk_code_counter)
+            risk_code_counter += 1
+
+            findings.append(
+                Finding(
+                    vendor,
+                    r.rule_id,
+                    r.src,
+                    r.dst,
+                    r.proto,
+                    r.port,
+                    r.action,
+                    finding_type="unused_rule",
+                    severity=unused_severity,
+                    rationale="; ".join(unused_reasons),
+                    risk_code=risk_code,
+                    source_file=r.source_file,
+                    risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, unused_tags),
+                    hit_count=r.hit_count,
+                    byte_count=r.byte_count,
+                    rule_enabled=r.enabled,
                 )
             )
 
@@ -891,6 +1039,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 high_ports=high_risk_admin_ports,
                 medium_ports=medium_risk_admin_ports,
             )
+            severity = override_with_risk_rating(r, severity)
             risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
             risk_code_counter += 1
 
@@ -909,6 +1058,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
                 )
             )
 
@@ -938,6 +1088,9 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
 
         if cidr_messages:
             cidr_severity = "High" if cidr_severity_rank == 2 else "Medium"
+            cidr_severity = override_with_risk_rating(r, cidr_severity)
+            risk_code = generate_risk_code("broad_cidr", cidr_severity, risk_code_counter)
+            risk_code_counter += 1
             findings.append(
                 Finding(
                     vendor,
@@ -950,13 +1103,16 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     finding_type="broad_cidr",
                     severity=cidr_severity,
                     rationale="; ".join(cidr_messages),
+                    risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["broad-scope", "cidr-policy"]),
                 )
             )
 
         if action_allows_traffic(r.action) and is_all_ports(r.port):
             severity = "High" if looks_internet_facing(r.dst_interface) else "Medium"
+            severity = override_with_risk_rating(r, severity)
             rationale_bits = [
                 "Service column permits all ports",
             ]
@@ -965,6 +1121,10 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             if is_any(r.src) and is_any(r.dst):
                 rationale_bits.append("rule is scoped to all sources and destinations")
 
+            risk_code = generate_risk_code(
+                "all_ports_service", severity, risk_code_counter
+            )
+            risk_code_counter += 1
             findings.append(
                 Finding(
                     vendor,
@@ -977,8 +1137,10 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     finding_type="all_ports_service",
                     severity=severity,
                     rationale="; ".join(rationale_bits),
+                    risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
+                    tags=merge_tags(r.tags, ["all-ports", "service-any"]),
                 )
             )
 

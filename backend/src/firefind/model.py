@@ -15,6 +15,10 @@ class Rule:
     service: str = ""
     source_file: str = ""
     risk_rating: str = ""
+    tags: Tuple[str, ...] = field(default_factory=tuple)
+    hit_count: Optional[int] = None
+    byte_count: Optional[int] = None
+    enabled: Optional[bool] = None
 
 @dataclass
 class Finding:
@@ -32,3 +36,7 @@ class Finding:
     source_file: str = ""
     contributing_severities: Tuple[str, ...] = field(default_factory=tuple)
     risk_rating: str = ""
+    tags: Tuple[str, ...] = field(default_factory=tuple)
+    hit_count: Optional[int] = None
+    byte_count: Optional[int] = None
+    rule_enabled: Optional[bool] = None

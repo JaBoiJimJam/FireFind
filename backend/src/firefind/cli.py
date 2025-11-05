@@ -1,14 +1,17 @@
 # backend/src/firefind/cli.py
 
 import os
+from collections import Counter
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import typer
 
 from . import __version__
 
+from .history import ScanHistoryStore
 from .loaders.csv_xlsx_loader import load_table
+from .metrics import build_metrics
 from .model import Finding
 from .reporters.csv_report import write_findings_csv
 from .reporters.pdf_report import generate_pdf
@@ -62,9 +65,18 @@ def main(
         is_eager=True,
         help="Show the application's version and exit",
     ),
+    trend_log: Optional[Path] = typer.Option(
+        None,
+        "--trend-log",
+        help=(
+            "Append scan metrics to the provided JSONL/SQLite log for trend analysis. "
+            "When omitted, no history is recorded."
+        ),
+        metavar="PATH",
+    ),
 ):
     """FireFind command line interface."""
-    parse(input, vendor, out_csv, out_pdf, rules, mappings)
+    parse(input, vendor, out_csv, out_pdf, rules, mappings, trend_log)
 
 def save_csv(findings: List[Finding], path: Path) -> None:
     p = Path(path)
@@ -83,6 +95,7 @@ def parse(
     out_pdf: str,
     rules: str,
     mappings: str,
+    trend_log: Optional[Path] = None,
 ):
     """Main entrypoint for FireFind CLI."""
 
@@ -122,11 +135,40 @@ def parse(
         mappings_path=Path(mappings),
     )
     findings_unique = analysis.findings
+    metrics = build_metrics(analysis)
+    if analysis.rejections:
+        typer.echo(
+            f"Rejected {len(analysis.rejections)} row(s) due to validation errors"
+        )
+        counts = Counter(
+            issue.code
+            for rejection in analysis.rejections
+            for issue in rejection.issues
+        )
+        for code, count in sorted(counts.items()):
+            typer.echo(f"  {code}: {count}")
+    else:
+        typer.echo("Rejected rows → 0")
+
+    tag_set = {tag for finding in findings_unique for tag in getattr(finding, "tags", ()) if tag}
+    if tag_set:
+        typer.echo(f"Observed tags → {', '.join(sorted(tag_set))}")
+    else:
+        typer.echo("Observed tags → (none)")
 
     save_csv(findings_unique, Path(out_csv))
     typer.echo(f"Saved CSV → {out_csv}")
     save_pdf(findings_unique, Path(out_pdf))
     typer.echo(f"Saved PDF → {out_pdf}")
+
+    if trend_log:
+        store = ScanHistoryStore(path=trend_log)
+        store.record_scan(
+            vendor=vendor,
+            metrics=metrics,
+            metadata={"source": "cli", "input": str(input_path)},
+        )
+        typer.echo(f"Logged trend metrics → {trend_log}")
 
 if __name__ == "__main__":
     app()

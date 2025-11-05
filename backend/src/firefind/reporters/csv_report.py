@@ -9,9 +9,10 @@ def write_findings_csv(path: str, findings: List[Finding]) -> None:
         writer = csv.writer(f)
         writer.writerow([
             'vendor', 'rule_id', 'src', 'dst', 'proto', 'port', 'action',
-            'finding_type', 'severity', 'risk_code', 'rationale'
+            'finding_type', 'severity', 'risk_code', 'hit_count', 'byte_count',
+            'rule_enabled', 'rationale', 'tags'
         ])
-        
+
         for finding in findings:
             writer.writerow([
                 finding.vendor,
@@ -24,5 +25,9 @@ def write_findings_csv(path: str, findings: List[Finding]) -> None:
                 finding.finding_type,
                 finding.severity,
                 finding.risk_code,
-                finding.rationale
+                "" if finding.hit_count is None else finding.hit_count,
+                "" if finding.byte_count is None else finding.byte_count,
+                "" if finding.rule_enabled is None else str(finding.rule_enabled).lower(),
+                finding.rationale,
+                ";".join(finding.tags)
             ])

@@ -152,7 +152,7 @@
         <section class="results-section" id="results">
             <div class="results-header">
                 <h2>Analysis Complete</h2>
-                <p style="color: var(--text-muted);">Critical vulnerabilities detected - Immediate action required</p>
+                <p class="results-subtitle">Critical vulnerabilities detected - Immediate action required</p>
             </div>
 
             <div class="metrics-grid">
@@ -174,22 +174,168 @@
                 </div>
             </div>
 
+            <div class="results-toolbar">
+                <div class="filters">
+                    <div class="filter-group">
+                        <label for="searchFilter">Search Findings</label>
+                        <div class="filter-input">
+                            <i class="fas fa-search"></i>
+                            <input type="search" id="searchFilter" placeholder="Search by description, rationale, or asset" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <label for="severityFilter">Severity</label>
+                        <select id="severityFilter">
+                            <option value="all" selected>All severities</option>
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                            <option value="info">Informational</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="ruleFilter">Rule</label>
+                        <select id="ruleFilter">
+                            <option value="all" selected>All rules</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="tagFilter">Tags</label>
+                        <select id="tagFilter" multiple aria-describedby="tagFilterHint">
+                        </select>
+                        <small id="tagFilterHint">Select one or more tags to refine results</small>
+                    </div>
+                </div>
+                <div class="toolbar-actions">
+                    <button class="btn btn-secondary" id="resetFilters" type="button">Reset filters</button>
+                </div>
+            </div>
+
+            <div class="results-table-card">
+                <div class="table-header">
+                    <div class="table-summary" id="findingsSummary">No findings yet</div>
+                    <div class="table-actions">
+                        <button class="btn btn-tertiary" id="downloadFilteredCsv" type="button" disabled data-state="disabled">
+                            <i class="fas fa-download"></i>
+                            <span>Download filtered CSV</span>
+                        </button>
+                        <button class="btn btn-tertiary" id="downloadFilteredJson" type="button" disabled data-state="disabled">
+                            <i class="fas fa-file-code"></i>
+                            <span>Download filtered JSON</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="findings-table" id="findingsTable" aria-live="polite">
+                        <thead>
+                            <tr>
+                                <th>
+                                    <button type="button" class="sort-button" data-sort="severity">
+                                        Severity
+                                        <span class="sort-indicator" data-sort-indicator="severity"></span>
+                                    </button>
+                                </th>
+                                <th>
+                                    <button type="button" class="sort-button" data-sort="rule_id">
+                                        Rule
+                                        <span class="sort-indicator" data-sort-indicator="rule_id"></span>
+                                    </button>
+                                </th>
+                                <th>
+                                    <button type="button" class="sort-button" data-sort="description">
+                                        Description
+                                        <span class="sort-indicator" data-sort-indicator="description"></span>
+                                    </button>
+                                </th>
+                                <th>
+                                    <button type="button" class="sort-button" data-sort="rationale">
+                                        Rationale
+                                        <span class="sort-indicator" data-sort-indicator="rationale"></span>
+                                    </button>
+                                </th>
+                                <th>
+                                    <button type="button" class="sort-button" data-sort="tags">
+                                        Tags
+                                        <span class="sort-indicator" data-sort-indicator="tags"></span>
+                                    </button>
+                                </th>
+                                <th class="actions-column">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="findingsTableBody"></tbody>
+                    </table>
+                    <div class="empty-state" id="resultsEmptyState" role="status" hidden>
+                        <i class="fas fa-clipboard-check"></i>
+                        <p>No findings match the selected filters.</p>
+                    </div>
+                </div>
+
+                <div class="pagination" id="findingsPagination" hidden>
+                    <button type="button" class="pagination-btn" id="prevPage" aria-label="Previous page">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="pagination-status" id="pageIndicator">Page 1</span>
+                    <button type="button" class="pagination-btn" id="nextPage" aria-label="Next page">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
             <div class="reports-section" id="reports">
-                <h3 style="text-align: center; color: var(--primary-green); margin-bottom: 2rem; font-size: 2rem;">View Reports</h3>
+                <h3 class="reports-title">View Reports</h3>
                 <div class="reports-grid">
-                    <a class="report-card" id="pdfLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                        <div class="report-icon"><i class="fas fa-file-pdf icon" style="color: var(--primary-green);"></i></div>
+                    <a class="report-card" id="pdfLink" href="#" download aria-disabled="true">
+                        <div class="report-icon"><i class="fas fa-file-pdf icon"></i></div>
                         <h4>PDF Report</h4>
-                        <p style="color: var(--text-muted);">High-level overview PDF</p>
+                        <p class="report-description">High-level overview PDF</p>
                     </a>
-                    <a class="report-card" id="csvLink" href="#" download style="pointer-events: none; opacity: 0.5;">
-                        <div class="report-icon"><i class="fas fa-file-csv icon" style="color: var(--primary-green);"></i></div>
+                    <a class="report-card" id="csvLink" href="#" download aria-disabled="true">
+                        <div class="report-icon"><i class="fas fa-file-csv icon"></i></div>
                         <h4>CSV Report</h4>
-                        <p style="color: var(--text-muted);">Detailed CSV export</p>
+                        <p class="report-description">Detailed CSV export</p>
                     </a>
                 </div>
             </div>
+
         </section>
+
+        <div class="modal-overlay" id="findingModal" aria-hidden="true">
+            <div class="modal-backdrop" data-close-modal></div>
+            <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="findingModalTitle">
+                <header class="modal-header">
+                    <div>
+                        <p class="modal-eyebrow" id="findingModalSeverity">Severity</p>
+                        <h3 class="modal-title" id="findingModalTitle">Finding details</h3>
+                    </div>
+                    <button type="button" class="modal-close" id="closeFindingModal" aria-label="Close details">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </header>
+                <div class="modal-body">
+                    <dl class="modal-definition">
+                        <div>
+                            <dt>Rule</dt>
+                            <dd id="findingModalRule"></dd>
+                        </div>
+                        <div>
+                            <dt>Description</dt>
+                            <dd id="findingModalDescription"></dd>
+                        </div>
+                        <div>
+                            <dt>Rationale</dt>
+                            <dd id="findingModalRationale"></dd>
+                        </div>
+                        <div>
+                            <dt>Tags</dt>
+                            <dd id="findingModalTags"></dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <footer>

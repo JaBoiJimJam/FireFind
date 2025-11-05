@@ -31,6 +31,44 @@ window.addEventListener('scroll', () => {
 
 let uploadedFiles = [];
 
+const findingsState = {
+    all: [],
+    filtered: [],
+    currentPage: 1,
+    pageSize: 10,
+    sortKey: 'severity',
+    sortDirection: 'desc',
+    filters: {
+        search: '',
+        severity: 'all',
+        rule: 'all',
+        tags: []
+    }
+};
+
+const severityOrder = {
+    critical: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+    info: 4,
+    informational: 4,
+    information: 4
+};
+
+const severityLabels = {
+    critical: 'Critical',
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low',
+    info: 'Informational'
+};
+
+let findingsUiInitialized = false;
+let lastFocusedDetailsTrigger = null;
+
+const asText = (value) => value == null ? '' : String(value);
+
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 
@@ -324,32 +362,34 @@ async function startScan(e) {
 
         const pdfLink = document.getElementById('pdfLink');
         const csvLink = document.getElementById('csvLink');
-        
-        if (data.pdf) {
-            pdfLink.href = data.pdf;
-            const pdfFileName = generateDateFilename('report', 'pdf');
-            pdfLink.setAttribute('download', pdfFileName);
-            pdfLink.style.pointerEvents = 'auto';
-            pdfLink.style.opacity = '1';
-        } else {
-            pdfLink.removeAttribute('href');
-            pdfLink.removeAttribute('download');
-            pdfLink.style.pointerEvents = 'none';
-            pdfLink.style.opacity = '0.5';
+
+        if (pdfLink) {
+            if (data.pdf) {
+                pdfLink.href = data.pdf;
+                const pdfFileName = generateDateFilename('report', 'pdf');
+                pdfLink.setAttribute('download', pdfFileName);
+                setReportCardState(pdfLink, true);
+            } else {
+                pdfLink.removeAttribute('href');
+                pdfLink.removeAttribute('download');
+                setReportCardState(pdfLink, false);
+            }        
         }
 
-        if (data.csv) {
-            csvLink.href = data.csv;
-            const csvFileName = generateDateFilename('findings', 'csv');
-            csvLink.setAttribute('download', csvFileName);
-            csvLink.style.pointerEvents = 'auto';
-            csvLink.style.opacity = '1';
-        } else {
-            csvLink.removeAttribute('href');
-            csvLink.removeAttribute('download');
-            csvLink.style.pointerEvents = 'none';
-            csvLink.style.opacity = '0.5';
+        if (csvLink) {
+            if (data.csv) {
+                csvLink.href = data.csv;
+                const csvFileName = generateDateFilename('findings', 'csv');
+                csvLink.setAttribute('download', csvFileName);
+                setReportCardState(csvLink, true);
+            } else {
+                csvLink.removeAttribute('href');
+                csvLink.removeAttribute('download');
+                setReportCardState(csvLink, false);
+            }
         }
+
+        updateFindingsUI(Array.isArray(data.findings) ? data.findings : []);
 
         const resultsSection = document.getElementById('results');
         resultsSection.classList.add('active');
@@ -363,6 +403,621 @@ async function startScan(e) {
         btn.textContent = originalText;
     }
 }
+
+function setReportCardState(link, isEnabled) {
+    if (!link) return;
+    link.classList.toggle('is-disabled', !isEnabled);
+    link.dataset.state = isEnabled ? 'enabled' : 'disabled';
+    link.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
+    link.style.pointerEvents = isEnabled ? 'auto' : 'none';
+    link.style.opacity = isEnabled ? '1' : '0.5';
+}
+
+function initializeFindingsUI() {
+    if (findingsUiInitialized) return;
+
+    const table = document.getElementById('findingsTable');
+    if (!table) return;
+
+    findingsUiInitialized = true;
+
+    const searchFilter = document.getElementById('searchFilter');
+    const severityFilter = document.getElementById('severityFilter');
+    const ruleFilter = document.getElementById('ruleFilter');
+    const tagFilter = document.getElementById('tagFilter');
+    const resetFilters = document.getElementById('resetFilters');
+    const prevPage = document.getElementById('prevPage');
+    const nextPage = document.getElementById('nextPage');
+    const downloadCsvBtn = document.getElementById('downloadFilteredCsv');
+    const downloadJsonBtn = document.getElementById('downloadFilteredJson');
+    const findingsTableBody = document.getElementById('findingsTableBody');
+    const closeModalButton = document.getElementById('closeFindingModal');
+    const modalBackdrop = document.querySelector('#findingModal .modal-backdrop');
+
+    if (searchFilter) {
+        searchFilter.addEventListener('input', (event) => {
+            findingsState.filters.search = event.target.value;
+            findingsState.currentPage = 1;
+            applyFiltersAndRender();
+        });
+    }
+
+    if (severityFilter) {
+        severityFilter.addEventListener('change', (event) => {
+            findingsState.filters.severity = event.target.value;
+            findingsState.currentPage = 1;
+            applyFiltersAndRender();
+        });
+    }
+
+    if (ruleFilter) {
+        ruleFilter.addEventListener('change', (event) => {
+            findingsState.filters.rule = event.target.value;
+            findingsState.currentPage = 1;
+            applyFiltersAndRender();
+        });
+    }
+
+    if (tagFilter) {
+        tagFilter.addEventListener('change', () => {
+            const selectedTags = Array.from(tagFilter.selectedOptions || []).map(option => option.value);
+            findingsState.filters.tags = selectedTags;
+            findingsState.currentPage = 1;
+            applyFiltersAndRender();
+        });
+    }
+
+    if (resetFilters) {
+        resetFilters.addEventListener('click', () => {
+            findingsState.filters = {
+                search: '',
+                severity: 'all',
+                rule: 'all',
+                tags: []
+            };
+            findingsState.currentPage = 1;
+            syncFilterControls();
+            applyFiltersAndRender();
+        });
+    }
+
+    if (prevPage) {
+        prevPage.addEventListener('click', () => changePage(-1));
+    }
+
+    if (nextPage) {
+        nextPage.addEventListener('click', () => changePage(1));
+    }
+
+    if (downloadCsvBtn) {
+        downloadCsvBtn.addEventListener('click', downloadFilteredCsv);
+    }
+
+    if (downloadJsonBtn) {
+        downloadJsonBtn.addEventListener('click', downloadFilteredJson);
+    }
+
+    if (findingsTableBody) {
+        findingsTableBody.addEventListener('click', (event) => {
+            const button = event.target.closest('.view-details-btn');
+            if (!button) return;
+            const index = Number(button.getAttribute('data-finding-index'));
+            const finding = findingsState.all.find(item => item.index === index);
+            if (finding) {
+                lastFocusedDetailsTrigger = button;
+                openFindingModal(finding);
+            }
+        });
+    }
+
+    if (closeModalButton) {
+        closeModalButton.addEventListener('click', closeFindingModal);
+    }
+
+    if (modalBackdrop) {
+        modalBackdrop.addEventListener('click', closeFindingModal);
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeFindingModal();
+        }
+    });
+
+    const sortButtons = document.querySelectorAll('.sort-button');
+    sortButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const sortKey = button.getAttribute('data-sort');
+            if (sortKey) {
+                changeSort(sortKey);
+            }
+        });
+    });
+
+    updateSortIndicators();
+}
+
+function updateFindingsUI(findings) {
+    initializeFindingsUI();
+
+    findingsState.all = normalizeFindings(Array.isArray(findings) ? findings : []);
+    findingsState.currentPage = 1;
+    findingsState.sortKey = 'severity';
+    findingsState.sortDirection = 'desc';
+    findingsState.filters = {
+        search: '',
+        severity: 'all',
+        rule: 'all',
+        tags: []
+    };
+
+    updateFilterOptions();
+    syncFilterControls();
+    applyFiltersAndRender();
+}
+
+function normalizeFindings(findings) {
+    return findings.map((finding, index) => {
+        const severityValue = asText(finding.severity ?? finding.level ?? 'info').toLowerCase();
+        const severity = Object.prototype.hasOwnProperty.call(severityOrder, severityValue) ? severityValue : 'info';
+        const ruleIdRaw = asText(finding.rule_id ?? finding.ruleId ?? finding.rule ?? finding.id ?? '').trim();
+        const ruleName = asText(finding.rule_name ?? finding.ruleName ?? finding.name ?? '').trim();
+        const ruleId = ruleIdRaw || `Rule ${index + 1}`;
+        const ruleDisplay = ruleName && ruleName !== ruleId ? `${ruleId} – ${ruleName}` : ruleId;
+        const description = asText(finding.description ?? finding.message ?? '');
+        const rationale = asText(finding.rationale ?? finding.reason ?? '');
+        const asset = asText(finding.asset ?? finding.asset_name ?? finding.device ?? '');
+
+        let tags = finding.tags;
+        if (Array.isArray(tags)) {
+            tags = tags.filter(Boolean).map(tag => asText(tag).trim()).filter(Boolean);
+        } else if (typeof tags === 'string') {
+            tags = tags.split(/[,;]+/).map(tag => tag.trim()).filter(Boolean);
+        } else if (tags != null) {
+            tags = [asText(tags).trim()].filter(Boolean);
+        } else {
+            tags = [];
+        }
+
+        const tagsLower = tags.map(tag => tag.toLowerCase());
+        const tagsDisplay = tags.join(', ');
+        const ruleKey = (ruleId || ruleName).toLowerCase();
+        const searchText = [ruleId, ruleName, description, rationale, asset, tagsDisplay].join(' ').toLowerCase();
+
+        return {
+            index,
+            severity,
+            ruleId,
+            ruleName,
+            ruleDisplay,
+            ruleKey,
+            description,
+            rationale,
+            asset,
+            tags,
+            tagsLower,
+            tagsDisplay,
+            searchText,
+            source: finding
+        };
+    });
+}
+
+function updateFilterOptions() {
+    const ruleFilter = document.getElementById('ruleFilter');
+    const tagFilter = document.getElementById('tagFilter');
+
+    if (ruleFilter) {
+        const selectedRule = findingsState.filters.rule;
+        const ruleOptions = new Map();
+        findingsState.all.forEach((finding) => {
+            if (!ruleOptions.has(finding.ruleKey)) {
+                ruleOptions.set(finding.ruleKey, finding.ruleDisplay);
+            }
+        });
+
+        let optionsHtml = '<option value="all">All rules</option>';
+        ruleOptions.forEach((label, value) => {
+            optionsHtml += `<option value="${sanitize(value)}">${sanitize(label)}</option>`;
+        });
+        ruleFilter.innerHTML = optionsHtml;
+
+        if (selectedRule !== 'all' && !ruleOptions.has(selectedRule)) {
+            findingsState.filters.rule = 'all';
+        }
+    }
+
+    if (tagFilter) {
+        const selectedTags = new Set(findingsState.filters.tags);
+        const tagOptions = new Map();
+        findingsState.all.forEach((finding) => {
+            finding.tags.forEach((tag, index) => {
+                const key = finding.tagsLower[index];
+                if (!tagOptions.has(key)) {
+                    tagOptions.set(key, tag);
+                }
+            });
+        });
+
+        tagFilter.innerHTML = Array.from(tagOptions.entries()).map(([value, label]) => (
+            `<option value="${sanitize(value)}">${sanitize(label)}</option>`
+        )).join('');
+
+        Array.from(tagFilter.options).forEach((option) => {
+            option.selected = selectedTags.has(option.value);
+        });
+    }
+}
+
+function syncFilterControls() {
+    const searchFilter = document.getElementById('searchFilter');
+    const severityFilter = document.getElementById('severityFilter');
+    const ruleFilter = document.getElementById('ruleFilter');
+    const tagFilter = document.getElementById('tagFilter');
+
+    if (searchFilter) {
+        searchFilter.value = findingsState.filters.search;
+    }
+
+    if (severityFilter) {
+        severityFilter.value = findingsState.filters.severity;
+    }
+
+    if (ruleFilter) {
+        ruleFilter.value = findingsState.filters.rule;
+    }
+
+    if (tagFilter) {
+        Array.from(tagFilter.options).forEach((option) => {
+            option.selected = findingsState.filters.tags.includes(option.value);
+        });
+    }
+}
+
+function applyFiltersAndRender() {
+    if (!findingsUiInitialized) return;
+
+    const { search, severity, rule, tags } = findingsState.filters;
+    const normalizedSearch = search.trim();
+
+    let items = findingsState.all.slice();
+
+    if (severity && severity !== 'all') {
+        items = items.filter(item => item.severity === severity);
+    }
+
+    if (rule && rule !== 'all') {
+        items = items.filter(item => item.ruleKey === rule);
+    }
+
+    if (tags.length > 0) {
+        items = items.filter(item => tags.every(tag => item.tagsLower.includes(tag)));
+    }
+
+    if (normalizedSearch) {
+        const searchTerm = normalizedSearch.toLowerCase();
+        items = items.filter(item => item.searchText.includes(searchTerm));
+    }
+
+    items = sortFindings(items);
+    findingsState.filtered = items;
+
+    const total = items.length;
+    const totalPages = total > 0 ? Math.ceil(total / findingsState.pageSize) : 1;
+
+    if (findingsState.currentPage > totalPages) {
+        findingsState.currentPage = total > 0 ? totalPages : 1;
+    }
+
+    const startIndex = total === 0 ? 0 : (findingsState.currentPage - 1) * findingsState.pageSize;
+    const pageItems = items.slice(startIndex, startIndex + findingsState.pageSize);
+
+    renderFindingsTable(pageItems, total, startIndex);
+    updatePaginationControls(totalPages, total);
+    setDownloadButtonsEnabled(total > 0);
+}
+
+function sortFindings(items) {
+    const key = findingsState.sortKey;
+    const direction = findingsState.sortDirection === 'asc' ? 1 : -1;
+    const getComparable = (item) => {
+        switch (key) {
+            case 'severity':
+                return severityOrder[item.severity] ?? Number.MAX_SAFE_INTEGER;
+            case 'rule_id':
+                return item.ruleDisplay.toLowerCase();
+            case 'description':
+                return item.description.toLowerCase();
+            case 'rationale':
+                return item.rationale.toLowerCase();
+            case 'tags':
+                return item.tagsDisplay.toLowerCase();
+            default:
+                return item.index;
+        }
+    };
+
+    return items.slice().sort((a, b) => {
+        const valueA = getComparable(a);
+        const valueB = getComparable(b);
+
+        if (valueA < valueB) return -1 * direction;
+        if (valueA > valueB) return 1 * direction;
+        return a.index - b.index;
+    });
+}
+
+function changePage(offset) {
+    const total = findingsState.filtered.length;
+    if (total === 0) return;
+    const totalPages = Math.ceil(total / findingsState.pageSize);
+    const targetPage = Math.min(Math.max(findingsState.currentPage + offset, 1), totalPages);
+    if (targetPage !== findingsState.currentPage) {
+        findingsState.currentPage = targetPage;
+        applyFiltersAndRender();
+    }
+}
+
+function changeSort(sortKey) {
+    if (!sortKey) return;
+    if (findingsState.sortKey === sortKey) {
+        findingsState.sortDirection = findingsState.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        findingsState.sortKey = sortKey;
+        findingsState.sortDirection = sortKey === 'severity' ? 'desc' : 'asc';
+    }
+    findingsState.currentPage = 1;
+    updateSortIndicators();
+    applyFiltersAndRender();
+}
+
+function updateSortIndicators() {
+    const indicators = document.querySelectorAll('[data-sort-indicator]');
+    indicators.forEach((indicator) => {
+        const key = indicator.getAttribute('data-sort-indicator');
+        if (key === findingsState.sortKey) {
+            indicator.dataset.direction = findingsState.sortDirection;
+        } else {
+            delete indicator.dataset.direction;
+        }
+    });
+}
+
+function renderFindingsTable(pageItems, total, startIndex) {
+    const tbody = document.getElementById('findingsTableBody');
+    const emptyState = document.getElementById('resultsEmptyState');
+    const summary = document.getElementById('findingsSummary');
+
+    if (!tbody || !emptyState || !summary) {
+        return;
+    }
+
+    if (total === 0) {
+        tbody.innerHTML = '';
+        emptyState.hidden = findingsState.all.length === 0;
+        summary.textContent = findingsState.all.length === 0
+            ? 'No findings yet'
+            : 'No findings match the selected filters';
+        return;
+    }
+
+    emptyState.hidden = pageItems.length > 0;
+
+    const rows = pageItems.map((finding) => {
+        const severityKey = Object.prototype.hasOwnProperty.call(severityLabels, finding.severity)
+            ? finding.severity
+            : 'info';
+        const severityClass = `severity-badge severity-${severityKey}`;
+        const severityText = severityLabels[severityKey] || severityLabels.info;
+        const descriptionText = finding.description || 'No description provided.';
+        const rationaleText = finding.rationale || 'No rationale provided.';
+        const tagsMarkup = finding.tags.length
+            ? finding.tags.map(tag => `<span class="tag">${sanitize(tag)}</span>`).join('')
+            : '<span class="tag tag-empty">No tags</span>';
+
+        const assetMarkup = finding.asset
+            ? `<span class="table-subtext">${sanitize(finding.asset)}</span>`
+            : '';
+
+        return `
+            <tr>
+                <td>
+                    <span class="${severityClass}" data-severity="${sanitize(severityText)}">${sanitize(severityText)}</span>
+                </td>
+                <td>
+                    <span class="table-cell-primary">${sanitize(finding.ruleDisplay)}</span>
+                    ${assetMarkup}
+                </td>
+                <td>
+                    <span class="table-cell-primary" title="${sanitize(descriptionText)}">${sanitize(descriptionText)}</span>
+                </td>
+                <td>
+                    <span class="table-cell-primary" title="${sanitize(rationaleText)}">${sanitize(rationaleText)}</span>
+                </td>
+                <td>
+                    <div class="tag-list">${tagsMarkup}</div>
+                </td>
+                <td class="actions-column">
+                    <button type="button" class="btn btn-link view-details-btn" data-finding-index="${finding.index}">
+                        View details
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    tbody.innerHTML = rows;
+
+    const endIndex = startIndex + pageItems.length;
+    summary.textContent = `Showing ${startIndex + 1}–${endIndex} of ${total} findings`;
+}
+
+function updatePaginationControls(totalPages, total) {
+    const pagination = document.getElementById('findingsPagination');
+    const pageIndicator = document.getElementById('pageIndicator');
+    const prevPage = document.getElementById('prevPage');
+    const nextPage = document.getElementById('nextPage');
+
+    if (!pagination || !pageIndicator || !prevPage || !nextPage) {
+        return;
+    }
+
+    if (total <= findingsState.pageSize) {
+        pagination.hidden = true;
+        prevPage.disabled = true;
+        nextPage.disabled = true;
+        pageIndicator.textContent = total === 0 ? 'Page 0 of 0' : 'Page 1 of 1';
+        return;
+    }
+
+    pagination.hidden = false;
+    pageIndicator.textContent = `Page ${findingsState.currentPage} of ${totalPages}`;
+    prevPage.disabled = findingsState.currentPage <= 1;
+    nextPage.disabled = findingsState.currentPage >= totalPages;
+}
+
+function setDownloadButtonsEnabled(isEnabled) {
+    const buttons = [
+        document.getElementById('downloadFilteredCsv'),
+        document.getElementById('downloadFilteredJson')
+    ];
+
+    buttons.forEach((button) => {
+        if (!button) return;
+        button.disabled = !isEnabled;
+        button.dataset.state = isEnabled ? 'enabled' : 'disabled';
+        button.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
+    });
+}
+
+function downloadFilteredCsv() {
+    if (!findingsState.filtered.length) return;
+    const content = createCsvContent(findingsState.filtered);
+    const filename = generateDateFilename('firefind-findings', 'csv');
+    triggerDownload(content, 'text/csv', filename);
+}
+
+function downloadFilteredJson() {
+    if (!findingsState.filtered.length) return;
+    const payload = findingsState.filtered.map(item => item.source);
+    const content = JSON.stringify(payload, null, 2);
+    const filename = generateDateFilename('firefind-findings', 'json');
+    triggerDownload(content, 'application/json', filename);
+}
+
+function createCsvContent(findings) {
+    const headers = ['severity', 'rule_id', 'rule_name', 'description', 'rationale', 'asset', 'tags'];
+    const headerRow = headers.join(',');
+
+    const rows = findings.map((finding) => {
+        const csvRow = {
+            severity: severityLabels[finding.severity] || severityLabels.info,
+            rule_id: finding.ruleId,
+            rule_name: finding.ruleName,
+            description: finding.description,
+            rationale: finding.rationale,
+            asset: finding.asset,
+            tags: finding.tags.join('; ')
+        };
+
+        return headers.map((key) => csvEscape(csvRow[key] ?? '')).join(',');
+    });
+
+    return [headerRow, ...rows].join('\n');
+}
+
+function csvEscape(value) {
+    const text = asText(value);
+    if (/[",\n]/.test(text)) {
+        return '"' + text.replace(/"/g, '""') + '"';
+    }
+    return text;
+}
+
+function triggerDownload(content, mimeType, filename) {
+    try {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error('Download failed', error);
+        showToast('Unable to download file. Please try again.', 'error');
+    }
+}
+
+function openFindingModal(finding) {
+    const modal = document.getElementById('findingModal');
+    const severityElement = document.getElementById('findingModalSeverity');
+    const titleElement = document.getElementById('findingModalTitle');
+    const ruleElement = document.getElementById('findingModalRule');
+    const descriptionElement = document.getElementById('findingModalDescription');
+    const rationaleElement = document.getElementById('findingModalRationale');
+    const tagsElement = document.getElementById('findingModalTags');
+    const closeButton = document.getElementById('closeFindingModal');
+
+    if (!modal || !severityElement || !titleElement || !ruleElement || !descriptionElement || !rationaleElement || !tagsElement) {
+        return;
+    }
+
+    const severityKey = Object.prototype.hasOwnProperty.call(severityLabels, finding.severity)
+        ? finding.severity
+        : 'info';
+    const severityText = severityLabels[severityKey] || severityLabels.info;
+
+    severityElement.textContent = severityText;
+    severityElement.dataset.severity = severityKey;
+    titleElement.textContent = finding.ruleDisplay || 'Finding details';
+    ruleElement.textContent = finding.ruleDisplay;
+    descriptionElement.textContent = finding.description || 'No description provided.';
+    rationaleElement.textContent = finding.rationale || 'No rationale provided.';
+
+    if (finding.tags.length) {
+        tagsElement.innerHTML = finding.tags.map(tag => `<span class="tag">${sanitize(tag)}</span>`).join('');
+    } else {
+        tagsElement.textContent = 'No tags available';
+    }
+
+    modal.classList.add('visible');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+
+    if (closeButton) {
+        closeButton.focus();
+    }
+}
+
+function closeFindingModal() {
+    const modal = document.getElementById('findingModal');
+    if (!modal || !modal.classList.contains('visible')) return;
+    modal.classList.remove('visible');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+
+    if (lastFocusedDetailsTrigger && typeof lastFocusedDetailsTrigger.focus === 'function') {
+        lastFocusedDetailsTrigger.focus();
+    }
+}
+
+if (document.readyState !== 'loading') {
+    initializeFindingsUI();
+} else {
+    document.addEventListener('DOMContentLoaded', initializeFindingsUI);
+}
+
+window.updateFindingsUI = updateFindingsUI;
+window.initializeFindingsUI = initializeFindingsUI;
+window.__firefind = {
+    findingsState,
+    applyFiltersAndRender,
+    changeSort,
+    changePage
+};
 
 function animateMetrics() {
     const metrics = document.querySelectorAll('.metric-value');

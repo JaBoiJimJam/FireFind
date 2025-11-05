@@ -4,9 +4,14 @@ import sys
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BACKEND_DIR / "src"))
 
-from firefind.rules_engine import ANALYZER_INVENTORY, parse_ports, run_checks
-from firefind.service import run_analysis
-from firefind.model import Rule
+from firefind.model import Finding, Rule
+from firefind.rules_engine import (
+    ANALYZER_INVENTORY,
+    generate_risk_code,
+    parse_ports,
+    run_checks,
+)
+from firefind.service import deduplicate_findings, run_analysis
 
 
 def test_parse_ports_single():
@@ -21,25 +26,93 @@ def test_parse_ports_malformed():
     assert parse_ports("abc") == []
 
 
+def test_generate_risk_code_info_prefix():
+    code = generate_risk_code("allow_any", "Info", 1)
+    assert code == "FR-allow_any-INFGEN-001"
+
+
 def test_run_checks_allow_any():
-    rule = Rule("1", "any", "any", "any", "any", "allow")
+    rule = Rule("1", "any", "any", "any", "all", "allow", risk_rating="High")
     findings = run_checks("v", [rule], {})
     types = {f.finding_type for f in findings}
     assert "allow_any" in types
     assert "broad_cidr" in types
+    assert "all_ports_service" in types
+
+    codes = {f.finding_type: f.risk_code for f in findings}
+    assert codes["allow_any"] == "FR-allow_any-HIGEN-001"
+    assert codes["broad_cidr"].startswith("FR-broad_cidr-")
+    assert codes["all_ports_service"].startswith("FR-all_ports_service-")
+
+    sequence = [
+        int(codes["allow_any"].split("-")[-1]),
+        int(codes["broad_cidr"].split("-")[-1]),
+        int(codes["all_ports_service"].split("-")[-1]),
+    ]
+    assert sequence == sorted(sequence)
+    assert len(set(sequence)) == 3
+
+
+def test_rule_tags_propagate_to_findings():
+    rule = Rule(
+        "tagged",
+        "any",
+        "any",
+        "any",
+        "any",
+        "allow",
+        tags=("custom-tag",),
+        risk_rating="High",
+    )
+    findings = run_checks("vendor", [rule], {})
+    allow_any = next(f for f in findings if f.finding_type == "allow_any")
+    assert "custom-tag" in allow_any.tags
+    assert "excessive-access" in allow_any.tags
 
 
 def test_run_checks_admin_port_exposure():
-    rule = Rule("2", "1.1.1.1", "2.2.2.2", "any", "22", "allow")
+    rule = Rule("2", "1.1.1.1", "2.2.2.2", "any", "22", "allow", risk_rating="High")
     findings = run_checks("v", [rule], {"admin_ports": [22]})
     assert any(f.finding_type == "admin_port_exposed" for f in findings)
 
 
 def test_admin_port_risk_rating_varies_with_port():
-    rule_critical = Rule("1", "1.1.1.1", "2.2.2.2", "any", "22", "allow")
-    rule_high = Rule("2", "1.1.1.1", "2.2.2.2", "any", "3389", "allow")
-    rule_medium = Rule("3", "1.1.1.1", "2.2.2.2", "any", "3306", "allow")
-    rule_low = Rule("4", "1.1.1.1", "2.2.2.2", "any", "25", "allow")
+    rule_critical = Rule(
+        "1",
+        "1.1.1.1",
+        "2.2.2.2",
+        "any",
+        "22",
+        "allow",
+        risk_rating="Low",
+    )
+    rule_high = Rule(
+        "2",
+        "1.1.1.1",
+        "2.2.2.2",
+        "any",
+        "3389",
+        "allow",
+        risk_rating="Cautionary",
+    )
+    rule_medium = Rule(
+        "3",
+        "1.1.1.1",
+        "2.2.2.2",
+        "any",
+        "3306",
+        "allow",
+        risk_rating="Low",
+    )
+    rule_low = Rule(
+        "4",
+        "1.1.1.1",
+        "2.2.2.2",
+        "any",
+        "25",
+        "allow",
+        risk_rating="Low",
+    )
 
     cfg = {
         "admin_ports": [22, 3389, 3306, 25],
@@ -68,6 +141,7 @@ def test_mixed_critical_ports_stay_critical():
         "any",
         "135,137,138,139,445",
         "allow",
+        risk_rating="Critical",
     )
 
     cfg = {
@@ -86,7 +160,15 @@ def test_mixed_critical_ports_stay_critical():
 
 
 def test_http_admin_port_finding_is_cautionary():
-    rule = Rule("web", "10.0.0.0/24", "0.0.0.0/0", "tcp", "80", "allow")
+    rule = Rule(
+        "web",
+        "10.0.0.0/24",
+        "0.0.0.0/0",
+        "tcp",
+        "80",
+        "allow",
+        risk_rating="Cautionary",
+    )
     findings = run_checks(
         "vendor",
         [rule],
@@ -106,13 +188,21 @@ def test_http_admin_port_finding_is_cautionary():
 
 
 def test_run_checks_broad_cidr():
-    rule = Rule("3", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow")
+    rule = Rule("3", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow", risk_rating="Medium")
     findings = run_checks("v", [rule], {"broad_cidr_prefix_max": 8})
     assert any(f.finding_type == "broad_cidr" for f in findings)
 
 
 def test_cidr_limits_vendor_override():
-    rule = Rule("12", "10.0.0.0/10", "2.2.2.2", "any", "any", "allow")
+    rule = Rule(
+        "12",
+        "10.0.0.0/10",
+        "2.2.2.2",
+        "any",
+        "any",
+        "allow",
+        risk_rating="Medium",
+    )
     cfg = {
         "cidr_limits": {
             "broad_networks": {
@@ -154,15 +244,85 @@ def test_cidr_limits_blocked_and_exempt():
         }
     }
 
-    blocked_rule = Rule("20", "0.0.0.0/0", "2.2.2.2", "any", "any", "allow")
+    blocked_rule = Rule(
+        "20",
+        "0.0.0.0/0",
+        "2.2.2.2",
+        "any",
+        "any",
+        "allow",
+        risk_rating="High",
+    )
     blocked_findings = run_checks("example_vendor", [blocked_rule], cfg)
     blocked = [f for f in blocked_findings if f.finding_type == "broad_cidr"]
     assert blocked and blocked[0].severity == "High"
     assert "blocked CIDR" in blocked[0].rationale
 
-    exempt_rule = Rule("21", "10.0.0.0/8", "2.2.2.2", "any", "any", "allow")
+    exempt_rule = Rule(
+        "21",
+        "10.0.0.0/8",
+        "2.2.2.2",
+        "any",
+        "any",
+        "allow",
+        risk_rating="Medium",
+    )
     exempt_findings = run_checks("example_vendor", [exempt_rule], cfg)
     assert not any(f.finding_type == "broad_cidr" for f in exempt_findings)
+
+
+def test_unrated_rules_do_not_emit_findings():
+    cfg = {"admin_ports": [22], "broad_cidr_prefix_max": 8}
+
+    rated_admin = Rule(
+        "rated-admin",
+        "10.0.0.10",
+        "192.0.2.1",
+        "any",
+        "22",
+        "allow",
+        risk_rating="High",
+    )
+    unrated_admin = Rule(
+        "unrated-admin",
+        "10.0.0.11",
+        "192.0.2.2",
+        "any",
+        "22",
+        "allow",
+    )
+    rated_broad = Rule(
+        "rated-broad",
+        "10.0.0.0/8",
+        "192.0.2.3",
+        "any",
+        "any",
+        "allow",
+        risk_rating="Medium",
+    )
+    invalid_broad = Rule(
+        "invalid-broad",
+        "172.16.0.0/8",
+        "192.0.2.4",
+        "any",
+        "any",
+        "allow",
+        risk_rating="severe",  # fails normalisation
+    )
+
+    findings = run_checks(
+        "generic",
+        [rated_admin, unrated_admin, rated_broad, invalid_broad],
+        cfg,
+    )
+
+    admin_ids = {f.rule_id for f in findings if f.finding_type == "admin_port_exposed"}
+    cidr_ids = {f.rule_id for f in findings if f.finding_type == "broad_cidr"}
+
+    assert admin_ids == {"rated-admin"}
+    assert cidr_ids == {"rated-broad"}
+    skipped_ids = {"unrated-admin", "invalid-broad"}
+    assert not ({f.rule_id for f in findings} & skipped_ids)
 
 
 def test_run_checks_all_ports_internet():
@@ -176,6 +336,7 @@ def test_run_checks_all_ports_internet():
         src_interface="LAN1",
         dst_interface="virtual-wan-link",
         service="ALL",
+        risk_rating="High",
     )
     findings = run_checks("v", [rule], {})
     matching = [f for f in findings if f.finding_type == "all_ports_service"]
@@ -194,6 +355,7 @@ def test_run_checks_all_ports_internal_scope():
         src_interface="internal",
         dst_interface="vpn",
         service="ALL",
+        risk_rating="Medium",
     )
     findings = run_checks("v", [rule], {})
     matching = [f for f in findings if f.finding_type == "all_ports_service"]
@@ -209,6 +371,7 @@ def test_run_checks_flags_redundant_rule():
         "tcp",
         "TCP/9000",
         "deny",
+        risk_rating="Medium",
     )
     specific_deny = Rule(
         "200",
@@ -217,6 +380,7 @@ def test_run_checks_flags_redundant_rule():
         "tcp",
         "TCP/9000",
         "deny",
+        risk_rating="Medium",
     )
 
     findings = run_checks(
@@ -239,6 +403,7 @@ def test_run_checks_flags_shadowed_rule():
         "tcp",
         "TCP/9000",
         "deny",
+        risk_rating="High",
     )
     allow_rule = Rule(
         "400",
@@ -247,6 +412,7 @@ def test_run_checks_flags_shadowed_rule():
         "tcp",
         "TCP/9000",
         "allow",
+        risk_rating="High",
     )
 
     findings = run_checks(
@@ -265,7 +431,10 @@ def test_run_checks_flags_shadowed_rule():
 def test_run_analysis_directory_and_dedup(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    csv_content = "Seq #,Source Value,Destination Value,Service,Service.1,Action\n1,any,any,any,22,allow\n"
+    csv_content = (
+        "Seq #,Source Value,Destination Value,Service,Service.1,Action,Risk Feedback\n"
+        "1,any,any,any,22,allow,High\n"
+    )
     (data_dir / "a.csv").write_text(csv_content)
     (data_dir / "b.csv").write_text(csv_content)
 
@@ -288,7 +457,10 @@ def test_run_analysis_directory_and_dedup(tmp_path):
 def test_run_analysis_custom_config_loading(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    csv = "rid,src_col,dst_col,proto_col,pcol,act_col\n1,1.1.1.1,2.2.2.2,any,TCP/9999,allow\n"
+    csv = (
+        "rid,src_col,dst_col,proto_col,pcol,act_col,risk_col\n"
+        "1,1.1.1.1,2.2.2.2,any,TCP/9999,allow,High\n"
+    )
     (data_dir / "rules.csv").write_text(csv)
 
     rules_yaml = tmp_path / "rules.yml"
@@ -301,6 +473,7 @@ def test_run_analysis_custom_config_loading(tmp_path):
         "  src: ['src_col']\n"
         "  dst: ['dst_col']\n"
         "  action: ['act_col']\n"
+        "  risk_rating: ['risk_col']\n"
     )
 
     analysis = run_analysis(
@@ -321,7 +494,10 @@ def test_run_analysis_custom_config_loading(tmp_path):
 def test_run_analysis_no_seq_column(tmp_path):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
-    csv = "rid,src_col,dst_col,svc_col,act_col\n1,1.1.1.1,2.2.2.2,TCP/9999,allow\n"
+    csv = (
+        "rid,src_col,dst_col,svc_col,act_col,risk_col\n"
+        "1,1.1.1.1,2.2.2.2,TCP/9999,allow,High\n"
+    )
     (data_dir / "rules.csv").write_text(csv)
 
     rules_yaml = tmp_path / "rules.yml"
@@ -334,6 +510,7 @@ def test_run_analysis_no_seq_column(tmp_path):
         "  src: ['src_col']\n"
         "  dst: ['dst_col']\n"
         "  action: ['act_col']\n"
+        "  risk_rating: ['risk_col']\n"
     )
 
     analysis = run_analysis(
@@ -352,7 +529,7 @@ def test_run_analysis_no_seq_column(tmp_path):
 
 
 def test_run_checks_logs_thresholds(caplog):
-    rule = Rule("1", "any", "any", "any", "any", "allow")
+    rule = Rule("1", "any", "any", "any", "any", "allow", risk_rating="Info")
 
     caplog.set_level("INFO")
     run_checks("generic", [rule], {})
@@ -364,3 +541,103 @@ def test_run_checks_logs_thresholds(caplog):
     assert "admin_port_exposed" in record.analyzers
     assert record.vendor == "generic"
     assert record.inventory == ANALYZER_INVENTORY
+
+
+def test_unused_rule_analyzer():
+    zero_hit_rule = Rule(
+        "zero-hit",
+        "10.0.0.0/24",
+        "10.1.0.0/24",
+        "tcp",
+        "443",
+        "deny",
+        hit_count=0,
+        byte_count=0,
+        enabled=True,
+        risk_rating="Cautionary",
+    )
+    disabled_rule = Rule(
+        "disabled",
+        "10.0.1.0/24",
+        "10.1.1.0/24",
+        "tcp",
+        "8443",
+        "deny",
+        hit_count=5,
+        byte_count=128,
+        enabled=False,
+        risk_rating="Low",
+    )
+    active_rule = Rule(
+        "active",
+        "10.0.2.0/24",
+        "10.1.2.0/24",
+        "tcp",
+        "22",
+        "deny",
+        hit_count=12,
+        byte_count=2048,
+        enabled=True,
+        risk_rating="High",
+    )
+
+    cfg = {
+        "unused_rule": {
+            "hit_count_threshold": 0,
+            "include_disabled": True,
+            "hit_count_severity": "cautionary",
+            "disabled_severity": "low",
+        }
+    }
+
+    findings = run_checks("generic", [zero_hit_rule, disabled_rule, active_rule], cfg)
+    unused_findings = [f for f in findings if f.finding_type == "unused_rule"]
+
+    assert len(unused_findings) == 2
+
+    zero_hit_finding = next(f for f in unused_findings if f.rule_id == "zero-hit")
+    assert zero_hit_finding.severity == "Cautionary"
+    assert zero_hit_finding.hit_count == 0
+    assert "recorded hit" in zero_hit_finding.rationale
+
+    disabled_finding = next(f for f in unused_findings if f.rule_id == "disabled")
+    assert disabled_finding.severity == "Low"
+    assert disabled_finding.rule_enabled is False
+    assert "disabled" in disabled_finding.rationale.lower()
+
+    assert not any(
+        f.rule_id == "active" and f.finding_type == "unused_rule" for f in findings
+    )
+
+
+def test_deduplicate_findings_merges_tags():
+    finding_primary = Finding(
+        vendor="generic",
+        rule_id="1",
+        src="any",
+        dst="any",
+        proto="any",
+        port="any",
+        action="allow",
+        finding_type="allow_any",
+        severity="High",
+        rationale="primary",
+        tags=("alpha", "beta"),
+    )
+    finding_secondary = Finding(
+        vendor="generic",
+        rule_id="1",
+        src="any",
+        dst="any",
+        proto="any",
+        port="any",
+        action="allow",
+        finding_type="allow_any",
+        severity="Medium",
+        rationale="primary",
+        tags=("beta", "gamma"),
+    )
+
+    deduped = deduplicate_findings([finding_primary, finding_secondary])
+    assert len(deduped) == 1
+    assert deduped[0].tags == ("alpha", "beta", "gamma")
