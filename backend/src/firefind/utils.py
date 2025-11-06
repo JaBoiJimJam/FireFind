@@ -6,13 +6,101 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 import ipaddress
-from typing import TYPE_CHECKING, Iterable, Mapping, Sequence, Tuple, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence, Tuple, List, Optional
 import yaml
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from .model import Rule
+
+_SEVERITY_RANKING: Mapping[str, int] = {
+    "CRITICAL": 5,
+    "HIGH": 4,
+    "MEDIUM": 3,
+    "CAUTIONARY": 2,
+    "LOW": 1,
+}
+
+
+def normalize_severity(value: str | None) -> str:
+    """Return a normalized severity string.
+
+    ``None`` and empty strings are treated as ``""`` to preserve the caller's
+    intent when the severity is missing.  All other inputs are uppercased and
+    stripped of surrounding whitespace.
+    """
+
+    if not value:
+        return ""
+    return str(value).strip().upper()
+
+
+def severity_rank(value: str | None) -> int:
+    """Translate a severity string into a comparable rank.
+
+    Unknown severities intentionally receive rank ``0`` so that they sort below
+    any recognized value without raising errors.
+    """
+
+    normalized = normalize_severity(value)
+    return _SEVERITY_RANKING.get(normalized, 0)
+
+
+def deduplicate_findings_by_rule(
+    findings: Iterable[Mapping[str, Any] | Any],
+) -> list[Mapping[str, Any] | Any]:
+    """Return the highest-severity finding for each rule identifier.
+
+    Objects may expose ``rule_id``/``severity`` via attributes or dictionary
+    keys.  Findings that do not contain a ``rule_id`` are ignored entirely so
+    they do not affect the per-rule aggregation (this behaviour is documented
+    here for clarity).
+    """
+
+    best_by_rule: dict[str, tuple[int, Mapping[str, Any] | Any]] = {}
+
+    for finding in findings:
+        rule_id: Any
+        severity: Any
+        if isinstance(finding, Mapping):
+            rule_id = finding.get("rule_id")
+            severity = finding.get("severity")
+        else:
+            rule_id = getattr(finding, "rule_id", None)
+            severity = getattr(finding, "severity", None)
+
+        if rule_id is None:
+            continue
+
+        rule_key = str(rule_id)
+        rank = severity_rank(severity)
+
+        existing = best_by_rule.get(rule_key)
+        if existing is None or rank > existing[0]:
+            best_by_rule[rule_key] = (rank, finding)
+
+    return [entry[1] for entry in best_by_rule.values()]
+
+
+def count_findings_by_severity(
+    findings: Iterable[Mapping[str, Any] | Any]
+) -> dict[str, int]:
+    """Return a mapping of normalized severities to occurrence counts."""
+
+    counts = {key: 0 for key in _SEVERITY_RANKING}
+
+    for finding in findings:
+        if isinstance(finding, Mapping):
+            severity = finding.get("severity")
+        else:
+            severity = getattr(finding, "severity", None)
+
+        normalized = normalize_severity(severity)
+        if normalized in counts:
+            counts[normalized] += 1
+
+    return counts
 
 if TYPE_CHECKING:
     from .config import RulesConfig
