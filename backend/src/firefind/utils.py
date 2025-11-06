@@ -583,6 +583,26 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
             wildcard = "ALL"
             break
 
+        mapped_ports = _service_ports_from_alias(upper)
+        if mapped_ports is None and cleaned != upper:
+            mapped_ports = _service_ports_from_alias(cleaned)
+        if mapped_ports is not None:
+            added = False
+            for port in mapped_ports:
+                if isinstance(port, int) and 1 <= port <= 65535 and port not in seen_numeric:
+                    seen_numeric.add(port)
+                    numeric_ports.append(port)
+                    added = True
+            if added:
+                continue
+            if any(
+                isinstance(port, int) and 1 <= port <= 65535
+                for port in mapped_ports
+            ):
+                continue
+            wildcard = "ALL"
+            break
+
         if "_" in cleaned and any(ch.isdigit() for ch in cleaned):
             head, _, remainder = cleaned.partition("_")
             remainder = remainder.strip()
@@ -604,26 +624,6 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
                 upper = cleaned.upper()
 
         if upper in {"ALL", "ANY", "*"}:
-            wildcard = "ALL"
-            break
-
-        mapped_ports = _service_ports_from_alias(upper)
-        if mapped_ports is None:
-            mapped_ports = _service_ports_from_alias(cleaned)
-        if mapped_ports is not None:
-            added = False
-            for port in mapped_ports:
-                if isinstance(port, int) and 1 <= port <= 65535 and port not in seen_numeric:
-                    seen_numeric.add(port)
-                    numeric_ports.append(port)
-                    added = True
-            if added:
-                continue
-            if any(
-                isinstance(port, int) and 1 <= port <= 65535
-                for port in mapped_ports
-            ):
-                continue
             wildcard = "ALL"
             break
 
