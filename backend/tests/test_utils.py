@@ -129,6 +129,10 @@ def test_sniff_proto_port_variants():
     assert sniff_proto_port(row7) == ("any", "TCP/443")
     netbios_row = {"Service": "NBT_ natagram nbname_tcp"}
     assert sniff_proto_port(netbios_row) == ("any", "137,138,139")
+    row8 = {"Service Port": "Group Member: TCP_443"}
+    assert sniff_proto_port(row8) == ("any", "443")
+    row9 = {"Service": "DM_INLINE_SERVICE_234"}
+    assert sniff_proto_port(row9) == ("any", "234")
     row4 = {}
     assert sniff_proto_port(row4) == ("any", "any")
 

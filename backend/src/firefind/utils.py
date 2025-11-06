@@ -137,61 +137,136 @@ class RuleValidationError(ValueError):
 # human-readable names (e.g. ``HTTP``) rather than explicit ``TCP/80`` entries.
 # The dictionary intentionally focuses on the most common services that affect
 # exposure analysis; unknown names simply fall back to the raw text.
-SERVICE_NAME_PORTS = {
-    "HTTP": [80],
-    "HTTPS": [443],
-    "SSH": [22],
-    "TELNET": [23],
-    "FTP": [21],
-    "FTPS": [990, 989, 21],
-    "DNS": [53],
-    "DNS_": [53],
-    "DOMAIN-TCP": [53],
-    "DOMAIN-UDP": [53],
-    "DOMAIN-UDP_": [53],
-    "SMTP": [25],
-    "SMTPS": [465],
-    "TCP-587": [587],
-    "POP3": [110],
-    "IMAP": [143],
-    "LDAP": [389],
-    "LDAP-SSL": [636],
-    "RDP": [3389],
-    "SQL": [1433],
-    "MS-SQL-SERVER": [1433],
-    "MYSQL": [3306],
-    "POSTGRES": [5432],
-    "HTTP_PROXY": [8080],
-    "VNC": [5900],
-    "SYSLOG": [514],
-    "SHELL": [514],
-    "NBT_": [137, 138, 139],
-    "NATAGRAM": [138],
-    "NBNAME": [137],
-    "NBNAME_TCP": [137],
-    "NBSESSION": [139],
-    "KERBEROS": [88],
-    "KERBEROS_": [88],
-    "KERBEROS_V5_TCP": [88],
-    "KERBEROS_V5_UDP": [88],
-    "KERBEROS-TCP-V4": [88],
-    "KERBEROS-UDP-V4_": [88],
-    "NTP-UDP": [123],
-    "NTP-TCP": [123],
-    "TCP_135": [135],
-    "TCP_3268": [3268],
-    "TCP_3269": [3269],
-    "TCP_464": [464],
-    "TCP_8810-8811": [8810, 8811],
-    "TCP-HIGH-PORTS": [1024, 65535],
-    "TCP-49152_65535": [49152, 65535],
-    "TCP-49152_65435": [49152, 65435],
-    "MICROSOFT-DS": [445],
-    "MICROSOFT_DS": [445],
-    "LDPW0RM": [515],
-    "PING": [],
-    "ICMP": [],
-}
+def _build_service_name_ports() -> dict[str, list[int]]:
+    base = {
+        "HTTP": [80],
+        "HTTPS": [443],
+        "SSH": [22],
+        "TELNET": [23],
+        "FTP": [21],
+        "FTPS": [990, 989, 21],
+        "DNS": [53],
+        "DNS_": [53],
+        "DOMAIN-TCP": [53],
+        "DOMAIN-UDP": [53],
+        "DOMAIN-UDP_": [53],
+        "SMTP": [25],
+        "SMTPS": [465],
+        "POP3": [110],
+        "IMAP": [143],
+        "LDAP": [389],
+        "LDAP-SSL": [636],
+        "RDP": [3389],
+        "SQL": [1433],
+        "MS-SQL-SERVER": [1433],
+        "MYSQL": [3306],
+        "POSTGRES": [5432],
+        "HTTP_PROXY": [8080],
+        "VNC": [5900],
+        "SYSLOG": [514],
+        "SHELL": [514],
+        "NBT_": [137, 138, 139],
+        "NATAGRAM": [138],
+        "NBNAME": [137],
+        "NBNAME_TCP": [137],
+        "NBSESSION": [139],
+        "KERBEROS": [88],
+        "KERBEROS_": [88],
+        "KERBEROS_V5_TCP": [88],
+        "KERBEROS_V5_UDP": [88],
+        "KERBEROS-TCP-V4": [88],
+        "KERBEROS-UDP-V4_": [88],
+        "NTP-UDP": [123],
+        "NTP-TCP": [123],
+        "TCP_135": [135],
+        "TCP_3268": [3268],
+        "TCP_3269": [3269],
+        "TCP_464": [464],
+        "TCP_8810-8811": [8810, 8811],
+        "TCP-HIGH-PORTS": [1024, 65535],
+        "TCP-49152_65535": [49152, 65535],
+        "TCP-49152_65435": [49152, 65435],
+        "MICROSOFT-DS": [445],
+        "MICROSOFT_DS": [445],
+        "LDPW0RM": [515],
+        "PING": [],
+        "ICMP": [],
+        "ICMP-COMMS": [],
+        "ECHO-REQUEST": [],
+        "ECHO-REPLY": [],
+        "SMTP-TLS": [465],
+        "SMTP SUBMISSION": [587],
+        "SMTP_SUBMISSION": [587],
+    }
+    # Populate a few common inline service aliases observed in exports.
+    for prefix, port in ("TCP", 25), ("TCP", 587), ("TCP", 465), ("UDP", 53):
+        key = f"{prefix}_{port}"
+        base.setdefault(key, [port])
+        base.setdefault(key.replace("_", "-"), [port])
+    return base
+
+
+SERVICE_NAME_PORTS = _build_service_name_ports()
+
+
+def _numeric_range_from_match(match: re.Match[str]) -> list[int]:
+    start_text = match.group("start")
+    end_text = match.group("end")
+    if not start_text:
+        return []
+    try:
+        start = int(start_text)
+    except ValueError:
+        return []
+    if not 1 <= start <= 65535:
+        return []
+    if not end_text:
+        return [start]
+    try:
+        end = int(end_text)
+    except ValueError:
+        return [start]
+    if end < start:
+        start, end = end, start
+    return [port for port in range(start, end + 1) if 1 <= port <= 65535]
+
+
+_SERVICE_ALIAS_PATTERNS: Tuple[Tuple[re.Pattern[str], Callable[[re.Match[str]], list[int]]], ...] = (
+    (
+        re.compile(
+            r"^(?P<prefix>TCP|UDP)[-_]?(?P<start>\d{1,5})(?:[-_](?P<end>\d{1,5}))?$",
+            re.IGNORECASE,
+        ),
+        _numeric_range_from_match,
+    ),
+    (
+        re.compile(
+            r"^DM_INLINE_SERVICE[-_]?(?P<start>\d{1,5})(?:[-_](?P<end>\d{1,5}))?$",
+            re.IGNORECASE,
+        ),
+        _numeric_range_from_match,
+    ),
+    (
+        re.compile(
+            r"^SMTP[S]?[-_]?(?P<start>\d{1,5})(?:[-_](?P<end>\d{1,5}))?$",
+            re.IGNORECASE,
+        ),
+        _numeric_range_from_match,
+    ),
+)
+
+
+def _service_ports_from_alias(label: str) -> list[int] | None:
+    ports = SERVICE_NAME_PORTS.get(label)
+    if ports is not None:
+        return ports
+    for pattern, resolver in _SERVICE_ALIAS_PATTERNS:
+        match = pattern.match(label)
+        if match:
+            resolved = resolver(match)
+            if resolved:
+                return resolved
+    return None
 
 
 _TAG_SANITIZE_RE = re.compile(r"[^a-z0-9]+")
@@ -202,7 +277,12 @@ _ADDRESS_WILDCARDS = {"any", "all", "*"}
 def _iter_ip_candidates(token: str) -> Iterable[str]:
     for match in _IP_CANDIDATE_RE.finditer(token):
         candidate = match.group(0)
-        if candidate and ("." in candidate or ":" in candidate):
+        if not candidate:
+            continue
+        if ":" in candidate:
+            yield candidate
+            continue
+        if candidate.count(".") >= 3:
             yield candidate
 
 
@@ -540,16 +620,36 @@ def _extract_rule_tags(
     return tuple(tags)
 
 
+_SERVICE_VALUE_PREFIX_RE = re.compile(
+   r"^(?:group\s*member|member|service\s*member|service\s*name)\s*(?:\(\d+\))?\s*:\s*",
+    re.IGNORECASE,
+)
+
+
+def _strip_service_prefix(value: str) -> str:
+    cleaned = value
+    while True:
+        stripped = _SERVICE_VALUE_PREFIX_RE.sub("", cleaned, count=1)
+        if stripped == cleaned:
+            break
+        cleaned = stripped.lstrip()
+    return cleaned
+
+
 def _tokenise_service_values(text: str) -> Iterable[str]:
     if not text:
         return []
+    raw = str(text)
+    segments = [_strip_service_prefix(segment) for segment in raw.split("\n")]
+    interim = " ".join(segments)
     cleaned = (
-        text.replace("\n", " ")
+        interim.replace("\n", " ")
         .replace(",", " ")
         .replace(";", " ")
         .replace("/ ", "/")
     )
-    return [part for part in cleaned.split() if part]
+    cleaned = re.sub(r"\s+", " ", cleaned.strip())
+    return [part for part in cleaned.split(" ") if part]
 
 
 def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
@@ -567,11 +667,13 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
             continue
         upper = cleaned.upper()
 
-        if upper in {"ALL", "ANY", "*"}:
+        if upper in {"IP/0", "IPV4/0", "IPV6/0"}:
             wildcard = "ALL"
             break
 
-        mapped_ports = SERVICE_NAME_PORTS.get(upper)
+        mapped_ports = _service_ports_from_alias(upper)
+        if mapped_ports is None and cleaned != upper:
+            mapped_ports = _service_ports_from_alias(cleaned)
         if mapped_ports is not None:
             added = False
             for port in mapped_ports:
@@ -586,6 +688,30 @@ def _prepare_port_tokens(tokens: Iterable[str]) -> list[str]:
                 for port in mapped_ports
             ):
                 continue
+            wildcard = "ALL"
+            break
+
+        if "_" in cleaned and any(ch.isdigit() for ch in cleaned):
+            head, _, remainder = cleaned.partition("_")
+            remainder = remainder.strip()
+            if head and remainder and head.isalpha():
+                remainder_digits = remainder.replace("-", "")
+                if remainder_digits.isdigit():
+                    cleaned = f"{head}/{remainder}"
+                    upper = cleaned.upper()
+
+        if "/" in cleaned and ":" in cleaned:
+            head, _, remainder = cleaned.partition("/")
+            parts = [segment.strip() for segment in remainder.split(":") if segment.strip()]
+            if parts and all(segment.isdigit() for segment in parts):
+                numbers = sorted(int(segment) for segment in parts)
+                if len(numbers) == 1:
+                    cleaned = f"{head}/{numbers[0]}"
+                else:
+                    cleaned = f"{head}/{numbers[0]}-{numbers[-1]}"
+                upper = cleaned.upper()
+
+        if upper in {"ALL", "ANY", "*"}:
             wildcard = "ALL"
             break
 
