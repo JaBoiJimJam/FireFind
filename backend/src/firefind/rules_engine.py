@@ -62,18 +62,8 @@ def _canonical_severity_label(value: str) -> str:
 
 
 def override_with_risk_rating(rule: Rule, severity: str) -> str:
-    """Prefer a rule's explicit risk rating when present."""
-    
-    rating_raw = getattr(rule, "risk_rating", "")
-    if not rating_raw:
-        return severity
-
-    rating = normalize_risk_rating(rating_raw)
-    if not rating:
-        return severity
-
-    return _canonical_severity_label(rating)
-
+    #this does nothing for now
+    return severity
 
 _WEB_PORTS = {80, 443}
 _WEB_INFRA_PORTS = _WEB_PORTS | {53, 88, 123, 389, 464, 636, 1433, 3268, 3269}
