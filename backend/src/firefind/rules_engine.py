@@ -62,7 +62,10 @@ def _canonical_severity_label(value: str) -> str:
 
 
 def override_with_risk_rating(rule: Rule, severity: str) -> str:
-    #this does nothing for now
+    """Return the analyzer's severity unchanged."""
+
+    # The risk rating field is reserved for calibration data and should not
+    # influence how findings are classified.
     return severity
 
 _WEB_PORTS = {80, 443}

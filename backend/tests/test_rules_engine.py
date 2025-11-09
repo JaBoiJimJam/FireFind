@@ -191,7 +191,7 @@ def test_single_web_port_with_high_risk_companion_not_info():
     assert severities and severities[0] != "Info"
 
 
-def test_admin_port_risk_rating_varies_with_port():
+def test_admin_port_severity_varies_with_port_profile():
     rule_critical = Rule(
         "1",
         "1.1.1.1",
@@ -242,8 +242,8 @@ def test_admin_port_risk_rating_varies_with_port():
     )
     ratings = {f.rule_id: f.severity for f in findings if f.finding_type == "admin_port_exposed"}
 
-    assert ratings["1"] == "Low"
-    assert ratings["2"] == "Cautionary"
+    assert ratings["1"] == "Medium"
+    assert ratings["2"] == "High"
     assert ratings["3"] == "Low"
     assert ratings["4"] == "Low"
 
@@ -432,7 +432,7 @@ def test_mixed_critical_ports_stay_critical():
     assert severities == ["Critical"]
 
 
-def test_http_admin_port_finding_is_cautionary():
+def test_http_admin_port_finding_is_informational():
     rule = Rule(
         "web",
         "10.0.0.0/24",
@@ -457,7 +457,7 @@ def test_http_admin_port_finding_is_cautionary():
     severities = [
         f.severity for f in findings if f.finding_type == "admin_port_exposed"
     ]
-    assert severities == ["Cautionary"]
+    assert severities == ["Info"]
 
 
 def test_run_checks_broad_cidr():
