@@ -39,6 +39,10 @@
                     <button id="exportYamlBtn" class="btn btn-primary" disabled><i class="fa-solid fa-file-export"></i> Export YAML Snapshot</button>
                     <input type="file" id="yamlFileInput" accept=".yml,.yaml,.json" hidden>
                 </div>
+                <div id="unsavedIndicator" class="unsaved-indicator" role="status" aria-live="polite" hidden>
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    <span>Unsaved changes. Export a snapshot before leaving the console.</span>
+                </div>
                 <p class="admin-hint">Importing merges additional keys from the source file and preserves them for export.</p>
             </div>
             <div class="validation-summary" id="validationSummary" role="status" aria-live="polite">Provide or import configuration to begin.</div>
@@ -50,9 +54,16 @@
                     <h2>Risk Levels</h2>
                     <p>Define severity labels and numeric thresholds used by the risk engine.</p>
                 </div>
-                <button class="btn" id="addRiskLevelBtn"><i class="fa-solid fa-plus"></i> Add Risk Level</button>
+                <div class="section-actions">
+                    <label class="search-field" for="riskLevelFilterInput" title="Filter risk levels by identifier, label, or severity.">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <span class="sr-only">Search risk levels</span>
+                        <input type="search" id="riskLevelFilterInput" placeholder="Search" autocomplete="off">
+                    </label>
+                    <button class="btn" id="addRiskLevelBtn" title="Add a new risk level definition"><i class="fa-solid fa-plus"></i> Add Risk Level</button>
+                </div>
             </div>
-            <div class="admin-help">Severity options mirror backend enumeration (<code>critical</code>, <code>high</code>, <code>medium</code>, <code>cautionary</code>, <code>low</code>, <code>informational</code>). Threshold minimums must not exceed maximums and negative finding counts are rejected.</div>
+            <div class="admin-help">Severity options mirror backend enumeration (<code>critical</code>, <code>high</code>, <code>medium</code>, <code>cautionary</code>, <code>low</code>, <code>informational</code>). Threshold minimums must not exceed maximums and negative finding counts are rejected. Use the search filter above to quickly locate levels and the arrow controls on each card to reprioritize the evaluation order.</div>
             <div id="riskLevelsList" class="config-grid"></div>
         </section>
 
@@ -62,9 +73,16 @@
                     <h2>CIDR Limit Sets</h2>
                     <p>Specify default and override policies controlling allowed network breadth.</p>
                 </div>
-                <button class="btn" id="addCidrSetBtn"><i class="fa-solid fa-plus"></i> Add CIDR Limit Set</button>
+                <div class="section-actions">
+                    <label class="search-field" for="cidrFilterInput" title="Filter CIDR limit sets by identifier or override text.">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <span class="sr-only">Search CIDR limit sets</span>
+                        <input type="search" id="cidrFilterInput" placeholder="Search" autocomplete="off">
+                    </label>
+                    <button class="btn" id="addCidrSetBtn" title="Add a new CIDR limit set"><i class="fa-solid fa-plus"></i> Add CIDR Limit Set</button>
+                </div>
             </div>
-            <div class="admin-help">Prefixes must be between /0 and /128. Provide CIDR values such as <code>10.0.0.0/8</code> or <code>2001:db8::/32</code>. Blocked and exempt entries accept newline or comma separated CIDRs and are validated using the backend parser rules.</div>
+            <div class="admin-help">Prefixes must be between /0 and /128. Provide CIDR values such as <code>10.0.0.0/8</code> or <code>2001:db8::/32</code>. Blocked and exempt entries accept newline or comma separated CIDRs and are validated using the backend parser rules. Use the search filter to narrow large inventories and confirm before deleting a set to avoid losing tailored overrides.</div>
             <div id="cidrSetsList" class="config-grid"></div>
         </section>
 
@@ -74,9 +92,16 @@
                     <h2>Port Groups</h2>
                     <p>Define reusable port groupings for analyzers.</p>
                 </div>
-                <button class="btn" id="addPortGroupBtn"><i class="fa-solid fa-plus"></i> Add Port Group</button>
+                <div class="section-actions">
+                    <label class="search-field" for="portGroupFilterInput" title="Filter port groups by identifier or range contents.">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <span class="sr-only">Search port groups</span>
+                        <input type="search" id="portGroupFilterInput" placeholder="Search" autocomplete="off">
+                    </label>
+                    <button class="btn" id="addPortGroupBtn" title="Add a new port group"><i class="fa-solid fa-plus"></i> Add Port Group</button>
+                </div>
             </div>
-            <div class="admin-help">Ports must be between 1 and 65535. Ranges cannot overlap or invert. Protocols follow backend expectations (<code>tcp</code>, <code>udp</code>, or <code>any</code>).</div>
+            <div class="admin-help">Ports must be between 1 and 65535. Ranges cannot overlap or invert. Protocols follow backend expectations (<code>tcp</code>, <code>udp</code>, or <code>any</code>). The search filter helps locate existing groups and hovering action buttons reveals tooltips describing their purpose.</div>
             <div id="portGroupsList" class="config-grid"></div>
         </section>
 
@@ -86,9 +111,16 @@
                     <h2>Rule Logic</h2>
                     <p>Author analyzer rule definitions, including condition logic and analyzer overrides.</p>
                 </div>
-                <button class="btn" id="addRuleLogicBtn"><i class="fa-solid fa-plus"></i> Add Rule Definition</button>
+                <div class="section-actions">
+                    <label class="search-field" for="ruleFilterInput" title="Filter rule definitions by identifier, label, analyzer, or severity.">
+                        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        <span class="sr-only">Search rule definitions</span>
+                        <input type="search" id="ruleFilterInput" placeholder="Search" autocomplete="off">
+                    </label>
+                    <button class="btn" id="addRuleLogicBtn" title="Add a new rule definition"><i class="fa-solid fa-plus"></i> Add Rule Definition</button>
+                </div>
             </div>
-            <div class="admin-help">Conditions and analyzers accept YAML that maps directly to the backend schema. Provide a logic tree describing rule criteria and analyzer-specific metadata, including severity overrides and administrative port tiers.</div>
+            <div class="admin-help">Conditions and analyzers accept YAML that maps directly to the backend schema. Provide a logic tree describing rule criteria and analyzer-specific metadata, including severity overrides and administrative port tiers. Use the search filter to explore existing logic, reorder cards to influence evaluation order, and rely on tooltips for clarification before toggling or deleting a rule.</div>
             <div id="ruleLogicList" class="config-grid"></div>
         </section>
     </main>

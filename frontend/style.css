@@ -1053,6 +1053,11 @@
             opacity: 0.6;
         }
 
+        .empty-state-hint {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
         /* Reports Section */
         .reports-section {
             background: var(--card-bg);
@@ -1459,6 +1464,78 @@
             margin: 1.5rem 0 0.75rem;
         }
 
+        .section-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .search-field {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(12, 16, 18, 0.92);
+            border: 1px solid rgba(78, 204, 163, 0.3);
+            border-radius: 999px;
+            padding: 0.35rem 0.75rem;
+            color: var(--text-muted);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .search-field:focus-within {
+            border-color: rgba(78, 204, 163, 0.6);
+            box-shadow: 0 0 0 2px rgba(78, 204, 163, 0.15);
+        }
+
+        .search-field i {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .search-field input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-light);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+            min-width: 160px;
+        }
+
+        .search-field input::placeholder {
+            color: rgba(255, 255, 255, 0.45);
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+
+        .unsaved-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            padding: 0.55rem 0.9rem;
+            border-radius: 12px;
+            background: rgba(255, 170, 0, 0.12);
+            border: 1px solid rgba(255, 170, 0, 0.35);
+            color: var(--warning);
+            font-size: 0.95rem;
+        }
+
+        .unsaved-indicator i {
+            color: var(--warning);
+        }
+
         .admin-body .btn {
             padding: 0.65rem 1.5rem;
             border-radius: 12px;
@@ -1480,6 +1557,12 @@
             background: rgba(78, 204, 163, 0.12);
             color: var(--primary-green);
             border: 1px solid rgba(78, 204, 163, 0.4);
+        }
+
+        .admin-body .btn.attention {
+            border-color: rgba(255, 170, 0, 0.5);
+            box-shadow: 0 0 0 2px rgba(255, 170, 0, 0.2);
+            color: var(--warning);
         }
 
         .admin-body .btn.tertiary {
@@ -1579,6 +1662,14 @@
             align-items: center;
             margin-bottom: 1.25rem;
             gap: 1rem;
+        }
+
+        .card-header-actions,
+        .rule-card-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
         }
 
         .card-header h3 {
@@ -1746,6 +1837,14 @@
             border-color: rgba(78, 204, 163, 0.4);
         }
 
+        .icon-btn:disabled,
+        .icon-btn[disabled] {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
         .icon-btn.danger {
             border-color: rgba(255, 68, 68, 0.35);
             color: #ff9f9f;
@@ -1794,6 +1893,11 @@
             display: flex;
             align-items: center;
             gap: 0.75rem;
+        }
+
+        .reorder-group {
+            display: inline-flex;
+            gap: 0.35rem;
         }
 
         .rule-card-body {

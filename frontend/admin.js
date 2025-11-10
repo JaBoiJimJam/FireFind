@@ -589,6 +589,22 @@
         toast: '#adminToast',
     };
 
+    const uiState = {
+        filters: {
+            riskLevels: '',
+            cidrLimitSets: '',
+            portGroups: '',
+            ruleLogic: '',
+        },
+    };
+
+    let lastCommittedSnapshot = null;
+    let hasUnsavedChanges = false;
+
+    if (typeof window !== 'undefined') {
+        window.addEventListener('beforeunload', handleBeforeUnload);
+    }
+
     const STORAGE_KEY = 'firefind:admin-state:v1';
     const storageAvailable = checkLocalStorageAvailability();
 
@@ -608,6 +624,11 @@
         const exportBtn = document.querySelector(selectors.exportButton);
         const importBtn = document.querySelector(selectors.importButton);
         const importInput = document.querySelector(selectors.importInput);
+
+        initializeFilterInput('riskLevelFilterInput', 'riskLevels', renderRiskLevels);
+        initializeFilterInput('cidrFilterInput', 'cidrLimitSets', renderCidrSets);
+        initializeFilterInput('portGroupFilterInput', 'portGroups', renderPortGroups);
+        initializeFilterInput('ruleFilterInput', 'ruleLogic', renderRuleLogic);
 
         addRiskBtn?.addEventListener('click', () => {
             configState.riskLevels.push(createRiskLevel());
@@ -649,6 +670,7 @@
             link.click();
             URL.revokeObjectURL(url);
             showToast('Exported YAML snapshot.');
+            markStateCommitted();
         });
 
         importBtn?.addEventListener('click', () => importInput?.click());
@@ -715,13 +737,271 @@
         );
     }
 
+    function getFilterValue(key) {
+        return uiState.filters?.[key] ?? '';
+    }
+
+    function setFilterValue(key, value) {
+        if (!uiState.filters) {
+            uiState.filters = {};
+        }
+        uiState.filters[key] = value ?? '';
+    }
+
+    function flattenTokens(tokens) {
+        if (tokens === null || tokens === undefined) {
+            return [];
+        }
+        if (Array.isArray(tokens)) {
+            const result = [];
+            tokens.forEach((token) => {
+                result.push(...flattenTokens(token));
+            });
+            return result;
+        }
+        return [tokens];
+    }
+
+    function applyTextFilter(items, query, extractor) {
+        if (!Array.isArray(items)) {
+            return [];
+        }
+        const trimmed = (query || '').trim();
+        if (!trimmed) {
+            return items.slice();
+        }
+        const normalized = trimmed.toLowerCase();
+        return items.filter((item) => {
+            try {
+                const tokens = flattenTokens(extractor(item));
+                return tokens
+                    .filter((token) => token !== null && token !== undefined)
+                    .map((token) => String(token).toLowerCase())
+                    .some((token) => token.includes(normalized));
+            } catch (error) {
+                return false;
+            }
+        });
+    }
+
+    function createEmptyState(message, options = {}) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'empty-state';
+        if (options.icon) {
+            const icon = document.createElement('i');
+            icon.className = `fa-solid ${options.icon}`;
+            icon.setAttribute('aria-hidden', 'true');
+            wrapper.appendChild(icon);
+        }
+        const text = document.createElement('p');
+        text.textContent = message;
+        wrapper.appendChild(text);
+        if (options.hint) {
+            const hint = document.createElement('p');
+            hint.className = 'empty-state-hint';
+            hint.textContent = options.hint;
+            wrapper.appendChild(hint);
+        }
+        return wrapper;
+    }
+
+    function confirmDeletion(entityLabel, name) {
+        const displayName = (name || '').trim();
+        const message = displayName
+            ? `Delete the ${entityLabel} '${displayName}'? This action cannot be undone.`
+            : `Delete this ${entityLabel}? This action cannot be undone.`;
+        return window.confirm(message);
+    }
+
+    function createReorderControls(options = {}) {
+        const group = document.createElement('div');
+        group.className = 'reorder-group';
+
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'icon-btn';
+        upBtn.innerHTML = '<i class="fa-solid fa-arrow-up" aria-hidden="true"></i>';
+        upBtn.dataset.reorderDirection = 'up';
+        const upTitle = options.upTitle || 'Move item up';
+        upBtn.title = upTitle;
+        upBtn.setAttribute('aria-label', upTitle);
+        upBtn.disabled = Boolean(options.disableUp);
+        if (typeof options.onMoveUp === 'function') {
+            upBtn.addEventListener('click', (event) => {
+                options.onMoveUp(event);
+            });
+        }
+        group.appendChild(upBtn);
+
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'icon-btn';
+        downBtn.innerHTML = '<i class="fa-solid fa-arrow-down" aria-hidden="true"></i>';
+        downBtn.dataset.reorderDirection = 'down';
+        const downTitle = options.downTitle || 'Move item down';
+        downBtn.title = downTitle;
+        downBtn.setAttribute('aria-label', downTitle);
+        downBtn.disabled = Boolean(options.disableDown);
+        if (typeof options.onMoveDown === 'function') {
+            downBtn.addEventListener('click', (event) => {
+                options.onMoveDown(event);
+            });
+        }
+        group.appendChild(downBtn);
+
+        return group;
+    }
+
+    function moveArrayEntry(list, itemId, offset) {
+        if (!Array.isArray(list)) {
+            return false;
+        }
+        const index = list.findIndex((item) => item.id === itemId);
+        if (index === -1) {
+            return false;
+        }
+        const targetIndex = index + offset;
+        if (targetIndex < 0 || targetIndex >= list.length) {
+            return false;
+        }
+        const [entry] = list.splice(index, 1);
+        list.splice(targetIndex, 0, entry);
+        return true;
+    }
+
+    function focusReorderButton(selector, direction = 'up') {
+        const normalized = direction === 'down' ? 'down' : 'up';
+        requestAnimationFrame(() => {
+            const container = document.querySelector(selector);
+            if (!container) {
+                return;
+            }
+            const target = container.querySelector(`.reorder-group button[data-reorder-direction="${normalized}"]`);
+            if (target && typeof target.focus === 'function') {
+                target.focus();
+            }
+        });
+    }
+
+    function moveRiskLevel(levelId, offset, triggerElement) {
+        if (!moveArrayEntry(configState.riskLevels, levelId, offset)) {
+            return;
+        }
+        renderRiskLevels();
+        runValidation({ suppressErrorToast: true });
+        focusReorderButton(`[data-level-id="${levelId}"]`, triggerElement?.dataset.reorderDirection);
+    }
+
+    function moveRuleDefinition(ruleId, offset, triggerElement) {
+        if (!moveArrayEntry(configState.ruleLogic, ruleId, offset)) {
+            return;
+        }
+        renderRuleLogic();
+        runValidation({ suppressErrorToast: true });
+        focusReorderButton(`[data-rule-id="${ruleId}"]`, triggerElement?.dataset.reorderDirection);
+    }
+
+    function updateUnsavedState() {
+        try {
+            const snapshot = JSON.stringify(buildConfigSnapshot());
+            if (lastCommittedSnapshot === null) {
+                lastCommittedSnapshot = snapshot;
+                hasUnsavedChanges = false;
+            } else {
+                hasUnsavedChanges = snapshot !== lastCommittedSnapshot;
+            }
+        } catch (error) {
+            console.error('Failed to compute configuration snapshot for change tracking.', error);
+        }
+        applyUnsavedUi();
+    }
+
+    function markStateCommitted() {
+        try {
+            lastCommittedSnapshot = JSON.stringify(buildConfigSnapshot());
+        } catch (error) {
+            console.error('Failed to capture committed configuration snapshot.', error);
+            lastCommittedSnapshot = null;
+        }
+        hasUnsavedChanges = false;
+        applyUnsavedUi();
+    }
+
+    function applyUnsavedUi() {
+        const indicator = document.getElementById('unsavedIndicator');
+        if (indicator) {
+            indicator.hidden = !hasUnsavedChanges;
+        }
+        const exportBtn = document.querySelector(selectors.exportButton);
+        if (exportBtn) {
+            exportBtn.classList.toggle('attention', hasUnsavedChanges);
+        }
+    }
+
+    function handleBeforeUnload(event) {
+        if (!hasUnsavedChanges) {
+            return;
+        }
+        event.preventDefault();
+        event.returnValue = '';
+    }
+
+    function initializeFilterInput(elementId, filterKey, renderFn) {
+        const input = document.getElementById(elementId);
+        if (!input) {
+            return;
+        }
+        input.value = getFilterValue(filterKey);
+        const update = (event) => {
+            setFilterValue(filterKey, event.target.value ?? '');
+            renderFn();
+        };
+        input.addEventListener('input', update);
+        input.addEventListener('search', update);
+    }
+
     function renderRiskLevels() {
         const container = document.querySelector(selectors.riskList);
         if (!container) {
             return;
         }
         container.innerHTML = '';
-        configState.riskLevels.forEach((level) => {
+        const allLevels = Array.isArray(configState.riskLevels) ? configState.riskLevels : [];
+        const filterValue = getFilterValue('riskLevels');
+        const filteredLevels = applyTextFilter(allLevels, filterValue, (level) => {
+            const rationale = level?.rationale || {};
+            const references = Array.isArray(rationale.references) ? rationale.references : [];
+            return [
+                level?.name,
+                level?.label,
+                level?.severity,
+                rationale.summary,
+                rationale.details,
+                references,
+            ];
+        });
+
+        if (filteredLevels.length === 0) {
+            if (allLevels.length === 0) {
+                container.appendChild(
+                    createEmptyState(
+                        'No risk levels configured yet. Add a risk level to begin defining severity thresholds.',
+                        { icon: 'fa-shield-halved', hint: 'Use the “Add Risk Level” button to create your first severity tier.' },
+                    ),
+                );
+            } else {
+                const trimmed = filterValue.trim();
+                container.appendChild(
+                    createEmptyState(`No risk levels match "${trimmed}".`, {
+                        icon: 'fa-magnifying-glass',
+                        hint: 'Clear the search filter to show every configured risk level.',
+                    }),
+                );
+            }
+            return;
+        }
+
+        filteredLevels.forEach((level) => {
             const card = document.createElement('article');
             card.className = 'config-card risk-level-card';
             card.dataset.levelId = level.id;
@@ -732,47 +1012,73 @@
             title.textContent = level.name || 'New risk level';
             header.appendChild(title);
 
+            const actions = document.createElement('div');
+            actions.className = 'card-header-actions';
+
+            const position = configState.riskLevels.findIndex((item) => item.id === level.id);
+            const reorderControls = createReorderControls({
+                upTitle: 'Move risk level up',
+                downTitle: 'Move risk level down',
+                disableUp: position <= 0,
+                disableDown: position === configState.riskLevels.length - 1,
+                onMoveUp: (event) => moveRiskLevel(level.id, -1, event.currentTarget),
+                onMoveDown: (event) => moveRiskLevel(level.id, 1, event.currentTarget),
+            });
+            actions.appendChild(reorderControls);
+
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.className = 'icon-btn danger';
             deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
             deleteBtn.title = 'Delete risk level';
+            deleteBtn.setAttribute('aria-label', `Delete ${title.textContent}`);
             deleteBtn.addEventListener('click', () => {
+                const displayName = (level.name || level.label || 'risk level').trim() || 'risk level';
+                if (!confirmDeletion('risk level', displayName)) {
+                    return;
+                }
                 configState.riskLevels = configState.riskLevels.filter((item) => item.id !== level.id);
                 renderRiskLevels();
                 runValidation();
-                showToast(`Removed risk level '${level.name || 'unnamed'}'.`);
+                showToast(`Removed risk level '${displayName}'.`);
             });
-            header.appendChild(deleteBtn);
+            actions.appendChild(deleteBtn);
+            header.appendChild(actions);
             card.appendChild(header);
 
             const body = document.createElement('div');
             body.className = 'card-body';
 
-            body.appendChild(createTextField('Identifier', level.name, (value) => {
-                level.name = value;
-                title.textContent = value || 'New risk level';
-                runValidation();
-            }, {
-                placeholder: 'critical',
-                help: 'Unique key used in YAML. Lowercase letters, numbers, dashes or underscores recommended.',
-                errorKey: 'name',
-            }));
+            body.appendChild(
+                createTextField('Identifier', level.name, (value) => {
+                    level.name = value;
+                    title.textContent = value || 'New risk level';
+                    runValidation();
+                }, {
+                    placeholder: 'critical',
+                    help: 'Unique key used in YAML. Lowercase letters, numbers, dashes or underscores recommended.',
+                    errorKey: 'name',
+                }),
+            );
 
-            body.appendChild(createTextField('Label', level.label, (value) => {
-                level.label = value;
-                runValidation();
-            }, {
-                placeholder: 'Critical Risk',
-                errorKey: 'label',
-            }));
+            body.appendChild(
+                createTextField('Label', level.label, (value) => {
+                    level.label = value;
+                    runValidation();
+                }, {
+                    placeholder: 'Critical Risk',
+                    errorKey: 'label',
+                }),
+            );
 
-            body.appendChild(createSelectField('Severity', severityOptions, level.severity, (value) => {
-                level.severity = value;
-                runValidation();
-            }, {
-                errorKey: 'severity',
-            }));
+            body.appendChild(
+                createSelectField('Severity', severityOptions, level.severity, (value) => {
+                    level.severity = value;
+                    runValidation();
+                }, {
+                    errorKey: 'severity',
+                }),
+            );
 
             const thresholdsGroup = document.createElement('div');
             thresholdsGroup.className = 'fieldset';
@@ -783,40 +1089,48 @@
 
             const thresholdsGrid = document.createElement('div');
             thresholdsGrid.className = 'field-grid';
-            thresholdsGrid.appendChild(createNumberField('Min Score', level.thresholds.min_score, (value) => {
-                level.thresholds.min_score = value;
-                runValidation();
-            }, {
-                min: 0,
-                max: 100,
-                placeholder: 'e.g. 80',
-                errorKey: 'min_score',
-            }));
-            thresholdsGrid.appendChild(createNumberField('Max Score', level.thresholds.max_score, (value) => {
-                level.thresholds.max_score = value;
-                runValidation();
-            }, {
-                min: 0,
-                max: 100,
-                placeholder: 'e.g. 100',
-                errorKey: 'max_score',
-            }));
-            thresholdsGrid.appendChild(createNumberField('Min Findings', level.thresholds.min_findings, (value) => {
-                level.thresholds.min_findings = value;
-                runValidation();
-            }, {
-                min: 0,
-                placeholder: 'e.g. 1',
-                errorKey: 'min_findings',
-            }));
-            thresholdsGrid.appendChild(createNumberField('Max Findings', level.thresholds.max_findings, (value) => {
-                level.thresholds.max_findings = value;
-                runValidation();
-            }, {
-                min: 0,
-                placeholder: 'e.g. 5',
-                errorKey: 'max_findings',
-            }));
+            thresholdsGrid.appendChild(
+                createNumberField('Min Score', level.thresholds.min_score, (value) => {
+                    level.thresholds.min_score = value;
+                    runValidation();
+                }, {
+                    min: 0,
+                    max: 100,
+                    placeholder: 'e.g. 80',
+                    errorKey: 'min_score',
+                }),
+            );
+            thresholdsGrid.appendChild(
+                createNumberField('Max Score', level.thresholds.max_score, (value) => {
+                    level.thresholds.max_score = value;
+                    runValidation();
+                }, {
+                    min: 0,
+                    max: 100,
+                    placeholder: 'e.g. 100',
+                    errorKey: 'max_score',
+                }),
+            );
+            thresholdsGrid.appendChild(
+                createNumberField('Min Findings', level.thresholds.min_findings, (value) => {
+                    level.thresholds.min_findings = value;
+                    runValidation();
+                }, {
+                    min: 0,
+                    placeholder: 'e.g. 1',
+                    errorKey: 'min_findings',
+                }),
+            );
+            thresholdsGrid.appendChild(
+                createNumberField('Max Findings', level.thresholds.max_findings, (value) => {
+                    level.thresholds.max_findings = value;
+                    runValidation();
+                }, {
+                    min: 0,
+                    placeholder: 'e.g. 5',
+                    errorKey: 'max_findings',
+                }),
+            );
             thresholdsGroup.appendChild(thresholdsGrid);
             thresholdsGroup.appendChild(createFieldError('thresholds'));
             body.appendChild(thresholdsGroup);
@@ -828,31 +1142,37 @@
             rationaleLegend.innerHTML = '<span>Rationale</span><span class="fieldset-hint">Explain why this risk level exists. References accept comma or newline separated values.</span>';
             rationaleGroup.appendChild(rationaleLegend);
 
-            rationaleGroup.appendChild(createTextField('Summary', level.rationale.summary, (value) => {
-                level.rationale.summary = value;
-                runValidation();
-            }, {
-                placeholder: 'High business impact exposure',
-                errorKey: 'rationale_summary',
-            }));
+            rationaleGroup.appendChild(
+                createTextField('Summary', level.rationale.summary, (value) => {
+                    level.rationale.summary = value;
+                    runValidation();
+                }, {
+                    placeholder: 'High business impact exposure',
+                    errorKey: 'rationale_summary',
+                }),
+            );
+    
+            rationaleGroup.appendChild(
+                createTextareaField('Details', level.rationale.details, (value) => {
+                    level.rationale.details = value;
+                    runValidation();
+                }, {
+                    rows: 3,
+                    placeholder: 'Describe the justification or remediation guidance.',
+                    errorKey: 'rationale_details',
+                }),
+            );
 
-            rationaleGroup.appendChild(createTextareaField('Details', level.rationale.details, (value) => {
-                level.rationale.details = value;
-                runValidation();
-            }, {
-                rows: 3,
-                placeholder: 'Describe the justification or remediation guidance.',
-                errorKey: 'rationale_details',
-            }));
-
-            rationaleGroup.appendChild(createTextareaField('References', level.rationale.references.join('\n'), (value) => {
-                level.rationale.references = splitList(value);
-                runValidation();
-            }, {
-                rows: 2,
-                placeholder: 'https://example.com/standard\nPolicy-1234',
-                errorKey: 'rationale_references',
-            }));
+            rationaleGroup.appendChild(
+                createTextareaField('References', level.rationale.references.join('\n'), (value) => {
+                    level.rationale.references = splitList(value);
+                    runValidation();
+                }, {
+                    rows: 2,
+                    placeholder: 'https://example.com/standard\nPolicy-1234',
+                    errorKey: 'rationale_references',
+                }),
+            );
 
             body.appendChild(rationaleGroup);
             body.appendChild(createFieldError('general'));
@@ -868,7 +1188,49 @@
             return;
         }
         container.innerHTML = '';
-        configState.cidrLimitSets.forEach((set) => {
+        const allSets = Array.isArray(configState.cidrLimitSets) ? configState.cidrLimitSets : [];
+        const filterValue = getFilterValue('cidrLimitSets');
+        const filteredSets = applyTextFilter(allSets, filterValue, (set) => {
+            const defaultPolicy = set?.defaultPolicy || {};
+            const overrides = Array.isArray(set?.overrides) ? set.overrides : [];
+            return [
+                set?.name,
+                defaultPolicy.description,
+                defaultPolicy.blocked,
+                defaultPolicy.exempt,
+                overrides.map((override) => [
+                    override.scope,
+                    override.key,
+                    override.vendor,
+                    override.direction,
+                    override.policy?.description,
+                    override.policy?.blocked,
+                    override.policy?.exempt,
+                ]),
+            ];
+        });
+
+        if (filteredSets.length === 0) {
+            if (allSets.length === 0) {
+                container.appendChild(
+                    createEmptyState(
+                        'No CIDR limit sets configured yet. Add a set to document inbound and outbound allowances.',
+                        { icon: 'fa-route', hint: 'Use “Add CIDR Limit Set” to define the default policy for analyzers.' },
+                    ),
+                );
+            } else {
+                const trimmed = filterValue.trim();
+                container.appendChild(
+                    createEmptyState(`No CIDR limit sets match "${trimmed}".`, {
+                        icon: 'fa-magnifying-glass',
+                        hint: 'Adjust or clear the search filter to review all CIDR policies.',
+                    }),
+                );
+            }
+            return;
+        }
+
+        filteredSets.forEach((set) => {
             const card = document.createElement('article');
             card.className = 'config-card cidr-card';
             card.dataset.setId = set.id;
@@ -879,31 +1241,41 @@
             title.textContent = set.name || 'New CIDR limit set';
             header.appendChild(title);
 
+            const actions = document.createElement('div');
+            actions.className = 'card-header-actions';
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.className = 'icon-btn danger';
             deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
             deleteBtn.title = 'Delete CIDR limit set';
+            deleteBtn.setAttribute('aria-label', `Delete ${title.textContent}`);
             deleteBtn.addEventListener('click', () => {
+                const displayName = (set.name || 'CIDR limit set').trim() || 'CIDR limit set';
+                if (!confirmDeletion('CIDR limit set', displayName)) {
+                    return;
+                }
                 configState.cidrLimitSets = configState.cidrLimitSets.filter((item) => item.id !== set.id);
                 renderCidrSets();
                 runValidation();
-                showToast(`Removed CIDR set '${set.name || 'unnamed'}'.`);
+                showToast(`Removed CIDR set '${displayName}'.`);
             });
-            header.appendChild(deleteBtn);
+            actions.appendChild(deleteBtn);
+            header.appendChild(actions);
             card.appendChild(header);
 
             const body = document.createElement('div');
             body.className = 'card-body';
 
-            body.appendChild(createTextField('Identifier', set.name, (value) => {
-                set.name = value;
-                title.textContent = value || 'New CIDR limit set';
-                runValidation();
-            }, {
-                placeholder: 'default_inbound_limits',
-                errorKey: 'name',
-            }));
+            body.appendChild(
+                createTextField('Identifier', set.name, (value) => {
+                    set.name = value;
+                    title.textContent = value || 'New CIDR limit set';
+                    runValidation();
+                }, {
+                    placeholder: 'default_inbound_limits',
+                    errorKey: 'name',
+                }),
+            );
 
             body.appendChild(createPolicyFields('Default Policy', set.defaultPolicy, () => runValidation(), 'default'));
 
@@ -926,6 +1298,7 @@
             addOverrideBtn.type = 'button';
             addOverrideBtn.className = 'btn tertiary';
             addOverrideBtn.innerHTML = '<i class="fa-solid fa-layer-group"></i> Add Override';
+            addOverrideBtn.title = 'Add a new CIDR override entry';
             addOverrideBtn.addEventListener('click', () => {
                 const override = createCidrOverride();
                 set.overrides.push(override);
@@ -1007,7 +1380,38 @@
             return;
         }
         container.innerHTML = '';
-        configState.portGroups.forEach((group) => {
+        const allGroups = Array.isArray(configState.portGroups) ? configState.portGroups : [];
+        const filterValue = getFilterValue('portGroups');
+        const filteredGroups = applyTextFilter(allGroups, filterValue, (group) => [
+            group?.name,
+            group?.description,
+            group?.protocol,
+            Array.isArray(group?.ranges)
+                ? group.ranges.map((range) => `${range.start ?? ''}-${range.end ?? ''}`)
+                : [],
+        ]);
+
+        if (filteredGroups.length === 0) {
+            if (allGroups.length === 0) {
+                container.appendChild(
+                    createEmptyState('No port groups configured yet. Add a group to reuse analyzer range definitions.', {
+                        icon: 'fa-plug',
+                        hint: 'Use “Add Port Group” to define a reusable set of ports and protocols.',
+                    }),
+                );
+            } else {
+                const trimmed = filterValue.trim();
+                container.appendChild(
+                    createEmptyState(`No port groups match "${trimmed}".`, {
+                        icon: 'fa-magnifying-glass',
+                        hint: 'Adjust the search text to find existing port groups.',
+                    }),
+                );
+            }
+            return;
+        }
+
+        filteredGroups.forEach((group) => {
             const card = document.createElement('article');
             card.className = 'config-card port-group-card';
             card.dataset.groupId = group.id;
@@ -1018,51 +1422,65 @@
             title.textContent = group.name || 'New port group';
             header.appendChild(title);
 
+            const actions = document.createElement('div');
+            actions.className = 'card-header-actions';
             const deleteBtn = document.createElement('button');
             deleteBtn.type = 'button';
             deleteBtn.className = 'icon-btn danger';
             deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
             deleteBtn.title = 'Delete port group';
+            deleteBtn.setAttribute('aria-label', `Delete ${title.textContent}`);
             deleteBtn.addEventListener('click', () => {
+                const displayName = (group.name || 'port group').trim() || 'port group';
+                if (!confirmDeletion('port group', displayName)) {
+                    return;
+                }
                 configState.portGroups = configState.portGroups.filter((item) => item.id !== group.id);
                 renderPortGroups();
                 runValidation();
-                showToast(`Removed port group '${group.name || 'unnamed'}'.`);
+                showToast(`Removed port group '${displayName}'.`);
             });
-            header.appendChild(deleteBtn);
+            actions.appendChild(deleteBtn);
+            header.appendChild(actions);
             card.appendChild(header);
 
             const body = document.createElement('div');
             body.className = 'card-body';
 
-            body.appendChild(createTextField('Identifier', group.name, (value) => {
-                group.name = value;
-                title.textContent = value || 'New port group';
-                runValidation();
-            }, {
-                placeholder: 'critical_admin_ports',
-                errorKey: 'name',
-            }));
+            body.appendChild(
+                createTextField('Identifier', group.name, (value) => {
+                    group.name = value;
+                    title.textContent = value || 'New port group';
+                    runValidation();
+                }, {
+                    placeholder: 'critical_admin_ports',
+                    errorKey: 'name',
+                }),
+            );
 
-            body.appendChild(createTextareaField('Description', group.description, (value) => {
-                group.description = value;
-                runValidation();
-            }, {
-                rows: 2,
-                placeholder: 'Optional description for documentation.',
-                errorKey: 'description',
-            }));
+            body.appendChild(
+                createTextareaField('Description', group.description, (value) => {
+                    group.description = value;
+                    runValidation();
+                }, {
+                    rows: 2,
+                    placeholder: 'Optional description for documentation.',
+                    errorKey: 'description',
+                }),
+            );
 
-            body.appendChild(createSelectField('Protocol', [
-                { value: 'any', label: 'Any' },
-                { value: 'tcp', label: 'TCP' },
-                { value: 'udp', label: 'UDP' },
-            ], group.protocol, (value) => {
-                group.protocol = value;
-                runValidation();
-            }, {
-                errorKey: 'protocol',
-            }));
+            body.appendChild(
+                createSelectField('Protocol', [
+                    { value: 'any', label: 'Any' },
+                    { value: 'tcp', label: 'TCP' },
+                    { value: 'udp', label: 'UDP' },
+                ], group.protocol, (value) => {
+                    group.protocol = value;
+                    runValidation();
+                }, {
+                    errorKey: 'protocol',
+                }),
+            );
 
             const rangesSection = document.createElement('div');
             rangesSection.className = 'fieldset';
@@ -1080,25 +1498,29 @@
                 rangeRow.className = 'range-row';
                 rangeRow.dataset.rangeId = range.id;
 
-                rangeRow.appendChild(createNumberField('Start', range.start, (value) => {
-                    range.start = value;
-                    runValidation();
-                }, {
-                    min: 1,
-                    max: 65535,
-                    compact: true,
-                    errorKey: `start_${range.id}`,
-                }));
+                rangeRow.appendChild(
+                    createNumberField('Start', range.start, (value) => {
+                        range.start = value;
+                        runValidation();
+                    }, {
+                        min: 1,
+                        max: 65535,
+                        compact: true,
+                        errorKey: `start_${range.id}`,
+                    }),
+                );
 
-                rangeRow.appendChild(createNumberField('End', range.end, (value) => {
-                    range.end = value;
-                    runValidation();
-                }, {
-                    min: 1,
-                    max: 65535,
-                    compact: true,
-                    errorKey: `end_${range.id}`,
-                }));
+                rangeRow.appendChild(
+                    createNumberField('End', range.end, (value) => {
+                        range.end = value;
+                        runValidation();
+                    }, {
+                        min: 1,
+                        max: 65535,
+                        compact: true,
+                        errorKey: `end_${range.id}`,
+                    }),
+                );
 
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
@@ -1119,8 +1541,10 @@
             addRangeBtn.type = 'button';
             addRangeBtn.className = 'btn tertiary';
             addRangeBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Add Range';
+            addRangeBtn.title = 'Add a port range to this group';
             addRangeBtn.addEventListener('click', () => {
-                group.ranges.push(createRange());
+                const newRange = createRange();
+                group.ranges.push(newRange);
                 renderPortGroups();
                 runValidation();
             });
@@ -1144,25 +1568,55 @@
         if (!ruleListView) {
             ruleListView = createRuleList(container);
         }
-        ruleListView.update(configState.ruleLogic);
+        const allRules = Array.isArray(configState.ruleLogic) ? configState.ruleLogic : [];
+        const filterValue = getFilterValue('ruleLogic');
+        const filteredRules = applyTextFilter(allRules, filterValue, (rule) => {
+            const primaryAnalyzer = getPrimaryAnalyzer(rule);
+            const analyzerKeys = Array.isArray(rule?.analyzerEntries)
+                ? rule.analyzerEntries.map((entry) => entry.key)
+                : [];
+            return [
+                getRuleDisplayName(rule),
+                rule?.key,
+                rule?.ruleId,
+                rule?.label,
+                rule?.description,
+                primaryAnalyzer.key,
+                getPrimarySeverity(primaryAnalyzer),
+                analyzerKeys,
+            ];
+        });
+        ruleListView.update(filteredRules, allRules.length, filterValue);
     }
 
     function createRuleList(container) {
         container.classList.add('rule-logic-container');
         return {
-            update(rules) {
+            update(rules, totalCount = 0, query = '') {
                 container.innerHTML = '';
                 if (!Array.isArray(rules) || rules.length === 0) {
-                    const empty = document.createElement('div');
-                    empty.className = 'empty-state';
-                    empty.textContent = 'No rule definitions configured yet. Add a rule to begin authoring logic.';
-                    container.appendChild(empty);
+                    const trimmed = (query || '').trim();
+                    if (totalCount > 0 && trimmed) {
+                        container.appendChild(
+                            createEmptyState(`No rule definitions match "${trimmed}".`, {
+                                icon: 'fa-magnifying-glass',
+                                hint: 'Clear the search filter to show every rule definition.',
+                            }),
+                        );
+                    } else {
+                        container.appendChild(
+                            createEmptyState('No rule definitions configured yet. Add a rule to begin authoring logic.', {
+                                icon: 'fa-diagram-project',
+                                hint: 'Use “Add Rule Definition” to author your first rule.',
+                            }),
+                        );
+                    }
                     return;
                 }
-                rules.forEach((rule, index) => {
+                rules.forEach((rule) => {
                     ensureConditionTree(rule);
                     ensureAnalyzerEntries(rule);
-                    const card = buildRuleCard(rule, index);
+                    const card = buildRuleCard(rule);
                     container.appendChild(card);
                     updateRulePreview(card, rule);
                 });
@@ -1170,7 +1624,7 @@
         };
     }
 
-    function buildRuleCard(rule, index) {
+    function buildRuleCard(rule) {
         const card = document.createElement('article');
         card.className = 'config-card rule-logic-card';
         card.dataset.ruleId = rule.id;
@@ -1202,6 +1656,18 @@
 
         const actions = document.createElement('div');
         actions.className = 'rule-card-actions';
+        const actualIndex = configState.ruleLogic.findIndex((entry) => entry.id === rule.id);
+        const safeIndex = actualIndex >= 0 ? actualIndex : 0;
+
+        const reorderControls = createReorderControls({
+            upTitle: 'Move rule earlier',
+            downTitle: 'Move rule later',
+            disableUp: actualIndex <= 0,
+            disableDown: actualIndex === configState.ruleLogic.length - 1,
+            onMoveUp: (event) => moveRuleDefinition(rule.id, -1, event.currentTarget),
+            onMoveDown: (event) => moveRuleDefinition(rule.id, 1, event.currentTarget),
+        });
+        actions.appendChild(reorderControls);
 
         const toggleLabel = document.createElement('label');
         toggleLabel.className = 'toggle rule-enable-toggle';
@@ -1224,7 +1690,8 @@
         editBtn.type = 'button';
         editBtn.className = 'btn btn-secondary rule-edit-btn';
         editBtn.innerHTML = '<i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Edit';
-        editBtn.addEventListener('click', () => openRuleEditor(rule, index));
+        editBtn.title = 'Open the rule editor';
+        editBtn.addEventListener('click', () => openRuleEditor(rule, safeIndex));
         actions.appendChild(editBtn);
 
         const deleteBtn = document.createElement('button');
@@ -1232,11 +1699,16 @@
         deleteBtn.className = 'icon-btn danger';
         deleteBtn.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
         deleteBtn.setAttribute('aria-label', `Delete ${getRuleDisplayName(rule)}`);
+        deleteBtn.title = 'Delete rule definition';
         deleteBtn.addEventListener('click', () => {
+            const displayName = getRuleDisplayName(rule);
+            if (!confirmDeletion('rule definition', displayName)) {
+                return;
+            }
             configState.ruleLogic = configState.ruleLogic.filter((item) => item.id !== rule.id);
             renderRuleLogic();
             runValidation();
-            showToast(`Removed rule definition '${getRuleDisplayName(rule)}'.`);
+            showToast(`Removed rule definition '${displayName}'.`);
         });
         actions.appendChild(deleteBtn);
 
@@ -2389,6 +2861,7 @@
         applyValidationState();
         updateExportState();
         persistState();
+        updateUnsavedState();
         validationOptions = { ...defaultValidationOptions };
     }
 
@@ -3127,6 +3600,7 @@
 
         renderAll();
         runValidation();
+        markStateCommitted();
     }
 
     function buildConfigSnapshot() {
