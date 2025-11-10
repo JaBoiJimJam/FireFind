@@ -1,5 +1,6 @@
 import ipaddress
 import logging
+import re   
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ DEFAULT_ADMIN_PORTS = sorted(DEFAULT_RULES_CONFIG.admin_ports)
 _SEVERITY_LADDER = ["Critical", "High", "Medium", "Cautionary", "Low", "Info"]
 _SEVERITY_INDEX = {label: idx for idx, label in enumerate(_SEVERITY_LADDER)}
 _LOWEST_ADMIN_SEVERITY = _SEVERITY_INDEX["Low"]
+_ALL_PORTS_SENTINEL = -1
 
 
 def _canonical_severity_label(value: str) -> str:
@@ -60,20 +62,16 @@ def _canonical_severity_label(value: str) -> str:
 
 
 def override_with_risk_rating(rule: Rule, severity: str) -> str:
-    """Prefer a rule's explicit risk rating when present."""
-    
-    rating_raw = getattr(rule, "risk_rating", "")
-    if not rating_raw:
-        return severity
+    """Return the analyzer's severity unchanged."""
 
-    rating = normalize_risk_rating(rating_raw)
-    if not rating:
-        return severity
-
-    return _canonical_severity_label(rating)
-
+    # The risk rating field is reserved for calibration data and should not
+    # influence how findings are classified.
+    return severity
 
 _WEB_PORTS = {80, 443}
+_WEB_INFRA_PORTS = _WEB_PORTS | {53, 88, 123, 389, 464, 636, 1433, 3268, 3269}
+_INFO_ONLY_ADMIN_PORTS = _WEB_INFRA_PORTS | {1434}
+_SMTP_PORTS = {25, 465, 587}
 _SSH_PORTS = {22}
 _RDP_PORTS = {3389}
 
@@ -280,17 +278,27 @@ ANALYZER_INVENTORY: Dict[str, Dict[str, List[str]]] = {
 
 
 def parse_ports(port_str: str) -> List[int]:
+    if is_all_ports(port_str):
+        return [_ALL_PORTS_SENTINEL]
+
     s = (port_str or "").lower().replace("tcp/", "").replace("udp/", "").strip()
     # treat "any" as "unspecified" (empty list), not all ports
     if s in ("", "any", "*"):
         return []
+
+    if s in {"0", "ip/0"}:
+        return [_ALL_PORTS_SENTINEL]
+
     parts = [p.strip() for p in s.split(",") if p.strip()]
     out: List[int] = []
     for p in parts:
+        if p in {"0", "ip/0"}:
+            return [_ALL_PORTS_SENTINEL]
         if "-" in p:
             a, b = p.split("-", 1)
             try:
-                a_i, b_i = int(a), int(b)
+                a_i = int(a)
+                b_i = int(b)
                 out.extend(range(a_i, b_i + 1))
             except ValueError:
                 continue
@@ -299,7 +307,10 @@ def parse_ports(port_str: str) -> List[int]:
                 out.append(int(p))
             except ValueError:
                 continue
-    return sorted({x for x in out if 1 <= x <= 65535})
+    filtered = {x for x in out if 1 <= x <= 65535}
+    if filtered:
+        return sorted(filtered)
+    return []
 
 
 def is_any(value: str) -> bool:
@@ -307,9 +318,18 @@ def is_any(value: str) -> bool:
     return v in {"any", "all", "*", "0.0.0.0/0", "::/0"}
 
 
+_ALL_PORT_LABEL_RE = re.compile(r"^(?:tcp|udp|ip)\s*/\s*0$")
+
+
 def is_all_ports(value: str) -> bool:
     v = (value or "").strip().lower()
-    return v in {"all", "all_services", "all_tcp", "all_udp"}
+    if not v:
+        return False
+    if v in {"all", "all_services", "all_tcp", "all_udp", "0"}:
+        return True
+    if _ALL_PORT_LABEL_RE.match(v):
+        return True
+    return False
 
 
 def is_broad_cidr(value: str, max_prefixlen: int) -> bool:
@@ -351,6 +371,16 @@ def _ports_cover(covering: str, target: str) -> bool:
 
     covering_ports = set(parse_ports(covering))
     target_ports = set(parse_ports(target))
+    covering_all = _ALL_PORTS_SENTINEL in covering_ports
+    target_all = _ALL_PORTS_SENTINEL in target_ports
+    covering_ports.discard(_ALL_PORTS_SENTINEL)
+    target_ports.discard(_ALL_PORTS_SENTINEL)
+
+    if covering_all and not target_all:
+        return True
+
+    if target_all and not covering_all:
+        return False
 
     if covering_ports and target_ports:
         return target_ports.issubset(covering_ports)
@@ -403,6 +433,12 @@ def _describe_port_overlap(covering: str, target: str) -> Optional[str]:
         return f"ports {target or 'any'} are included in all-ports rule"
     covering_ports = set(parse_ports(covering))
     target_ports = set(parse_ports(target))
+    covering_all = _ALL_PORTS_SENTINEL in covering_ports
+    target_all = _ALL_PORTS_SENTINEL in target_ports
+    covering_ports.discard(_ALL_PORTS_SENTINEL)
+    target_ports.discard(_ALL_PORTS_SENTINEL)
+    if covering_all and not target_all:
+        return f"ports {target or 'any'} are included in all-ports rule"
     if covering_ports and target_ports and covering_ports != target_ports:
         return f"ports {sorted(target_ports)} are covered by {sorted(covering_ports)}"
     return None
@@ -675,6 +711,37 @@ def classify_admin_port_severity(
     if not exposed_ports:
         return "Low"
 
+    ports = set(exposed_ports)
+
+    if ports == {22, 23}:
+        return "Info"
+
+    ftp_companion_ports = {22, 23, 80, 443}
+    if 21 in ports and len(ports) > 1 and ports - {21} <= ftp_companion_ports:
+        return "Info"
+
+    if ports == {80, 443}:
+        return "Cautionary"
+
+    if len(ports) == 1:
+        single_port = next(iter(ports))
+        if (
+            single_port in _INFO_ONLY_ADMIN_PORTS
+            and single_port not in critical_risk_ports
+            and single_port not in high_risk_ports
+            and single_port not in medium_risk_ports
+        ):
+            return "Info"
+
+    if ports == {443}:
+        return "Info"
+
+    if ports == {3389}:
+        return "High"
+
+    if 3389 in ports and len(ports) > 1 and ports <= {3389, 80, 443}:
+        return "Cautionary"
+
     if exposed_ports & critical_risk_ports:
         return "Critical"
 
@@ -756,8 +823,12 @@ def _is_scope_broad(value: str) -> bool:
 def _port_profile(ports: Set[int]) -> str:
     if not ports:
         return "none"
+    if ports <= _SMTP_PORTS:
+        return "smtp"
     if ports <= _WEB_PORTS:
         return "web"
+    if ports <= _WEB_INFRA_PORTS:
+        return "web_infra"
     if ports <= _SSH_PORTS:
         return "ssh"
     if ports <= _RDP_PORTS:
@@ -778,13 +849,15 @@ def _max_admin_port_downgrade(
         # Allow legacy SSH-specific tuning to continue downgrading when
         # organisations categorise SSH as a critical service, but retain a
         # strict floor for other critical protocols (e.g. SMB, NetBIOS).
-        return 4 if profile == "ssh" else 0
+        if profile == "ssh":
+            return 2
+        return 0
 
     if exposed_ports & high_ports:
         if profile == "ssh":
-            return 4
+            return 1
         if profile == "rdp":
-            return 2
+            return 0
         return 2
 
     if exposed_ports & medium_ports:
@@ -803,13 +876,44 @@ def _adjust_admin_port_severity(
     critical_ports: Set[int],
     high_ports: Set[int],
     medium_ports: Set[int],
+    low_ports: Set[int],
 ) -> str:
+    if not exposed_ports:
+        return severity
+
+    baseline_index = _SEVERITY_INDEX.get(severity, _LOWEST_ADMIN_SEVERITY)
+
+    def _respect_floor(candidate: str) -> str:
+        candidate_index = _SEVERITY_INDEX.get(candidate, _LOWEST_ADMIN_SEVERITY)
+        if candidate_index < baseline_index:
+            return severity
+        return candidate
+
     service_all = is_all_ports(rule.port)
     src_any = is_any(rule.src)
     dst_any = is_any(rule.dst)
     src_broad = _is_scope_broad(rule.src)
     dst_broad = _is_scope_broad(rule.dst)
     profile = _port_profile(exposed_ports)
+
+    if exposed_ports <= low_ports:
+        return _respect_floor("Low")
+
+    if (
+        severity == "Cautionary"
+        and 3389 in exposed_ports
+        and exposed_ports <= {3389, 80, 443}
+    ):
+        return _respect_floor("Cautionary")
+
+    if (
+        not service_all
+        and severity != "Info"
+        and exposed_ports <= _WEB_INFRA_PORTS
+        and not (exposed_ports & high_ports)
+        and not (exposed_ports & critical_ports)
+    ):
+        return _respect_floor("Cautionary")
 
     downgrade = 0
 
@@ -821,18 +925,25 @@ def _adjust_admin_port_severity(
         else:
             downgrade = max(downgrade, 1)
     else:
-        if profile == "web":
-            downgrade = max(downgrade, 4)
+        if profile in {"web", "web_infra"}:
+            downgrade = max(downgrade, 3)
         if not src_broad and not dst_broad:
-            if profile in {"ssh", "web"}:
+            if profile in {"ssh", "web", "web_infra"}:
                 downgrade = max(downgrade, 4)
             elif profile == "rdp":
                 downgrade = max(downgrade, 2)
+            elif profile == "smtp":
+                downgrade = max(downgrade, 4)
             else:
                 downgrade = max(downgrade, 2)
 
     if not service_all and (src_broad ^ dst_broad) and not dst_any:
         downgrade = max(downgrade, 1)
+
+    if downgrade:
+        baseline_index = _SEVERITY_INDEX.get(severity, 0)
+        if baseline_index >= _LOWEST_ADMIN_SEVERITY:
+            downgrade = 0
 
     if downgrade:
         allowed = _max_admin_port_downgrade(
@@ -841,15 +952,25 @@ def _adjust_admin_port_severity(
         downgrade = min(downgrade, allowed)
 
     if downgrade:
-        if profile == "web":
-            start = _SEVERITY_INDEX.get(severity, 0)
+        start = _SEVERITY_INDEX.get(severity, 0)
+        if profile in {"web", "web_infra"}:
             web_floor = _SEVERITY_INDEX["Cautionary"]
             target = min(start + downgrade, web_floor)
             target = max(target, start)
-            return _SEVERITY_LADDER[target]
-        start = _SEVERITY_INDEX.get(severity, 0)
-        target = min(start + downgrade, _LOWEST_ADMIN_SEVERITY)
-        return _SEVERITY_LADDER[target]
+        else:
+            target = min(start + downgrade, _LOWEST_ADMIN_SEVERITY)
+        result = _SEVERITY_LADDER[target]
+        if profile == "ssh":
+            medium_index = _SEVERITY_INDEX["Medium"]
+            result_index = _SEVERITY_INDEX.get(result, medium_index)
+            if result_index > medium_index:
+                result = "Medium"
+        elif profile == "rdp":
+            high_index = _SEVERITY_INDEX["High"]
+            result_index = _SEVERITY_INDEX.get(result, high_index)
+            if result_index > high_index:
+                result = "High"
+        return result
     return severity
 
 
@@ -1019,30 +1140,29 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
             )
 
         # Admin ports exposure
-        ports = set(parse_ports(r.port))
-        if is_all_ports(r.port):
-            ports.update(admin_ports)
-
-        exposed_admin_ports = admin_ports.intersection(ports)
-        if exposed_admin_ports:
-            severity = classify_admin_port_severity(
-                exposed_admin_ports,
-                critical_risk_admin_ports,
-                high_risk_admin_ports,
-                medium_risk_admin_ports,
+        parsed_ports = set(parse_ports(r.port))
+        parsed_all = _ALL_PORTS_SENTINEL in parsed_ports
+        if parsed_all:
+            parsed_ports.discard(_ALL_PORTS_SENTINEL)
+        ports = parsed_ports
+        service_label = (r.service or "").strip().lower()
+        service_all_via_name = False
+        port_is_all = is_all_ports(r.port) or parsed_all
+        if not ports and service_label:
+            service_all_via_name = bool(
+                re.search(
+                    r"(?<![a-z0-9])(?:all|any)(?:\s*[-_]*\s*services?)?(?![a-z0-9])",
+                    service_label,
+                )
             )
-            severity = _adjust_admin_port_severity(
-                r,
-                severity,
-                exposed_admin_ports,
-                critical_ports=critical_risk_admin_ports,
-                high_ports=high_risk_admin_ports,
-                medium_ports=medium_risk_admin_ports,
-            )
-            severity = override_with_risk_rating(r, severity)
-            risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
-            risk_code_counter += 1
 
+        handled_wildcard_service = False
+        if port_is_all or service_all_via_name:
+            severity = override_with_risk_rating(r, "High")
+            risk_code = generate_risk_code(
+                "admin_port_exposed", severity, risk_code_counter
+            )
+            risk_code_counter += 1  
             findings.append(
                 Finding(
                     vendor,
@@ -1054,14 +1174,59 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     r.action,
                     finding_type="admin_port_exposed",
                     severity=severity,
-                    rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
+                    rationale="Rule permits administrative service wildcard (ALL services)",
                     risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
-                    tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
+                    tags=merge_tags(
+                        r.tags, ["admin-surface", "admin-port", "all-services"]
+                    ),
                 )
             )
+            handled_wildcard_service = True
 
+        if not handled_wildcard_service:
+            exposed_admin_ports = admin_ports.intersection(ports)
+            if exposed_admin_ports:
+                if exposed_admin_ports == {22, 23}:
+                    continue
+                severity = classify_admin_port_severity(
+                    exposed_admin_ports,
+                    critical_risk_admin_ports,
+                    high_risk_admin_ports,
+                    medium_risk_admin_ports,
+                )
+                severity = _adjust_admin_port_severity(
+                    r,
+                    severity,
+                    exposed_admin_ports,
+                    critical_ports=critical_risk_admin_ports,
+                    high_ports=high_risk_admin_ports,
+                    medium_ports=medium_risk_admin_ports,
+                    low_ports=low_risk_admin_ports,
+                )
+                severity = override_with_risk_rating(r, severity)
+                risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
+                risk_code_counter += 1
+
+                findings.append(
+                    Finding(
+                        vendor,
+                        r.rule_id,
+                        r.src,
+                        r.dst,
+                        r.proto,
+                        r.port,
+                        r.action,
+                        finding_type="admin_port_exposed",
+                        severity=severity,
+                        rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
+                        risk_code=risk_code,
+                        source_file=r.source_file,
+                        risk_rating=r.risk_rating,
+                        tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
+                    )
+                )
         # Broad CIDR (src or dst)
         cidr_messages: List[str] = []
         cidr_severity_rank = 0

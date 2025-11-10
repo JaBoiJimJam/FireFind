@@ -9,18 +9,98 @@ import pytest
 from firefind.config.schema import RulesConfig
 from firefind.utils import (
     RuleValidationError,
+    count_findings_by_severity,
+    deduplicate_findings_by_rule,
     load_yaml,
     pick_mapping,
     sniff_proto_port,
     to_rule,
 )
-from firefind.model import Rule
+from firefind.model import Rule, Finding
 
 
 def test_load_yaml_empty(tmp_path):
     yaml_file = tmp_path / "empty.yaml"
     yaml_file.write_text("")
     assert load_yaml(yaml_file) == {}
+
+
+def test_deduplicate_findings_by_rule_selects_highest():
+    findings = [
+        Finding(
+            vendor="v1",
+            rule_id="10",
+            src="any",
+            dst="any",
+            proto="any",
+            port="any",
+            action="allow",
+            finding_type="ft",
+            severity="low",
+            rationale="",
+        ),
+        {
+            "vendor": "v1",
+            "rule_id": "10",
+            "severity": "HIGH",
+        },
+        Finding(
+            vendor="v2",
+            rule_id="20",
+            src="any",
+            dst="any",
+            proto="any",
+            port="any",
+            action="allow",
+            finding_type="ft",
+            severity="Medium",
+            rationale="",
+        ),
+        {
+            "vendor": "v3",
+            "severity": "Critical",
+        },
+    ]
+
+    deduped = deduplicate_findings_by_rule(findings)
+    by_rule = {}
+    for finding in deduped:
+        if isinstance(finding, dict):
+            by_rule[finding["rule_id"]] = finding
+        else:
+            by_rule[finding.rule_id] = finding
+
+    assert set(by_rule.keys()) == {"10", "20"}
+    assert by_rule["10"]["severity"] == "HIGH"
+    assert by_rule["20"].severity == "Medium"
+
+
+def test_count_findings_by_severity_normalizes():
+    findings = [
+        {"rule_id": "1", "severity": "critical"},
+        {"rule_id": "2", "severity": " high "},
+        Finding(
+            vendor="v2",
+            rule_id="3",
+            src="any",
+            dst="any",
+            proto="any",
+            port="any",
+            action="allow",
+            finding_type="ft",
+            severity="Medium",
+            rationale="",
+        ),
+    ]
+
+    counts = count_findings_by_severity(findings)
+    assert counts == {
+        "CRITICAL": 1,
+        "HIGH": 1,
+        "MEDIUM": 1,
+        "CAUTIONARY": 0,
+        "LOW": 0,
+    }
 
 
 def test_pick_mapping_case_insensitive():
@@ -49,6 +129,10 @@ def test_sniff_proto_port_variants():
     assert sniff_proto_port(row7) == ("any", "TCP/443")
     netbios_row = {"Service": "NBT_ natagram nbname_tcp"}
     assert sniff_proto_port(netbios_row) == ("any", "137,138,139")
+    row8 = {"Service Port": "Group Member: TCP_443"}
+    assert sniff_proto_port(row8) == ("any", "443")
+    row9 = {"Service": "DM_INLINE_SERVICE_234"}
+    assert sniff_proto_port(row9) == ("any", "234")
     row4 = {}
     assert sniff_proto_port(row4) == ("any", "any")
 

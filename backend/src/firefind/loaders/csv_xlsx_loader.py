@@ -121,6 +121,30 @@ def _read_xlsx_rows(path: Path) -> Iterator[Dict[str, str]]:
                 for idx, header in enumerate(headers)
             ]
 
+        # Propagate the last seen non-empty header across blank cells so the
+        # loader produces names like ``Service.1`` that mirror pandas' naming
+        # convention.  Several mappings rely on those derived labels when
+        # looking up auxiliary columns such as port definitions.
+        propagated_headers: List[str] = []
+        previous_header = ""
+        propagated_counts: Dict[str, int] = {}
+        for header in headers:
+            current = (header or "").strip()
+            if current:
+                previous_header = current
+                propagated_headers.append(current)
+                continue
+
+            if not previous_header:
+                propagated_headers.append("")
+                continue
+
+            counter = propagated_counts.get(previous_header, 0) + 1
+            propagated_counts[previous_header] = counter
+            propagated_headers.append(f"{previous_header}.{counter}")
+
+        headers = propagated_headers
+
         # Ensure header names remain unique so trailing columns are not
         # collapsed when converted to a dictionary.
         seen_headers: Dict[str, int] = {}
