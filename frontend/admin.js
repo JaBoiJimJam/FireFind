@@ -1843,9 +1843,11 @@
         header.appendChild(closeBtn);
         modal.appendChild(header);
 
+        const formId = generateId('rule-editor-form');
         const form = document.createElement('form');
         form.className = 'rule-editor-form';
         form.noValidate = true;
+        form.id = formId;
         modal.appendChild(form);
 
         const metadataSection = document.createElement('section');
@@ -1886,6 +1888,7 @@
         saveBtn.type = 'submit';
         saveBtn.className = 'btn btn-primary';
         saveBtn.textContent = 'Save rule';
+        saveBtn.setAttribute('form', formId);
         footer.appendChild(cancelBtn);
         footer.appendChild(saveBtn);
         modal.appendChild(footer);
