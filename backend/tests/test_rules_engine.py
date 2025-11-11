@@ -248,6 +248,61 @@ def test_admin_port_severity_varies_with_port_profile():
     assert ratings["4"] == "Low"
 
 
+def test_admin_port_findings_split_by_port_group():
+    rule = Rule(
+        "grouped-admin",
+        "10.0.0.0/24",
+        "10.0.0.10",
+        "tcp",
+        "22,389,636",
+        "allow",
+        source_file="test.conf",
+    )
+
+    cfg = {
+        "admin_ports": [22, 389, 636],
+        "critical_risk_admin_ports": [],
+        "high_risk_admin_ports": [],
+        "medium_risk_admin_ports": [],
+        "low_risk_admin_ports": [],
+        "port_groups": {
+            "core_admin": {
+                "protocol": "tcp",
+                "ranges": [],
+            },
+            "directory_services": {
+                "protocol": "tcp",
+                "ranges": [],
+            },
+            "remote_shell_ports": {
+                "protocol": "tcp",
+                "ranges": [22],
+            },
+            "ldap_related_ports": {
+                "protocol": "tcp",
+                "ranges": [389, 636],
+            },
+        },
+    }
+
+    findings = run_checks("vendor", [rule], cfg)
+    admin_findings = [
+        f for f in findings if f.finding_type == "admin_port_exposed"
+    ]
+
+    assert len(admin_findings) == 2
+    by_profile = {finding.port_profile: finding for finding in admin_findings}
+    assert set(by_profile) == {"remote_shell_ports", "ldap_related_ports"}
+    assert (
+        by_profile["remote_shell_ports"].rationale
+        == "Rule permits remote_shell_ports ports: [22]"
+    )
+    assert (
+        by_profile["ldap_related_ports"].rationale
+        == "Rule permits ldap_related_ports ports: [389, 636]"
+    )
+
+
 def test_classify_admin_port_severity_rdp_alone_high():
     severity = classify_admin_port_severity({3389}, {22}, {3389}, set())
     assert severity == "High"

@@ -86,6 +86,24 @@ def test_deduplicate_uses_port_profile() -> None:
     assert result.port == "22"
 
 
+def test_deduplicate_collapses_named_port_groups() -> None:
+    primary = _make_finding("High", risk_code="FR-admin_port_exposed-HIGEN-015")
+    primary.port_profile = "ldap_related_ports"
+    primary.rationale = "Rule permits ldap_related_ports ports: [389, 636]"
+
+    secondary = _make_finding("Medium", risk_code="FR-admin_port_exposed-MEDGEN-016")
+    secondary.port = "636"
+    secondary.port_profile = "ldap_related_ports"
+    secondary.rationale = primary.rationale
+
+    deduped = deduplicate_findings([secondary, primary])
+
+    assert len(deduped) == 1
+    result = deduped[0]
+    assert result.port_profile == "ldap_related_ports"
+    assert "ldap_related_ports" in result.rationale
+
+
 def test_run_analysis_tracks_rejections(tmp_path: Path) -> None:
     csv_path = tmp_path / "sample.csv"
     csv_path.write_text(

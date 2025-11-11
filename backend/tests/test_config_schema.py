@@ -14,6 +14,7 @@ from firefind.config.schema import (  # noqa: E402
     ConditionGroup,
     NumericThresholds,
     PortGroup,
+    PortGroupCollection,
     PortRange,
     RuleCondition,
     RuleConditionThreshold,
@@ -169,3 +170,45 @@ class TestPortGroups:
                 name="invalid",
                 ranges=[PortRange(20, 30), PortRange(25, 35)],
             )
+
+    def test_port_group_flattened_ports_and_membership(self):
+        group = PortGroup(
+            name="ldap_related_ports",
+            protocol="tcp",
+            ranges=[PortRange(389, 389), PortRange(636, 636)],
+        )
+
+        assert group.port_set == frozenset({389, 636})
+        assert group.contains_port(389, "tcp")
+        assert not group.contains_port(389, "udp")
+        assert group.matches_protocol("any")
+
+    def test_port_group_collection_memberships(self):
+        tcp_group = PortGroup(
+            name="remote_shell_ports",
+            protocol="tcp",
+            ranges=[PortRange(22, 22), PortRange(2222, 2222)],
+        )
+        udp_group = PortGroup(
+            name="tftp_ports",
+            protocol="udp",
+            ranges=[PortRange(69, 69)],
+        )
+        collection = PortGroupCollection(groups={
+            "remote_shell_ports": tcp_group,
+            "tftp_ports": udp_group,
+        })
+
+        tcp_sets = collection.port_sets(protocol="tcp")
+        assert tcp_sets == {
+            "remote_shell_ports": frozenset({22, 2222}),
+        }
+
+        memberships = collection.port_memberships({22, 69, 2222}, protocol="any")
+        assert memberships == {
+            "remote_shell_ports": {22, 2222},
+            "tftp_ports": {69},
+        }
+
+        assert collection.groups_for_port(69, "udp") == ["tftp_ports"]
+        assert collection.groups_for_port(69, "tcp") == []
