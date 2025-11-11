@@ -32,6 +32,7 @@ class Finding:
     finding_type: str
     severity: str
     rationale: str
+    port_profile: str = ""
     risk_code: str = ""  # Add this field
     source_file: str = ""
     contributing_severities: Tuple[str, ...] = field(default_factory=tuple)

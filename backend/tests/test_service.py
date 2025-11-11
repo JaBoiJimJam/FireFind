@@ -18,6 +18,7 @@ def _make_finding(severity: str, risk_code: str = "") -> Finding:
         finding_type="admin_port_exposed",
         severity=severity,
         rationale="Rule permits administrative port(s): [22]",
+        port_profile="ssh",
         risk_code=risk_code,
         source_file="sample.csv",
     )
@@ -70,6 +71,19 @@ def test_risk_codes_use_info_prefix() -> None:
         "FR-admin_port_exposed-INFGEN-001",
         "FR-admin_port_exposed-INFGEN-002",
     ]
+
+
+def test_deduplicate_uses_port_profile() -> None:
+    primary = _make_finding("High", risk_code="FR-admin_port_exposed-HIGEN-005")
+    secondary = _make_finding("Medium", risk_code="FR-admin_port_exposed-MEDGEN-006")
+    secondary.port = "2222"
+
+    deduped = deduplicate_findings([secondary, primary])
+
+    assert len(deduped) == 1
+    result = deduped[0]
+    assert result.port_profile == "ssh"
+    assert result.port == "22"
 
 
 def test_run_analysis_tracks_rejections(tmp_path: Path) -> None:

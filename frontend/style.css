@@ -116,7 +116,7 @@
             display: block;
         }
 
-        body.show-scan-line header {
+        body.show-scan-line > header {
             position: sticky;
             top: 0;
             border-bottom: 1px solid rgba(78, 204, 163, 0.15);
@@ -130,7 +130,7 @@
         }
 
         /* Header */
-        header {
+        body > header {
             position: sticky;
             top: 0;
             width: 100%;
@@ -1428,7 +1428,7 @@
             color: var(--text-light);
         }
 
-        .admin-body header {
+        .admin-body > header {
             position: sticky;
             top: 0;
             border-bottom: 1px solid rgba(78, 204, 163, 0.15);

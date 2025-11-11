@@ -1843,9 +1843,11 @@
         header.appendChild(closeBtn);
         modal.appendChild(header);
 
+        const formId = generateId('rule-editor-form');
         const form = document.createElement('form');
         form.className = 'rule-editor-form';
         form.noValidate = true;
+        form.id = formId;
         modal.appendChild(form);
 
         const metadataSection = document.createElement('section');
@@ -1886,6 +1888,7 @@
         saveBtn.type = 'submit';
         saveBtn.className = 'btn btn-primary';
         saveBtn.textContent = 'Save rule';
+        saveBtn.setAttribute('form', formId);
         footer.appendChild(cancelBtn);
         footer.appendChild(saveBtn);
         modal.appendChild(footer);
@@ -4499,7 +4502,7 @@
         if (!raw || typeof raw !== 'object') {
             return base;
         }
-        const conditionsText =
+        const conditionsTextRaw =
             typeof raw.conditionsText === 'string' && raw.conditionsText.trim().length > 0
                 ? raw.conditionsText
                 : DEFAULT_RULE_CONDITIONS_YAML;
@@ -4507,7 +4510,11 @@
             typeof raw.analyzersText === 'string' && raw.analyzersText.trim().length > 0
                 ? raw.analyzersText
                 : DEFAULT_ANALYZERS_YAML;
-        const conditionsResult = parseYamlForValidation(conditionsText, {
+        const storedTree =
+            raw.conditionTree && typeof raw.conditionTree === 'object'
+                ? normalizeConditionGroup(raw.conditionTree)
+                : null;
+        const conditionsResult = parseYamlForValidation(conditionsTextRaw, {
             allowEmpty: false,
             expectObject: true,
             defaultValue: createDefaultRuleConditions(),
@@ -4517,6 +4524,19 @@
             expectObject: true,
             defaultValue: {},
         });
+        const parsedConditionsFromYaml = conditionsResult.parsed ?? createDefaultRuleConditions();
+        const parsedAnalyzers = analyzersResult.parsed ?? {};
+
+        const normalizedTree = storedTree
+            ? storedTree
+            : normalizeConditionGroup(parsedConditionsFromYaml ?? createDefaultRuleConditions());
+        const parsedConditions = storedTree
+            ? conditionGroupToParsed(storedTree)
+            : parsedConditionsFromYaml ?? createDefaultRuleConditions();
+        const conditionsText = storedTree
+            ? toYamlString(parsedConditions, conditionsTextRaw)
+            : conditionsTextRaw;
+
         return {
             ...base,
             id: raw.id || base.id,
@@ -4526,10 +4546,10 @@
             description: raw.description ? String(raw.description) : '',
             conditionsText,
             analyzersText,
-            parsedConditions: conditionsResult.parsed ?? createDefaultRuleConditions(),
-            parsedAnalyzers: analyzersResult.parsed ?? {},
-            conditionTree: normalizeConditionGroup(conditionsResult.parsed ?? createDefaultRuleConditions()),
-            analyzerEntries: normalizeAnalyzerEntries(analyzersResult.parsed ?? {}),
+            parsedConditions,
+            parsedAnalyzers,
+            conditionTree: normalizedTree,
+            analyzerEntries: normalizeAnalyzerEntries(parsedAnalyzers),
             validationMessages: Array.isArray(raw.validationMessages) ? raw.validationMessages : [],
         };
     }

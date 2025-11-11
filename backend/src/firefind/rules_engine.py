@@ -1150,6 +1150,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     finding_type="admin_port_exposed",
                     severity=severity,
                     rationale="Rule permits administrative service wildcard (ALL services)",
+                    port_profile="all-services",
                     risk_code=risk_code,
                     source_file=r.source_file,
                     risk_rating=r.risk_rating,
@@ -1184,6 +1185,8 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                 risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
                 risk_code_counter += 1
 
+                port_profile = _port_profile(exposed_admin_ports)
+
                 findings.append(
                     Finding(
                         vendor,
@@ -1196,6 +1199,7 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                         finding_type="admin_port_exposed",
                         severity=severity,
                         rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
+                        port_profile=port_profile,
                         risk_code=risk_code,
                         source_file=r.source_file,
                         risk_rating=r.risk_rating,
