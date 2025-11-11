@@ -544,7 +544,7 @@ def test_cidr_limits_blocked_and_exempt():
     assert not any(f.finding_type == "broad_cidr" for f in exempt_findings)
 
 
-def test_unrated_rules_do_not_emit_findings():
+def test_rules_are_analyzed_without_risk_rating():
     cfg = {"admin_ports": [22], "broad_cidr_prefix_max": 8}
 
     rated_admin = Rule(
@@ -592,10 +592,8 @@ def test_unrated_rules_do_not_emit_findings():
     admin_ids = {f.rule_id for f in findings if f.finding_type == "admin_port_exposed"}
     cidr_ids = {f.rule_id for f in findings if f.finding_type == "broad_cidr"}
 
-    assert admin_ids == {"rated-admin"}
-    assert cidr_ids == {"rated-broad"}
-    skipped_ids = {"unrated-admin", "invalid-broad"}
-    assert not ({f.rule_id for f in findings} & skipped_ids)
+    assert admin_ids == {"rated-admin", "unrated-admin"}
+    assert cidr_ids == {"rated-broad", "invalid-broad"}
 
 
 def test_run_checks_all_ports_internet():
@@ -746,7 +744,6 @@ def test_run_analysis_custom_config_loading(tmp_path):
         "  src: ['src_col']\n"
         "  dst: ['dst_col']\n"
         "  action: ['act_col']\n"
-        "  risk_rating: ['risk_col']\n"
     )
 
     analysis = run_analysis(
@@ -783,7 +780,6 @@ def test_run_analysis_no_seq_column(tmp_path):
         "  src: ['src_col']\n"
         "  dst: ['dst_col']\n"
         "  action: ['act_col']\n"
-        "  risk_rating: ['risk_col']\n"
     )
 
     analysis = run_analysis(

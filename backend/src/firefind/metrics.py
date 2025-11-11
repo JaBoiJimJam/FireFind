@@ -115,44 +115,6 @@ def metrics_from_findings(findings: Iterable[Finding]) -> Dict[str, int | Dict[s
 
 
 def build_metrics(result: AnalysisResult) -> Dict[str, object]:
-    rated_totals: Counter[str] = Counter()
-    rated_locations: dict[str, Counter[str]] = defaultdict(Counter)
-    unrated_locations: dict[str, int] = defaultdict(int)
-
-    for rule in result.rules:
-        rating = _normalise_severity_key(getattr(rule, "risk_rating", ""))
-        location = _derive_location_label(getattr(rule, "source_file", ""))
-        if rating:
-            rated_totals[rating] += 1
-            rated_locations[location][rating] += 1
-        else:
-            unrated_locations[location] += 1
-
-    if rated_totals:
-        metrics: Dict[str, object] = {
-            key: int(rated_totals.get(key, 0)) for key in SEVERITY_KEYS
-        }
-        total_findings = sum(int(metrics[key]) for key in SEVERITY_KEYS)
-        metrics["total"] = total_findings
-        metrics["score"] = calculate_score({key: int(metrics[key]) for key in SEVERITY_KEYS})
-        metrics["by_location"] = {
-            location: {key: int(counts.get(key, 0)) for key in SEVERITY_KEYS}
-            for location, counts in sorted(rated_locations.items())
-        }
-
-        unrated_total = sum(unrated_locations.values())
-        if unrated_total:
-            metrics["unrated_rules"] = {
-                "total": int(unrated_total),
-                "by_location": {
-                    location: int(count)
-                    for location, count in sorted(unrated_locations.items())
-                    if count
-                },
-            }
-
-        return metrics
-
     return metrics_from_findings(result.findings)
 
 

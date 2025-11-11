@@ -1000,14 +1000,6 @@ def to_rule(
     srcintf = _pick_value(mapping.get("srcintf", ["Srcintf", "Src Interface"])) or ""
     dstintf = _pick_value(mapping.get("dstintf", ["Dstintf", "Dst Interface"])) or ""
     source_file = str(normalized_row.get("_source_file", ""))
-    risk_rating_fields = mapping.get("risk_rating", [])
-    risk_rating_raw = (
-        _pick_value(risk_rating_fields)
-        if risk_rating_fields
-        else ""
-    )
-    risk_rating = normalize_risk_rating(risk_rating_raw)
-
     hit_count = _coerce_optional_int(_pick_value(mapping.get("hit_count", [])))
     byte_count = _coerce_optional_int(_pick_value(mapping.get("byte_count", [])))
     enabled = _coerce_optional_bool(_pick_value(mapping.get("enabled", [])))
@@ -1041,7 +1033,7 @@ def to_rule(
         dst_interface=dstintf,
         service=service,
         source_file=source_file,
-        risk_rating=risk_rating,
+        risk_rating="",
         tags=tags,
         hit_count=hit_count,
         byte_count=byte_count,
