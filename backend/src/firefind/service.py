@@ -83,13 +83,17 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     ordered_keys: List[Tuple[str, ...]] = []
 
     for finding in findings:
+        port_group = getattr(finding, "port_profile", "")
+        if not port_group:
+            port_group = finding.port
+
         key_fields = (
             finding.vendor,
             finding.rule_id,
             finding.src,
             finding.dst,
             finding.proto,
-            finding.port,
+            port_group,
             finding.action,
             finding.finding_type,
             finding.rationale,
@@ -164,6 +168,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 dst=primary.dst,
                 proto=primary.proto,
                 port=primary.port,
+                port_profile=getattr(primary, "port_profile", ""),
                 action=primary.action,
                 finding_type=primary.finding_type,
                 severity=primary.severity,
