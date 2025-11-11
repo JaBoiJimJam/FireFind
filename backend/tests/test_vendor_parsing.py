@@ -40,30 +40,15 @@ def test_generic_sample_produces_finding():
     _assert_admin_port_finding("generic", rule)
 
 
-def test_client_samples_risk_ratings_match_expectations():
-    sample_expectations = {
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-EXTERNAL-FW-DC - WITH RISK FEEDBACK.xlsx": {
-            "High": 3,
-            "Cautionary": 1,
-            "Low": 1,
-        },
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-DaaS - WITH RISK FEEDBACK.xlsx": {
-            "Critical": 11,
-            "Medium": 1,
-            "Cautionary": 2,
-        },
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-FW01 - WITH RISK FEEDBACK.xlsx": {
-            "Critical": 8,
-            "High": 14,
-            "Cautionary": 11,
-            "Low": 1,
-        },
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-OUTSIDE-FW - WITH RISK FEEDBACK.xlsx": {
-            "High": 2,
-        },
-    }
+def test_client_samples_ignore_risk_ratings():
+    sample_names = [
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-EXTERNAL-FW-DC - WITH RISK FEEDBACK.xlsx",
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-DaaS - WITH RISK FEEDBACK.xlsx",
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-FW01 - WITH RISK FEEDBACK.xlsx",
+        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-OUTSIDE-FW - WITH RISK FEEDBACK.xlsx",
+    ]
 
-    for sample_name, expected in sample_expectations.items():
+    for sample_name in sample_names:
         sample_path = BACKEND_DIR / "samples" / sample_name
         rules, _, rejections = _collect_rules(
             sample_path,
@@ -74,5 +59,4 @@ def test_client_samples_risk_ratings_match_expectations():
 
         assert not rejections, f"Unexpected rejections for {sample_name}: {rejections}"
 
-        dist = Counter(rule.risk_rating for rule in rules if rule.risk_rating)
-        assert dist == expected
+        assert all(rule.risk_rating == "" for rule in rules)

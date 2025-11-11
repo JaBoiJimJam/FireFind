@@ -179,8 +179,7 @@ class PDFReport(FPDF):
 
         severity_counts = {}
         for finding in findings:
-            rating = getattr(finding, "risk_rating", "")
-            chosen = self.pick_display_severity(rating, finding.severity)
+            chosen = self.pick_display_severity("", finding.severity)
             severity_counts[chosen] = severity_counts.get(chosen, 0) + 1
             
         y_start = self.get_y()

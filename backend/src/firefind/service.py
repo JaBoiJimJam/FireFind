@@ -156,14 +156,6 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         additional_tag_sources = [detail.tags for detail in details if detail is not primary]
         combined_tags = merge_tags(primary.tags, *additional_tag_sources)
 
-        risk_rating = getattr(primary, "risk_rating", "") or ""
-        if not risk_rating:
-            for detail in details:
-                rating = getattr(detail, "risk_rating", "")
-                if rating:
-                    risk_rating = rating
-                    break
-
         findings_unique.append(
             Finding(
                 vendor=primary.vendor,
@@ -179,7 +171,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 risk_code=primary.risk_code,
                 source_file=primary.source_file,
                 contributing_severities=tuple(contributing_severities),
-                risk_rating=risk_rating,
+                risk_rating="",
                 tags=combined_tags,
                 hit_count=primary.hit_count,
                 byte_count=primary.byte_count,

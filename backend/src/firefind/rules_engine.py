@@ -17,7 +17,7 @@ from typing import (
 
 from .config import DEFAULT_RULES_CONFIG, RulesConfig, CIDRLimitPolicy
 from .model import Rule, Finding
-from .utils import merge_tags, normalize_risk_rating
+from .utils import merge_tags
 
 
 logger = logging.getLogger(__name__)
@@ -1027,31 +1027,6 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
     risk_code_counter = 1
 
     for r in rules_list:
-        normalized_risk_rating = normalize_risk_rating(getattr(r, "risk_rating", ""))
-        rating_known = bool(normalized_risk_rating) and (
-            normalized_risk_rating in _SEVERITY_INDEX
-        )
-        if not rating_known:
-            has_source_file = bool(str(getattr(r, "source_file", "")).strip())
-            if not has_source_file:
-                logger.debug(
-                    "Skipping analyzers for rule without normalised risk rating",
-                    extra={
-                        "rule_id": getattr(r, "rule_id", ""),
-                        "raw_risk_rating": getattr(r, "risk_rating", ""),
-                    },
-                )
-                continue
-
-            logger.debug(
-                "Proceeding with analyzers despite missing normalised risk rating",
-                extra={
-                    "rule_id": getattr(r, "rule_id", ""),
-                    "raw_risk_rating": getattr(r, "risk_rating", ""),
-                    "source_file": getattr(r, "source_file", ""),
-                },
-            )
-
         # Allow-any
         if (
             action_allows_traffic(r.action)
