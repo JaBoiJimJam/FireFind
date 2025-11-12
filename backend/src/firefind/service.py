@@ -258,9 +258,15 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 port_profile_value = "combined"
 
             contributing_rules = sorted(entry["rules"])
-            if len(contributing_rules) > 1:
+            if len(details) > 1:
                 rule_id = "admin_ports_combined"
                 label_value = "Administrative ports exposed (combined)"
+
+            if len(contributing_rules) > 1:
+                if rule_id != "admin_ports_combined":
+                    rule_id = "admin_ports_combined"
+                    label_value = "Administrative ports exposed (combined)"
+
                 extra_rules = [rid for rid in contributing_rules if rid != primary.rule_id]
                 if extra_rules:
                     combined_rationale = (
