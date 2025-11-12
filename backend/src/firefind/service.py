@@ -254,17 +254,19 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             elif ports_text:
                 port_value = ports_text
 
-            port_profile_value = "combined"
-            rule_id = "admin_ports_combined"
-            label_value = "Administrative ports exposed (combined)"
+            if contributing_groups or len(contributing_ports) > 1:
+                port_profile_value = "combined"
 
             contributing_rules = sorted(entry["rules"])
-            extra_rules = [rid for rid in contributing_rules if rid != primary.rule_id]
-            if extra_rules:
-                combined_rationale = (
-                    f"{combined_rationale} | +{len(extra_rules)} other matching rules: "
-                    + ", ".join(extra_rules)
-                )
+            if len(contributing_rules) > 1:
+                rule_id = "admin_ports_combined"
+                label_value = "Administrative ports exposed (combined)"
+                extra_rules = [rid for rid in contributing_rules if rid != primary.rule_id]
+                if extra_rules:
+                    combined_rationale = (
+                        f"{combined_rationale} | +{len(extra_rules)} other matching rules: "
+                        + ", ".join(extra_rules)
+                    )
 
         deduped_finding = Finding(
             vendor=primary.vendor,
