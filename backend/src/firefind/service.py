@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Mapping, Tuple, TypedDict
+from typing import Dict, List, Mapping, Set, Tuple, TypedDict
+import os
 import logging
 
 from .loaders.csv_xlsx_loader import load_table
@@ -23,6 +24,18 @@ from .utils import (
 
 
 logger = logging.getLogger(__name__)
+
+_ADMIN_PORT_DEDUP_MODES = {"per_port", "per_group", "all_groups"}
+
+ADMIN_PORT_DEDUPLICATION_MODE = (
+    os.environ.get("FIREFIND_ADMIN_PORT_DEDUP_MODE", "all_groups").strip().lower()
+)
+if ADMIN_PORT_DEDUPLICATION_MODE not in _ADMIN_PORT_DEDUP_MODES:
+    logger.warning(
+        "Unknown admin port deduplication mode: %s. Falling back to all_groups.",
+        ADMIN_PORT_DEDUPLICATION_MODE,
+    )
+    ADMIN_PORT_DEDUPLICATION_MODE = "all_groups"
 
 
 @dataclass
@@ -73,44 +86,105 @@ def _resequence_risk_codes(findings: List[Finding]) -> None:
 class _GroupedEntry(TypedDict):
     primary: Finding
     details: List[Finding]
+    ports: Set[str]
+    groups: Set[str]
+    rules: Set[str]
 
 
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     """De-duplicate findings keeping the highest severity entry for each key."""
 
-    key_fields: Tuple[str, ...]
     grouped: Dict[Tuple[str, ...], _GroupedEntry] = {}
     ordered_keys: List[Tuple[str, ...]] = []
 
-    for finding in findings:
-        port_group = getattr(finding, "port_profile", "")
-        if not port_group:
-            port_group = finding.port
+    def _port_literal(finding: Finding) -> str:
+        port_text = finding.port or ""
+        if "/" in port_text:
+            return port_text
+        proto_text = (finding.proto or "").upper()
+        if proto_text and port_text:
+            return f"{proto_text}/{port_text}"
+        if proto_text:
+            return proto_text
+        return port_text
 
-        key_fields = (
-            finding.vendor,
-            finding.rule_id,
-            finding.src,
-            finding.dst,
-            finding.proto,
-            port_group,
-            finding.action,
-            finding.finding_type,
-            finding.rationale,
-            finding.source_file,
-        )
+    for finding in findings:
+        port_profile = getattr(finding, "port_profile", "")
+        mode = ADMIN_PORT_DEDUPLICATION_MODE
+
+        if finding.finding_type == "admin_port_exposed":
+            if mode == "all_groups":
+                key_fields = (
+                    finding.vendor,
+                    finding.src,
+                    finding.dst,
+                    finding.proto,
+                    finding.action,
+                    finding.finding_type,
+                    finding.source_file,
+                )
+            elif mode == "per_group":
+                group_component = port_profile or finding.port
+                key_fields = (
+                    finding.vendor,
+                    finding.rule_id,
+                    finding.src,
+                    finding.dst,
+                    finding.proto,
+                    group_component,
+                    finding.action,
+                    finding.finding_type,
+                    finding.rationale,
+                    finding.source_file,
+                )
+            else:  # per_port
+                key_fields = (
+                    finding.vendor,
+                    finding.rule_id,
+                    finding.src,
+                    finding.dst,
+                    finding.proto,
+                    finding.port,
+                    finding.action,
+                    finding.finding_type,
+                    finding.rationale,
+                    finding.source_file,
+                )
+        else:
+            port_group = port_profile or finding.port
+            key_fields = (
+                finding.vendor,
+                finding.rule_id,
+                finding.src,
+                finding.dst,
+                finding.proto,
+                port_group,
+                finding.action,
+                finding.finding_type,
+                finding.rationale,
+                finding.source_file,
+            )
 
         entry = grouped.get(key_fields)
         if entry is None:
-            grouped[key_fields] = {
+            entry = {
                 "primary": finding,
-                "details": [finding],
+                "details": [],
+                "ports": set(),
+                "groups": set(),
+                "rules": set(),
             }
+            grouped[key_fields] = entry
             ordered_keys.append(key_fields)
-            continue
 
-        entry_details = entry["details"]
-        entry_details.append(finding)
+        entry["details"].append(finding)
+
+        if finding.finding_type == "admin_port_exposed":
+            entry["ports"].add(_port_literal(finding))
+            if port_profile:
+                entry["groups"].add(port_profile)
+            if finding.rule_id:
+                entry["rules"].add(finding.rule_id)
 
         primary = entry["primary"]
 
@@ -160,29 +234,64 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         additional_tag_sources = [detail.tags for detail in details if detail is not primary]
         combined_tags = merge_tags(primary.tags, *additional_tag_sources)
 
-        findings_unique.append(
-            Finding(
-                vendor=primary.vendor,
-                rule_id=primary.rule_id,
-                src=primary.src,
-                dst=primary.dst,
-                proto=primary.proto,
-                port=primary.port,
-                port_profile=getattr(primary, "port_profile", ""),
-                action=primary.action,
-                finding_type=primary.finding_type,
-                severity=primary.severity,
-                rationale=combined_rationale,
-                risk_code=primary.risk_code,
-                source_file=primary.source_file,
-                contributing_severities=tuple(contributing_severities),
-                risk_rating="",
-                tags=combined_tags,
-                hit_count=primary.hit_count,
-                byte_count=primary.byte_count,
-                rule_enabled=primary.rule_enabled,
-            )
+        rule_id = primary.rule_id
+        port_value = primary.port
+        port_profile_value = getattr(primary, "port_profile", "")
+        label_value = getattr(primary, "label", "")
+
+        if (
+            primary.finding_type == "admin_port_exposed"
+            and ADMIN_PORT_DEDUPLICATION_MODE == "all_groups"
+        ):
+            contributing_groups = sorted(entry["groups"], key=lambda value: value.lower())
+            contributing_ports = sorted(entry["ports"], key=lambda value: value.lower())
+            groups_text = ", ".join(contributing_groups)
+            ports_text = ", ".join(contributing_ports)
+            if groups_text and ports_text:
+                port_value = f"{groups_text} ({ports_text})"
+            elif groups_text:
+                port_value = groups_text
+            elif ports_text:
+                port_value = ports_text
+
+            port_profile_value = "combined"
+            rule_id = "admin_ports_combined"
+            label_value = "Administrative ports exposed (combined)"
+
+            contributing_rules = sorted(entry["rules"])
+            extra_rules = [rid for rid in contributing_rules if rid != primary.rule_id]
+            if extra_rules:
+                combined_rationale = (
+                    f"{combined_rationale} | +{len(extra_rules)} other matching rules: "
+                    + ", ".join(extra_rules)
+                )
+
+        deduped_finding = Finding(
+            vendor=primary.vendor,
+            rule_id=rule_id,
+            src=primary.src,
+            dst=primary.dst,
+            proto=primary.proto,
+            port=port_value,
+            port_profile=port_profile_value,
+            action=primary.action,
+            finding_type=primary.finding_type,
+            severity=primary.severity,
+            rationale=combined_rationale,
+            risk_code=primary.risk_code,
+            source_file=primary.source_file,
+            contributing_severities=tuple(contributing_severities),
+            risk_rating="",
+            tags=combined_tags,
+            hit_count=primary.hit_count,
+            byte_count=primary.byte_count,
+            rule_enabled=primary.rule_enabled,
         )
+
+        if label_value:
+            setattr(deduped_finding, "label", label_value)
+
+        findings_unique.append(deduped_finding)
 
     _resequence_risk_codes(findings_unique)
 

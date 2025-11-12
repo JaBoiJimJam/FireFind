@@ -424,11 +424,20 @@ class PDFReport(FPDF):
             title = self.get_user_friendly_description(finding)
             self.cell(0, 6, title, 0, 1, 'L')
             
-            self.set_font('Arial', '', 9)
-            technical_details = self.format_technical_details(finding)
-            for detail in technical_details:
-                safe_detail = self.safe_text(detail, max_chars=160)
-                self.cell(0, 5, f'  - {safe_detail}', 0, 1, 'L')
+        self.set_font('Arial', '', 9)
+        technical_details = self.format_technical_details(finding)
+        for detail in technical_details:
+            max_chars = 160
+            use_wrapping = False
+            if detail.startswith("Port/Service: "):
+                max_chars = 400
+                use_wrapping = True
+            safe_detail = self.safe_text(detail, max_chars=max_chars)
+            line_text = f'  - {safe_detail}'
+            if use_wrapping:
+                self.multi_cell(0, 5, line_text, 0, 'L')
+            else:
+                self.cell(0, 5, line_text, 0, 1, 'L')
 
             rationale = getattr(finding, 'rationale', None)
             if rationale:
