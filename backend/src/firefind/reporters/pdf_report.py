@@ -1,8 +1,10 @@
-from fpdf import FPDF
-import os
 import logging
-from typing import List
+import os
+import textwrap
 from datetime import datetime
+from typing import List
+
+from fpdf import FPDF
 from ..model import Finding
 
 
@@ -439,8 +441,11 @@ class PDFReport(FPDF):
                 line_text = f'  - {safe_detail}'
 
                 if use_wrapping or len(line_text) > 110:
-                if use_wrapping:
-                    self.multi_cell(0, 5, line_text, 0, 'L')
+                    wrapped_text = textwrap.fill(
+                        line_text, width=110, break_long_words=True, break_on_hyphens=False
+                    )
+                    for wrapped_line in wrapped_text.splitlines():
+                        self.cell(0, 5, wrapped_line, 0, 1, 'L')
                 else:
                     self.cell(0, 5, line_text, 0, 1, 'L')
 
