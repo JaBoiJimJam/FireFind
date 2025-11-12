@@ -432,8 +432,13 @@ class PDFReport(FPDF):
                 if detail.startswith("Port/Service: "):
                     max_chars = 400
                     use_wrapping = True
+                elif detail.startswith("Tags: "):
+                    use_wrapping = True
+
                 safe_detail = self.safe_text(detail, max_chars=max_chars)
                 line_text = f'  - {safe_detail}'
+
+                if use_wrapping or len(line_text) > 110:
                 if use_wrapping:
                     self.multi_cell(0, 5, line_text, 0, 'L')
                 else:
