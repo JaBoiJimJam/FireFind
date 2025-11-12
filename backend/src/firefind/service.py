@@ -89,6 +89,31 @@ class _GroupedEntry(TypedDict):
     ports: Set[str]
     groups: Set[str]
     rules: Set[str]
+    service_any: bool
+
+
+def _is_any_service_finding(finding: Finding) -> bool:
+    """Return True if the finding represents an ANY-service rule."""
+
+    port_profile = getattr(finding, "port_profile", "").strip().lower()
+    if port_profile == "all-services":
+        return True
+
+    port_text = (finding.port or "").strip().lower()
+    if not port_text:
+        return False
+
+    if port_text in {"all", "any", "0", "all/all"}:
+        return True
+
+    if "/" in port_text:
+        proto, _, value = port_text.partition("/")
+        proto = proto.strip()
+        value = value.strip()
+        if value == "0" and proto in {"", "ip", "tcp", "udp", "all"}:
+            return True
+
+    return False
 
 
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
@@ -112,7 +137,24 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         port_profile = getattr(finding, "port_profile", "")
         mode = ADMIN_PORT_DEDUPLICATION_MODE
 
-        if finding.finding_type == "admin_port_exposed":
+        service_any = False
+        if finding.finding_type in {"admin_port_exposed", "all_ports_service"}:
+            service_any = _is_any_service_finding(finding)
+
+        if service_any and finding.finding_type in {
+            "admin_port_exposed",
+            "all_ports_service",
+        }:
+            key_fields = (
+                finding.vendor,
+                finding.src,
+                finding.dst,
+                finding.proto,
+                finding.action,
+                finding.finding_type,
+                finding.source_file,
+            )
+        elif finding.finding_type == "admin_port_exposed":
             if mode == "all_groups":
                 key_fields = (
                     finding.vendor,
@@ -173,9 +215,12 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 "ports": set(),
                 "groups": set(),
                 "rules": set(),
+                "service_any": service_any,
             }
             grouped[key_fields] = entry
             ordered_keys.append(key_fields)
+        else:
+            entry.setdefault("service_any", service_any)
 
         entry["details"].append(finding)
 
@@ -242,6 +287,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         if (
             primary.finding_type == "admin_port_exposed"
             and ADMIN_PORT_DEDUPLICATION_MODE == "all_groups"
+            and not entry.get("service_any", False)
         ):
             contributing_groups = sorted(entry["groups"], key=lambda value: value.lower())
             contributing_ports = sorted(entry["ports"], key=lambda value: value.lower())
@@ -273,6 +319,10 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                         f"{combined_rationale} | +{len(extra_rules)} other matching rules: "
                         + ", ".join(extra_rules)
                     )
+
+        if entry.get("service_any", False) and primary.finding_type == "admin_port_exposed":
+            label_value = "Administrative ports exposed (ANY-service, combined)"
+            port_value = "ALL/ALL"
 
         deduped_finding = Finding(
             vendor=primary.vendor,

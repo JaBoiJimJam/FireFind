@@ -157,6 +157,70 @@ def test_per_port_mode_retains_individual_ports() -> None:
     assert ports == ["389", "636"]
 
 
+def test_service_any_family_combines_admin_port_wildcards() -> None:
+    primary = _make_finding(
+        "High",
+        risk_code="FR-admin_port_exposed-HIGEN-050",
+        port="ALL/ALL",
+        port_profile="all-services",
+        rationale="Wildcard admin service detection",
+    )
+    secondary = _make_finding(
+        "Medium",
+        risk_code="FR-admin_port_exposed-MEDGEN-051",
+        port="0",
+        port_profile="all-services",
+        rationale="Secondary analyzer hit",
+    )
+
+    deduped = deduplicate_findings([secondary, primary])
+
+    assert len(deduped) == 1
+    result = deduped[0]
+    assert result.severity == "High"
+    assert result.port == "ALL/ALL"
+    assert result.port_profile == "all-services"
+    assert getattr(result, "label", "") == "Administrative ports exposed (ANY-service, combined)"
+
+
+def test_service_any_family_groups_all_ports_service_findings() -> None:
+    primary = Finding(
+        vendor="generic",
+        rule_id="rule-1",
+        src="any",
+        dst="any",
+        proto="tcp",
+        port="0",
+        action="allow",
+        finding_type="all_ports_service",
+        severity="High",
+        rationale="Service column permits all ports",
+        risk_code="FR-all_ports_service-HIGEN-010",
+        source_file="sample.csv",
+    )
+    secondary = Finding(
+        vendor="generic",
+        rule_id="rule-1",
+        src="any",
+        dst="any",
+        proto="tcp",
+        port="ALL/ALL",
+        action="allow",
+        finding_type="all_ports_service",
+        severity="Medium",
+        rationale="Additional analyzer notes",
+        risk_code="FR-all_ports_service-MEDGEN-011",
+        source_file="sample.csv",
+    )
+
+    deduped = deduplicate_findings([secondary, primary])
+
+    assert len(deduped) == 1
+    result = deduped[0]
+    assert result.severity == "High"
+    assert result.finding_type == "all_ports_service"
+
+
 def test_run_analysis_tracks_rejections(tmp_path: Path) -> None:
     csv_path = tmp_path / "sample.csv"
     csv_path.write_text(
