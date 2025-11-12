@@ -410,43 +410,45 @@ class PDFReport(FPDF):
         
         for i, finding in enumerate(findings, 1):
             risk_id = self.generate_risk_id(finding, i)
-            
+
             severity = getattr(finding, 'severity', 'Info')
             color = self.get_severity_color(severity)
-            
+
             self.set_fill_color(*color)
             self.set_font('Arial', 'B', 12)
             self.cell(0, 8, f'{risk_id} - {severity} Risk', 1, 1, 'L', True)
-            
+
             self.set_fill_color(255, 255, 255)
-            
+
             self.set_font('Arial', 'B', 11)
             title = self.get_user_friendly_description(finding)
             self.cell(0, 6, title, 0, 1, 'L')
-            
-        self.set_font('Arial', '', 9)
-        technical_details = self.format_technical_details(finding)
-        for detail in technical_details:
-            max_chars = 160
-            use_wrapping = False
-            if detail.startswith("Port/Service: "):
-                max_chars = 400
-                use_wrapping = True
-            safe_detail = self.safe_text(detail, max_chars=max_chars)
-            line_text = f'  - {safe_detail}'
-            if use_wrapping:
-                self.multi_cell(0, 5, line_text, 0, 'L')
-            else:
-                self.cell(0, 5, line_text, 0, 1, 'L')
+
+            self.set_font('Arial', '', 9)
+            technical_details = self.format_technical_details(finding)
+            for detail in technical_details:
+                max_chars = 160
+                use_wrapping = False
+                if detail.startswith("Port/Service: "):
+                    max_chars = 400
+                    use_wrapping = True
+                safe_detail = self.safe_text(detail, max_chars=max_chars)
+                line_text = f'  - {safe_detail}'
+                if use_wrapping:
+                    self.multi_cell(0, 5, line_text, 0, 'L')
+                else:
+                    self.cell(0, 5, line_text, 0, 1, 'L')
 
             rationale = getattr(finding, 'rationale', None)
             if rationale:
                 self.set_font('Arial', 'I', 9)
                 rationale_text = self.safe_text(rationale, 160)
                 self.cell(0, 5, f'Analysis: {rationale_text}', 0, 1, 'L')
-            
+                self.set_font('Arial', '', 9)
+
+
             self.ln(3)
-            
+
             if self.get_y() > 250:
                 self.add_page()
                 
