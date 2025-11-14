@@ -32,13 +32,14 @@ def _make_finding(
     port: str = "22",
     port_profile: str = "ssh",
     rationale: str = "Rule permits administrative port(s): [22]",
+    proto: str = "tcp",
 ) -> Finding:
     return Finding(
         vendor="generic",
         rule_id=rule_id,
         src="any",
         dst=dst,
-        proto="tcp",
+        proto=proto,
         port=port,
         action="allow",
         finding_type="admin_port_exposed",
@@ -219,6 +220,69 @@ def test_service_any_family_groups_all_ports_service_findings() -> None:
     result = deduped[0]
     assert result.severity == "High"
     assert result.finding_type == "all_ports_service"
+
+
+def test_service_any_prefers_highest_severity_across_types() -> None:
+    admin = _make_finding(
+        "High",
+        risk_code="FR-admin_port_exposed-HIGEN-070",
+        port="ALL",
+        port_profile="all-services",
+        rationale="Primary analyzer wildcard",
+        dst="any",
+    )
+    all_ports = Finding(
+        vendor="generic",
+        rule_id="rule-99",
+        src="any",
+        dst="any",
+        proto="udp",
+        port="0",
+        action="allow",
+        finding_type="all_ports_service",
+        severity="Medium",
+        rationale="Secondary analyzer wildcard",
+        risk_code="FR-all_ports_service-MEDGEN-071",
+        source_file="sample.csv",
+    )
+
+    deduped = deduplicate_findings([all_ports, admin])
+
+    assert len(deduped) == 1
+    result = deduped[0]
+    assert result.severity == "High"
+    assert result.finding_type == "admin_port_exposed"
+    assert getattr(result, "label", "").startswith(
+        "Administrative ports exposed (ANY-service"
+    )
+    assert result.port == "ALL/ALL"
+
+
+def test_service_any_recognises_ip_zero_wildcard() -> None:
+    primary = _make_finding(
+        "High",
+        risk_code="FR-admin_port_exposed-HIGEN-080",
+        port="IP/0",
+        port_profile="",
+        rationale="IP wildcard",
+        proto="ip",
+    )
+    secondary = _make_finding(
+        "Medium",
+        risk_code="FR-admin_port_exposed-MEDGEN-081",
+        port="Any",
+        port_profile="",
+        rationale="Additional wildcard",
+        proto="udp",
+    )
+
+    deduped = deduplicate_findings([secondary, primary])
+
+    assert len(deduped) == 1
+    result = deduped[0]
+    assert result.severity == "High"
+    assert getattr(result, "label", "") == "Administrative ports exposed (ANY-service, combined)"
+    assert result.port == "ALL/ALL"
 
 
 def test_run_analysis_tracks_rejections(tmp_path: Path) -> None:

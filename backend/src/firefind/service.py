@@ -66,6 +66,9 @@ def _severity_rank(severity: str) -> int:
     return _SEVERITY_PRIORITY.get(severity or "", -1)
 
 
+_SERVICE_ANY_SENTINEL = "ANY_SERVICE"
+
+
 def _resequence_risk_codes(findings: List[Finding]) -> None:
     """Ensure risk codes are sequential after de-duplication."""
 
@@ -92,28 +95,35 @@ class _GroupedEntry(TypedDict):
     service_any: bool
 
 
+def _normalise_any_service_token(finding: Finding) -> str:
+    """Return a sentinel when the finding represents an ANY-service rule."""
+
+    port_profile = getattr(finding, "port_profile", "")
+    if port_profile and port_profile.strip().lower() == "all-services":
+        return _SERVICE_ANY_SENTINEL
+
+    port_text_raw = (finding.port or "").strip()
+    if not port_text_raw:
+        return ""
+
+    port_text = port_text_raw.lower()
+    if port_text in {"all", "all/all", "any", "0"}:
+        return _SERVICE_ANY_SENTINEL
+
+    if "/" in port_text_raw:
+        proto, _, value = port_text_raw.partition("/")
+        proto = proto.strip().lower()
+        value = value.strip().lower()
+        if value == "0" and proto in {"", "ip", "tcp", "udp", "all"}:
+            return _SERVICE_ANY_SENTINEL
+
+    return ""
+
+
 def _is_any_service_finding(finding: Finding) -> bool:
     """Return True if the finding represents an ANY-service rule."""
 
-    port_profile = getattr(finding, "port_profile", "").strip().lower()
-    if port_profile == "all-services":
-        return True
-
-    port_text = (finding.port or "").strip().lower()
-    if not port_text:
-        return False
-
-    if port_text in {"all", "any", "0", "all/all"}:
-        return True
-
-    if "/" in port_text:
-        proto, _, value = port_text.partition("/")
-        proto = proto.strip()
-        value = value.strip()
-        if value == "0" and proto in {"", "ip", "tcp", "udp", "all"}:
-            return True
-
-    return False
+    return bool(_normalise_any_service_token(finding))
 
 
 def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
@@ -137,9 +147,11 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
         port_profile = getattr(finding, "port_profile", "")
         mode = ADMIN_PORT_DEDUPLICATION_MODE
 
-        service_any = False
+        service_any_token = ""
         if finding.finding_type in {"admin_port_exposed", "all_ports_service"}:
-            service_any = _is_any_service_finding(finding)
+            service_any_token = _normalise_any_service_token(finding)
+
+        service_any = bool(service_any_token)
 
         if service_any and finding.finding_type in {
             "admin_port_exposed",
@@ -149,9 +161,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
                 finding.vendor,
                 finding.src,
                 finding.dst,
-                finding.proto,
                 finding.action,
-                finding.finding_type,
                 finding.source_file,
             )
         elif finding.finding_type == "admin_port_exposed":
@@ -220,7 +230,7 @@ def deduplicate_findings(findings: List[Finding]) -> List[Finding]:
             grouped[key_fields] = entry
             ordered_keys.append(key_fields)
         else:
-            entry.setdefault("service_any", service_any)
+            entry["service_any"] = entry.get("service_any", False) or service_any
 
         entry["details"].append(finding)
 
