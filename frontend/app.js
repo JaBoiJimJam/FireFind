@@ -341,8 +341,18 @@ async function startScan(e) {
         if (f.file) formData.append('files', f.file);
     });
     const clientInput = document.getElementById('client-name');
-    if (clientInput && clientInput.value.trim() !== '') {
-        formData.append('client_name', clientInput.value.trim());
+    if (clientInput) {
+        const value = clientInput.value.trim();
+        if (!value) {
+            // Prevent empty/whitespace-only client names
+            btn.disabled = false;
+            btn.textContent = originalText;
+            clientInput.reportValidity?.();
+            clientInput.focus();
+            showToast('Client name is required', 'error');
+            return;
+        }
+        formData.append('client_name', value);
     }
 
     try {
