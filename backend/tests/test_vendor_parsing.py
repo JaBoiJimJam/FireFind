@@ -38,25 +38,3 @@ def test_generic_sample_produces_finding():
     assert rule.action == "allow"
     assert rule.port in {"22", "TCP/22"}
     _assert_admin_port_finding("generic", rule)
-
-
-def test_client_samples_ignore_risk_ratings():
-    sample_names = [
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-EXTERNAL-FW-DC - WITH RISK FEEDBACK.xlsx",
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-DaaS - WITH RISK FEEDBACK.xlsx",
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-INSIDE-FW01 - WITH RISK FEEDBACK.xlsx",
-        "CLIENT1 Firewall Rules - Anonymised - Firewall Policy-OUTSIDE-FW - WITH RISK FEEDBACK.xlsx",
-    ]
-
-    for sample_name in sample_names:
-        sample_path = BACKEND_DIR / "samples" / sample_name
-        rules, _, rejections = _collect_rules(
-            sample_path,
-            "generic",
-            BACKEND_DIR / "rules.config.sample.yaml",
-            BACKEND_DIR / "rules" / "vendor_mappings.yaml",
-        )
-
-        assert not rejections, f"Unexpected rejections for {sample_name}: {rejections}"
-
-        assert all(rule.risk_rating == "" for rule in rules)

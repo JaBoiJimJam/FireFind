@@ -2,54 +2,72 @@
 
 Firewall Risk Identification Tool
 
-![My Project Logo](public/firefind_logo.jpg)
+![FireFind Logo](public/firefind_logo.jpg)
 
 ## Requirements
 - Python 3.8+
 - pip
-- Git Bash or Windows Subsystem for Linux (WSL) for Windows users
+
+All components are open-source and work on Windows, Linux, and macOS. Windows users do not need Git Bash or WSL to run the app.
 
 ## Installation
-(Optional) create and activate a virtual environment:
+Optional but recommended: create and activate a virtual environment.
 
 ```bash
 python -m venv venv
-source venv/bin/activate  # Linux
-venv\Scripts\activate     # Windows
+# Linux/macOS
+source venv/bin/activate
+# Windows (PowerShell)
+venv\Scripts\Activate.ps1
 ```
 
-Install dependencies:
+Install backend dependencies:
 
 ```bash
 python -m pip install -r backend/requirements.txt
 ```
 
-This project relies solely on open-source libraries and runs on Windows or Linux without commercial dependencies.
+## How to run
+For end users, use the provided launchers which install dependencies (if needed), start the server, and open your browser:
 
-## Usage
-Run the backend via the provided wrapper script:
+- Windows: double‑click `run_firefind.bat`
+- Linux/macOS: run `./run_firefind.sh`
+
+Both start a local server at http://localhost:8000 serving the API under `/api` and the frontend at the root path.
+
+### Development alternatives
+- Integrated dev server (serves API + static frontend):
+  ```bash
+  ./start_dev.sh
+  ```
+- Run the CLI workflow with a helper script:
+  ```bash
+  cd backend && python run_backend.py
+  ```
+
+### Direct CLI (advanced)
+If you prefer calling the CLI directly, make sure Python can import the backend package. One simple way is to set `PYTHONPATH`.
 
 ```bash
-cd backend && python run_backend.py
+# Linux/macOS
+PYTHONPATH=backend/src \
+python -m firefind.cli --vendor generic --input "backend/samples" \
+  --out-csv "out/findings.csv" --out-pdf "out/report.pdf" \
+  --rules "backend/rules/rules.yaml" --mappings "backend/rules/vendor_mappings.yaml"
+
+# Windows (PowerShell)
+$env:PYTHONPATH = "$PWD/backend/src"
+python -m firefind.cli --vendor generic --input "backend/samples" \
+  --out-csv "out/findings.csv" --out-pdf "out/report.pdf" \
+  --rules "backend/rules/rules.yaml" --mappings "backend/rules/vendor_mappings.yaml"
 ```
 
-Or invoke the CLI directly:
+Tips:
+- Always quote paths (especially with spaces or parentheses).
+- `--input` accepts files or directories of CSV/XLSX exports. Extensions are matched case-insensitively.
+- The CLI overwrites existing output files—use unique names or timestamps.
 
-```bash
-python -m firefind.cli --vendor generic --input "samples" \
-  --out-csv "../out/findings.csv" --out-pdf "../out/report.pdf" \
-  --rules "../rules/rules.yaml" --mappings "../rules/vendor_mappings.yaml"
-```
-
-Always wrap CLI paths in quotes—especially when working with directories or
-filenames that contain spaces, parentheses, or other special characters. The
-`--input` flag accepts individual files or directories containing CSV or XLSX
-exports. File extensions are matched case-insensitively, so variants such as
-`.CSV` or `.XLSX` are processed without additional configuration. When
-generating reports, choose unique output filenames because the CLI will
-overwrite existing files.
-
-To view the current application version:
+To view the current version:
 
 ```bash
 python -m firefind.cli --version
@@ -82,17 +100,10 @@ rotated while the service is offline; new scans will recreate the log on the
 next request.
 
 ### Integrated development server
-For a combined frontend and API during development, run:
+During development you can also launch the combined server manually:
 
 ```bash
 ./start_dev.sh
-```
-
-Alternatively, use the convenience script to install dependencies, launch the server, and open it in your browser:
-
-```bash
-./run_firefind.sh   # Linux
-run_firefind.bat    # Windows
 ```
 
 The server will be available at http://localhost:8000 and serves the API under `/api` while hosting the static `frontend/` files at the root path.
@@ -108,7 +119,7 @@ uvicorn firefind.api:app --reload
 ## Project Structure
 ```
 backend/
-├── src/firefind/   # core logic and CLI
+├── src/firefind/   # core logic, API, CLI, loaders, reporters
 ├── rules/          # YAML-based policy rules
 └── samples/        # example firewall policies
 frontend/           # optional prototype UI
@@ -133,8 +144,8 @@ groups, and risk thresholds the backend consumes.
 
 1. Export a bearer token via `FIRE_FIND_API_TOKEN` before starting the server. The development scripts set a default
    `dev-admin-token`, but production deployments must provide a secret value.
-2. Start the integrated FastAPI + static frontend host with `./start_dev.sh` (Linux/macOS) or `run_firefind.bat`
-   (Windows/Wine). Both scripts place the backend on port `8000` and inject the admin token.
+2. Start the integrated FastAPI + static frontend host with `./run_firefind.sh` (Linux/macOS) or `run_firefind.bat`
+  (Windows). Both scripts place the backend on port `8000` and inject the admin token for local development.
 3. Visit `http://localhost:8000/admin.html` to open the console. The UI loads the active configuration on first load and caches
    drafts locally so you can iterate without immediately committing changes.
 
@@ -217,17 +228,21 @@ FireFind uses a sprint-based versioning scheme documented in the Version Strateg
 - Historical trend analysis of risk scores
 
 ## Development
-Run the test suite with:
+Run the Python tests with:
 
 ```bash
 pytest
 ```
 
-Some integration tests invoke the Windows batch script `run_firefind.bat` using
-`cmd.exe`. A Windows runtime or a compatible environment such as Wine is
-required to execute these tests; they will be skipped when neither is available.
+Some integration tests invoke the Windows batch script `run_firefind.bat`; they are skipped automatically when a Windows-compatible runtime is unavailable.
 
-Additional tooling such as flake8 and black can be introduced once the project grows.
+Run the frontend tests with:
+
+```bash
+npm test
+```
+
+Additional tooling such as flake8 and black can be introduced as the project grows.
 
 ## Testing Strategy
 

@@ -17,13 +17,15 @@ FireFind/
 ├── backend/
 │   ├── src/
 │   │   └── firefind/
-│   │       ├── cli.py          # Main CLI module
-│   │       ├── loaders/        # Data loading modules
-│   │       ├── analyzers/      # Security analysis modules
-│   │       └── generators/     # Report generation modules
+│   │       ├── api.py          # FastAPI application
+│   │       ├── cli.py          # CLI entry point
+│   │       ├── loaders/        # CSV/XLSX ingestion
+│   │       ├── reporters/      # CSV/PDF report generation
+│   │       ├── rules_engine.py # Core rule evaluation
+│   │       └── service.py      # Orchestration helpers
 │   ├── run_backend.py          # Convenient Python wrapper script
-│   ├── samples/               # Sample firewall configuration files
-│   └── rules/                 # Analysis rules and vendor mappings
+│   ├── samples/                # Sample firewall configuration files
+│   └── rules/                  # Analysis rules and vendor mappings
 ├── rules/
 │   ├── rules.yaml             # Security analysis rules
 │   └── vendor_mappings.yaml   # Vendor-specific column mappings
@@ -41,7 +43,7 @@ FireFind/
 
 2. **Install dependencies**:
    ```bash
-   pip install -r requirements.txt
+  pip install -r backend/requirements.txt
    ```
 
 ## Usage
@@ -101,7 +103,7 @@ For a web API interface, run the bundled FastAPI application:
 uvicorn firefind.api:app --reload
 ```
 
-Then send a `POST` request to `http://localhost:8000/scan` with a CSV or XLSX file in the `file` form field. Findings are returned as JSON and optional CSV/PDF reports are saved to the `out/` directory.
+Then send a `POST` request to `http://localhost:8000/api/scan` with CSV/XLSX files in a `files` form field. Findings are returned as JSON and optional CSV/PDF reports are saved to the `out/` directory when `save_csv=1` and/or `save_pdf=1` are present in the query string.
 
 #### Configuration API
 
@@ -212,17 +214,15 @@ npx playwright install --with-deps
 npm run test:e2e
 ```
 
-`npm run test:e2e` automatically launches `./start_dev.sh`, drives the admin
-console to create/update/delete a rule, and verifies the configuration persists
-across reloads.
+`npm run test:e2e` launches the integrated dev server via `./start_dev.sh`, drives the admin console to create/update/delete a rule, and verifies configuration persistence.
 
 ## Troubleshooting
 
 ### Unicode Encoding Issues
-If you encounter Unicode encoding errors on Windows, the `run_backend.py` script automatically handles this by setting appropriate environment variables.
+On Windows, the `run_backend.py` script sets `PYTHONIOENCODING` and `PYTHONUTF8` to avoid common encoding pitfalls.
 
 ### File Path Issues
-The `run_backend.py` script automatically searches for required files and directories in common locations. Ensure your project structure matches the expected layout.
+The `run_backend.py` script searches for required files and directories in common locations. Ensure your project structure matches the expected layout.
 
 ### Missing Dependencies
 Install all required packages:
