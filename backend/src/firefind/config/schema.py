@@ -5,7 +5,18 @@ from dataclasses import dataclass, field
 from enum import Enum
 import ipaddress
 import re
-from typing import Any, Dict, Iterable, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 
 _TAG_SANITIZE_RE = re.compile(r"[^a-z0-9]+")
@@ -16,6 +27,13 @@ def _normalise_tag_label(value: object) -> str:
     if not text:
         return ""
     return _TAG_SANITIZE_RE.sub("-", text.lower()).strip("-")
+
+
+def _normalise_protocol(value: Optional[str]) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"tcp", "udp", "any"}:
+        return text
+    return "any"
 
 
 class Severity(str, Enum):
@@ -220,6 +238,7 @@ class PortGroup:
     description: str = ""
     protocol: str = "any"
     ranges: list[PortRange] = field(default_factory=list)
+    _ports: frozenset[int] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         normalized_proto = (self.protocol or "any").lower()
@@ -227,6 +246,7 @@ class PortGroup:
             raise ValueError(f"Unsupported protocol '{self.protocol}' in port group '{self.name}'")
         self.protocol = normalized_proto
         self._validate_no_overlaps()
+        self._ports = frozenset(self._iter_ports())
 
     def _validate_no_overlaps(self) -> None:
         sorted_ranges = sorted(self.ranges)
@@ -237,6 +257,35 @@ class PortGroup:
                 raise ValueError(
                     f"Port ranges {previous.to_tuple()} and {current.to_tuple()} overlap in group '{self.name}'"
                 )
+
+    def _iter_ports(self) -> Iterator[int]:
+        for range_ in self.ranges:
+            start, end = range_.to_tuple()
+            for port in range(start, end + 1):
+                yield port
+
+    @property
+    def port_set(self) -> frozenset[int]:
+        """Return all ports covered by the group."""
+
+        return self._ports
+
+    def matches_protocol(self, protocol: Optional[str]) -> bool:
+        """Return ``True`` when the supplied protocol is compatible with this group."""
+
+        normalized = _normalise_protocol(protocol)
+        if self.protocol == "any" or normalized == "any":
+            return True
+        return self.protocol == normalized
+
+    def contains_port(self, port: int, protocol: Optional[str] = None) -> bool:
+        """Check whether the group includes ``port`` for the given protocol."""
+
+        try:
+            port_number = int(port)
+        except (TypeError, ValueError):
+            return False
+        return self.matches_protocol(protocol) and port_number in self._ports
 
     def to_dict(self) -> dict:
         return {
@@ -251,6 +300,49 @@ class PortGroupCollection:
     """Collection of reusable port groups."""
 
     groups: Dict[str, PortGroup] = field(default_factory=dict)
+
+    def port_sets(self, protocol: Optional[str] = None) -> Dict[str, frozenset[int]]:
+        """Return flattened port sets for groups compatible with ``protocol``."""
+
+        compatible: Dict[str, frozenset[int]] = {}
+        normalized = _normalise_protocol(protocol)
+        for name, group in self.groups.items():
+            if group.matches_protocol(normalized):
+                compatible[name] = group.port_set
+        return compatible
+
+    def port_memberships(
+        self, ports: Iterable[int], protocol: Optional[str] = None
+    ) -> Dict[str, Set[int]]:
+        """Return mapping of group names to ports contained within ``ports``."""
+
+        evaluated_ports: Set[int] = set()
+        for port in ports:
+            try:
+                evaluated_ports.add(int(port))
+            except (TypeError, ValueError):
+                continue
+        memberships: Dict[str, Set[int]] = {}
+        for name, group_ports in self.port_sets(protocol).items():
+            matched = evaluated_ports & set(group_ports)
+            if matched:
+                memberships[name] = matched
+        return memberships
+
+    def groups_for_port(self, port: int, protocol: Optional[str] = None) -> list[str]:
+        """Return the names of groups that contain ``port`` for ``protocol``."""
+
+        try:
+            port_number = int(port)
+        except (TypeError, ValueError):
+            return []
+
+        matches = [
+            name
+            for name, group in self.groups.items()
+            if group.contains_port(port_number, protocol)
+        ]
+        return matches
 
     def to_dict(self) -> dict:
         return {name: group.to_dict() for name, group in self.groups.items()}

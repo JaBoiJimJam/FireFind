@@ -92,7 +92,21 @@ analyzers or reporting layers. Each entry expands to a
   `start`/`end` keys. Validation ensures ranges fall within `1-65535` and do not
   overlap within the same group.
 
-Future analyzers can consume these canonical groups instead of redefining ports.
+The loader flattens each range into an explicit set of ports so analyzers can
+perform quick membership checks. Helpers on
+[`PortGroupCollection`](../src/firefind/config/schema.py) return the flattened
+sets (`port_sets`), identify which groups cover an arbitrary port
+(`groups_for_port`), or intersect a list of ports with all compatible groups
+(`port_memberships`).
+
+These canonical names now flow directly into admin-port reporting: when a rule
+exposes multiple curated groups, FireFind emits one finding per group with
+`port_profile` set to the group key (for example `ldap_related_ports` or
+`remote_shell_ports`). The deterministic rationale of each finding lists the
+matched ports, allowing `deduplicate_findings` to collapse repeat hits for the
+same source/destination/protocol tuple automatically. Leftover ports that do not
+belong to any configured group continue to fall back to the heuristic
+`_port_profile` classifications.
 
 ## Rule Logic Definitions
 

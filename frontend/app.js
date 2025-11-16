@@ -101,12 +101,45 @@ function loadStoredFiles() {
         const storedFiles = localStorage.getItem('firefind_uploaded_files');
         if (storedFiles) {
             const fileData = JSON.parse(storedFiles);
-            uploadedFiles = fileData.map(fileInfo => ({
-                id: fileInfo.id,
-                name: fileInfo.name,
-                size: fileInfo.size,
-                file: new File([fileInfo.content], fileInfo.name, { type: fileInfo.type })
-            }));
+            const convertBase64ToFile = (fileInfo) => {
+                try {
+                    const base64 = fileInfo.content || '';
+                    if (!base64 || typeof atob !== 'function' || typeof File !== 'function') {
+                        return null;
+                    }
+
+                    const binaryString = atob(base64);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+
+                    return new File([bytes], fileInfo.name, { type: fileInfo.type || 'application/octet-stream' });
+                } catch (error) {
+                    console.error('Failed to restore file from storage:', error);
+                    return null;
+                }
+            };
+
+            uploadedFiles = fileData
+                .map(fileInfo => {
+                    const restoredFile = convertBase64ToFile(fileInfo);
+                    if (!restoredFile) {
+                        return null;
+                    }
+                    return {
+                        id: fileInfo.id,
+                        name: fileInfo.name,
+                        size: fileInfo.size,
+                        file: restoredFile
+                    };
+                })
+                .filter(Boolean);
+
+            if (uploadedFiles.length !== fileData.length) {
+                showToast('Some files could not be restored and were removed.', 'error');
+                saveFilesToStorage();
+            }
             displayFiles();
         }
     } catch (error) {
