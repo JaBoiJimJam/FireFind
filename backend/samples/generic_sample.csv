@@ -1,2 +1,0 @@
-Seq #,Source Value,Destination Value,Service,Service.1,Action
-1,0.0.0.0/0,10.0.0.10,SSH,TCP/22,allow

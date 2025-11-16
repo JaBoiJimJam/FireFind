@@ -1834,7 +1834,7 @@
         header.appendChild(title);
         const subtitle = document.createElement('p');
         subtitle.className = 'modal-subtitle';
-        subtitle.textContent = 'Configure metadata, condition groups, analyzer overrides, and validation thresholds.';
+        subtitle.textContent = 'Configure metadata, condition groups, analyzer overrides, and review validation feedback.';
         header.appendChild(subtitle);
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
@@ -3714,6 +3714,10 @@
 
         const rules = {};
         configState.ruleLogic.forEach((rule) => {
+            ensureConditionTree(rule);
+            ensureAnalyzerEntries(rule);
+            syncRuleConditions(rule);
+            syncRuleAnalyzers(rule);
             const key = (rule.key || '').trim();
             if (!key) {
                 return;

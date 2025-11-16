@@ -1182,30 +1182,70 @@ def run_checks(vendor: str, rules: Iterable[Rule], cfg) -> List[Finding]:
                     low_ports=low_risk_admin_ports,
                 )
                 severity = override_with_risk_rating(r, severity)
-                risk_code = generate_risk_code('admin_port_exposed', severity, risk_code_counter)
-                risk_code_counter += 1
+                remaining_ports = set(exposed_admin_ports)
 
-                port_profile = _port_profile(exposed_admin_ports)
-
-                findings.append(
-                    Finding(
-                        vendor,
-                        r.rule_id,
-                        r.src,
-                        r.dst,
-                        r.proto,
-                        r.port,
-                        r.action,
-                        finding_type="admin_port_exposed",
-                        severity=severity,
-                        rationale=f"Rule permits administrative port(s): {sorted(exposed_admin_ports)}",
-                        port_profile=port_profile,
-                        risk_code=risk_code,
-                        source_file=r.source_file,
-                        risk_rating=r.risk_rating,
-                        tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
-                    )
+                group_port_sets = rules_cfg.port_groups.port_sets(protocol=r.proto)
+                sorted_groups = sorted(
+                    group_port_sets.items(), key=lambda item: (len(item[1]), item[0])
                 )
+
+                for group_name, group_ports in sorted_groups:
+                    matched_ports = remaining_ports & set(group_ports)
+                    if not matched_ports:
+                        continue
+                    risk_code = generate_risk_code(
+                        "admin_port_exposed", severity, risk_code_counter
+                    )
+                    risk_code_counter += 1
+                    findings.append(
+                        Finding(
+                            vendor,
+                            r.rule_id,
+                            r.src,
+                            r.dst,
+                            r.proto,
+                            r.port,
+                            r.action,
+                            finding_type="admin_port_exposed",
+                            severity=severity,
+                            rationale=f"Rule permits {group_name} ports: {sorted(matched_ports)}",
+                            port_profile=group_name,
+                            risk_code=risk_code,
+                            source_file=r.source_file,
+                            risk_rating=r.risk_rating,
+                            tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
+                        )
+                    )
+                    remaining_ports.difference_update(matched_ports)
+
+                if remaining_ports:
+                    port_profile = _port_profile(remaining_ports)
+                    if port_profile == "mixed":
+                        mixed_ports = ",".join(str(port) for port in sorted(remaining_ports))
+                        port_profile = f"mixed:{mixed_ports}" if mixed_ports else port_profile
+                    risk_code = generate_risk_code(
+                        "admin_port_exposed", severity, risk_code_counter
+                    )
+                    risk_code_counter += 1
+                    findings.append(
+                        Finding(
+                            vendor,
+                            r.rule_id,
+                            r.src,
+                            r.dst,
+                            r.proto,
+                            r.port,
+                            r.action,
+                            finding_type="admin_port_exposed",
+                            severity=severity,
+                            rationale=f"Rule permits administrative port(s): {sorted(remaining_ports)}",
+                            port_profile=port_profile,
+                            risk_code=risk_code,
+                            source_file=r.source_file,
+                            risk_rating=r.risk_rating,
+                            tags=merge_tags(r.tags, ["admin-surface", "admin-port"]),
+                        )
+                    )
         # Broad CIDR (src or dst)
         cidr_messages: List[str] = []
         cidr_severity_rank = 0
