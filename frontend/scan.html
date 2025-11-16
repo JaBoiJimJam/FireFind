@@ -131,9 +131,10 @@
                                 <div style="display: flex; flex-direction: column; align-items: center; margin-top: 2em;">
                                     <div style="display: flex; align-items: center; gap: 0.75em;">
                                         <label for="client-name" style="color: #39ffb6; font-family: 'Fira Mono', monospace; font-size: 1.1em; letter-spacing: 1px;">Client Name:</label>
-                                        <input type="text" id="client-name" name="client-name" placeholder="Enter client name"
-                                              style="background: #181c1f; color: #39ffb6; border: 1px solid #39ffb6; border-radius: 6px; padding: 0.5em 1em; font-family: 'Fira Mono', monospace; font-size: 1em; outline: none; min-width: 220px; text-align: left; transition: border-color 0.2s;"
-                                              oninput='this.value = this.value.replace(/[_*"\/\\<>:|?]/g, "")' />
+                            <input type="text" id="client-name" name="client-name" placeholder="Enter client name"
+                                style="background: #181c1f; color: #39ffb6; border: 1px solid #39ffb6; border-radius: 6px; padding: 0.5em 1em; font-family: 'Fira Mono', monospace; font-size: 1em; outline: none; min-width: 220px; text-align: left; transition: border-color 0.2s;"
+                                oninput='this.value = this.value.replace(/[_*"\/\\<>:|?]/g, ""); this.setCustomValidity( this.value.trim() ? "" : "Client name is required" );'
+                                required aria-required="true" pattern=".*\S.*" title="Client name is required" />
                                     </div>
                                 </div>
             </div>
