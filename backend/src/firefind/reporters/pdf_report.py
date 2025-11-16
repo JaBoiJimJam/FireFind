@@ -92,10 +92,6 @@ class PDFReport(FPDF):
         self.set_font('Arial', '', 14)
         self.cell(0, 10, f'Client: {client_name}', 0, 1, 'C')
         self.cell(0, 10, f'Report Date: {report_date}', 0, 1, 'C')
-
-        self.ln(10)
-        self.set_font('Arial', 'I', 12)
-        self.cell(0, 10, 'By team Five guys', 0, 1, 'C')
         
     def get_severity_color(self, severity):
         """Return RGB color based on severity level"""
